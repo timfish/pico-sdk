@@ -1,0 +1,25 @@
+[package]
+authors = ["Tim Fish"]
+license = "MIT"
+name = "pico-download"
+version = "0.1.0"
+edition = "2018"
+description = "Unofficial Rust bindings and wrappers for Pico Technology oscilloscope drivers"
+keywords = ["Oscilloscope", "Streaming", "PicoScope", "Pico-Technology" ]
+repository = "https://github.com/meatysolutions/pico-sdk"
+readme = "README.md"
+
+[lib]
+crate-type = ["lib"]
+path = "src/lib.rs"
+
+[dependencies]
+pico-common = { path = "../common" }
+pico-driver = { path = "../driver" }
+directories = "3.0"
+http_req = "^0.7.0"
+thiserror = "^1.0.9"
+ring = "0.16.15"
+
+[dev-dependencies]
+enum-iterator = "0.6.0"
