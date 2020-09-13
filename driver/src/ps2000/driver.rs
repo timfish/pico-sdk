@@ -1,12 +1,20 @@
 use super::LoaderPS2000;
-use crate::{CallbackType, DriverLoadError, PicoDriver, Resolution};
+use crate::{DriverLoadError, PicoDriver, Resolution};
+use lazy_static::*;
 use log_derive::{logfn, logfn_inputs};
+use parking_lot::{Mutex, RwLock};
 use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
     PicoResult, PicoStatus, SampleConfig,
 };
-use std::{collections::HashMap, fmt, pin::Pin, str};
+use std::{collections::HashMap, fmt, pin::Pin, str, sync::Arc};
 
+type BufferMap = HashMap<PicoChannel, Arc<RwLock<Pin<Vec<i16>>>>>;
+
+lazy_static! {
+    /// We store buffers so the ps2000 emulates the same API as the other drivers
+    static ref BUFFERS: Mutex<HashMap<i16, BufferMap>> = Default::default();
+}
 /// Wraps the ps2000 driver so that it implements the `PicoDriver` trait
 #[derive(Clone)]
 pub struct DriverPS2000 {
@@ -96,7 +104,13 @@ impl PicoDriver for DriverPS2000 {
                     output.push(serial);
                 }
                 Err(PicoStatus::NOT_FOUND) => break,
-                Err(e) => return Err(PicoError::from_status(e, "open_unit")),
+                Err(e) => {
+                    for each in handles_to_close {
+                        let _ = self.close_unit(each);
+                    }
+
+                    return Err(PicoError::from_status(e, "open_unit"));
+                }
             }
         }
 
@@ -158,6 +172,10 @@ impl PicoDriver for DriverPS2000 {
     #[logfn(ok = "Trace", err = "Warn")]
     #[logfn_inputs(Trace)]
     fn close_unit(&self, handle: i16) -> PicoResult<()> {
+        // Remove any buffers which have been allocated for this device
+        let mut buffers = BUFFERS.lock();
+        buffers.remove(&handle);
+
         let close_unit = self.loader.close_unit;
         PicoStatus::from(unsafe { close_unit(handle) }).to_result((), "close_unit")
     }
@@ -228,20 +246,30 @@ impl PicoDriver for DriverPS2000 {
         .to_result((), "set_channel")
     }
 
-    fn allocates_own_buffers(&self) -> bool {
-        true
-    }
-
     // This ps2000 driver doesn't copy data into supplied buffers. It passes the
-    // buffers in the callback.
+    // buffers in the callback. Here we store the buffers and try and emulate
+    // the other drivers
     fn set_data_buffer(
         &self,
-        _handle: i16,
-        _channel: PicoChannel,
-        _buffer: &Pin<Vec<i16>>,
+        handle: i16,
+        channel: PicoChannel,
+        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
         _buffer_len: usize,
     ) -> PicoResult<()> {
-        panic!("The ps2000 allocates it's own buffers so they should not be passed via set_data_buffer")
+        let mut buffers = BUFFERS.lock();
+
+        buffers
+            .entry(handle)
+            .and_modify(|e| {
+                e.insert(channel, buffer.clone());
+            })
+            .or_insert_with(|| {
+                let mut hashmap = HashMap::new();
+                hashmap.insert(channel, buffer);
+                hashmap
+            });
+
+        Ok(())
     }
 
     #[logfn(ok = "Trace", err = "Warn")]
@@ -277,13 +305,11 @@ impl PicoDriver for DriverPS2000 {
     fn get_latest_streaming_values<'a>(
         &self,
         handle: i16,
-        mut callback: Box<dyn FnMut(CallbackType) + 'a>,
+        mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
         self.loader.get_latest_streaming_values_wrap(
             handle,
             |overview_buffers: *const *const i16, _: i16, _: u32, _: i16, _: i16, n_values: u32| {
-                let mut output: HashMap<PicoChannel, Vec<i16>> = Default::default();
-
                 let buffer_pointers = unsafe {
                     std::slice::from_raw_parts::<*const usize>(
                         overview_buffers as *const *const usize,
@@ -291,30 +317,43 @@ impl PicoDriver for DriverPS2000 {
                     )
                 };
 
-                // ps2000 devices only have up to two channels so we just handle them manually
-                if !buffer_pointers[0].is_null() {
+                let mut all_buffers = BUFFERS.lock();
+                let buffers = all_buffers
+                    .get_mut(&handle)
+                    .expect("Could not find buffers for this device");
+
+                let mut copy_data = |index: usize, ch: PicoChannel| {
                     let raw_data = unsafe {
                         std::slice::from_raw_parts::<i16>(
-                            buffer_pointers[0] as *const i16,
+                            buffer_pointers[index] as *const i16,
                             n_values as usize,
                         )
                     };
+                    // fetch the buffer to copy the data into it
+                    let mut ch_buf = buffers
+                        .get_mut(&ch)
+                        .expect("Could not find buffers for this channel")
+                        .write();
 
-                    output.insert(PicoChannel::A, raw_data.to_vec());
+                    // We need to resize the buffer so we can copy it
+                    // straight into ch_buf
+                    let mut raw_data = raw_data.to_vec();
+                    raw_data.resize(ch_buf.len(), 0);
+
+                    ch_buf.copy_from_slice(&raw_data);
+                };
+
+                // ps2000 devices only have up to two channels so we just handle them manually
+                if !buffer_pointers[0].is_null() {
+                    copy_data(0, PicoChannel::A)
                 }
 
                 if !buffer_pointers[2].is_null() {
-                    let raw_data = unsafe {
-                        std::slice::from_raw_parts::<i16>(
-                            buffer_pointers[2] as *const i16,
-                            n_values as usize,
-                        )
-                    };
-
-                    output.insert(PicoChannel::B, raw_data.to_vec());
+                    copy_data(2, PicoChannel::B)
                 }
 
-                callback(CallbackType::PS2000(output));
+                // The data is always copied into the start of the buffer
+                callback(0, n_values as usize);
             },
         );
 

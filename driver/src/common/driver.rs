@@ -1,17 +1,17 @@
 use super::loader::{
     LoaderCommon, OpenUnitFn, RunStreamingFn, SetBufferFn, SetChannelFn, UserProbeInteractions,
 };
-use crate::{CallbackType, DriverLoadError, PicoDriver, Resolution};
+use crate::{DriverLoadError, PicoDriver, Resolution};
 use c_vec::CVec;
 use lazy_static::*;
 use log::*;
 use log_derive::{logfn, logfn_inputs};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
     PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
 };
-use std::{collections::HashMap, fmt, pin::Pin, str};
+use std::{collections::HashMap, fmt, pin::Pin, str, sync::Arc};
 
 type ChannelRangesMap = HashMap<PicoChannel, Vec<PicoRange>>;
 
@@ -341,19 +341,17 @@ impl PicoDriver for DriverCommon {
         .to_result((), "set_channel")
     }
 
-    fn allocates_own_buffers(&self) -> bool {
-        false
-    }
-
     #[logfn(ok = "Trace", err = "Warn")]
     #[logfn_inputs(Trace)]
     fn set_data_buffer(
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: &Pin<Vec<i16>>,
+        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
         buffer_len: usize,
     ) -> PicoResult<()> {
+        let buffer = buffer.read();
+
         PicoStatus::from(unsafe {
             match self.loader.set_data_buffer {
                 SetBufferFn::Common(set_data_buffer) => set_data_buffer(
@@ -423,15 +421,12 @@ impl PicoDriver for DriverCommon {
     fn get_latest_streaming_values<'a>(
         &self,
         handle: i16,
-        mut callback: Box<dyn FnMut(CallbackType) + 'a>,
+        mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
         let status = PicoStatus::from(self.loader.get_latest_streaming_values_wrap(
             handle,
             |_, sample_count, start_index, _, _, _, _, _| {
-                callback(CallbackType::Common {
-                    start_index: start_index as usize,
-                    sample_count: sample_count as usize,
-                })
+                callback(start_index as usize, sample_count as usize);
             },
         ));
 

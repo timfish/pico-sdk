@@ -48,12 +48,13 @@ driver.set_channel(handle, PicoChannel::A, &ch_config)?;
 */
 
 pub use common::{DriverCommon, LoaderCommon};
+use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, Driver, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
 };
 pub use ps2000::{DriverPS2000, LoaderPS2000};
 pub use resolution::{DependencyLoader, Resolution};
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::{pin::Pin, sync::Arc};
 use thiserror::Error;
 use version_compare::Version;
 
@@ -72,15 +73,6 @@ pub enum DriverLoadError {
 
     #[error("Invalid Driver Version: Requires >= {required}, Found: {found}")]
     VersionError { found: String, required: String },
-}
-
-/// Encapsulates the two different callbacks we can expect from Pico drivers
-pub enum CallbackType {
-    Common {
-        start_index: usize,
-        sample_count: usize,
-    },
-    PS2000(HashMap<PicoChannel, Vec<i16>>),
 }
 
 /// Common trait implemented for every driver
@@ -112,15 +104,12 @@ pub trait PicoDriver: Send + Sync {
         channel: PicoChannel,
         config: &ChannelConfig,
     ) -> PicoResult<()>;
-    /// Find out if this driver allocates its own buffers. Only the ps2000
-    /// driver does this
-    fn allocates_own_buffers(&self) -> bool;
     /// Give the driver a buffer to write data into
     fn set_data_buffer(
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: &Pin<Vec<i16>>,
+        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
         buffer_len: usize,
     ) -> PicoResult<()>;
     /// Starts the device streaming
@@ -134,7 +123,7 @@ pub trait PicoDriver: Send + Sync {
     fn get_latest_streaming_values<'a>(
         &self,
         handle: i16,
-        callback: Box<dyn FnMut(CallbackType) + 'a>,
+        callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()>;
     /// Stops the device streaming
     fn stop_streaming(&self, handle: i16) -> PicoResult<()>;

@@ -63,7 +63,6 @@ use pico_common::{
     PicoChannel, PicoCoupling, PicoError, PicoRange, PicoResult, PicoStatus, SampleConfig,
 };
 use pico_device::PicoDevice;
-use pico_driver::CallbackType;
 use std::{
     collections::HashMap,
     fmt,
@@ -89,7 +88,7 @@ impl ToStreamDevice for PicoDevice {
     }
 }
 
-type BufferMap = HashMap<PicoChannel, Pin<Vec<i16>>>;
+type BufferMap = HashMap<PicoChannel, Arc<RwLock<Pin<Vec<i16>>>>>;
 type OptionalHandle = Option<i16>;
 
 /// Encapsulates a `PicoDevice` and adds streaming functionality
@@ -245,16 +244,8 @@ impl PicoStreamingDevice {
                             return Ok(());
                         }
 
-                        let closure = |param| match param {
-                            CallbackType::Common {
-                                start_index,
-                                sample_count,
-                            } => {
-                                self.handle_callback(start_index, sample_count);
-                            }
-                            CallbackType::PS2000(data) => {
-                                self.handle_callback_ps2000(data);
-                            }
+                        let closure = |start_index, sample_count| {
+                            self.handle_callback(start_index, sample_count);
                         };
 
                         if self
@@ -329,7 +320,8 @@ impl PicoStreamingDevice {
             .map(|(ch, config)| {
                 let ch_buf = buffers
                     .get(&ch)
-                    .expect("channel is enabled but has no buffer");
+                    .expect("channel is enabled but has no buffer")
+                    .read();
 
                 (
                     **ch,
@@ -341,36 +333,6 @@ impl PicoStreamingDevice {
                 )
             })
             .collect::<HashMap<_, _>>();
-
-        self.events.broadcast(StreamingEvent::Data {
-            interval,
-            length,
-            channels,
-        });
-    }
-
-    fn handle_callback_ps2000(&self, data: HashMap<PicoChannel, Vec<i16>>) {
-        let channels = self.base.channels.read();
-        let sample_config = self.sample_config.read();
-        let interval = sample_config.get_interval();
-
-        let length = data.iter().next().unwrap().1.len();
-
-        let channels = data
-            .iter()
-            .map(|(ch, raw)| {
-                let ch_settings = channels.get(&ch).unwrap();
-
-                (
-                    *ch,
-                    RawChannelDataBlock {
-                        max_adc_value: self.base.get_max_adc_value(),
-                        max_scaled_value: ch_settings.configuration.range.get_max_scaled_value(),
-                        samples: raw.clone(),
-                    },
-                )
-            })
-            .collect();
 
         self.events.broadcast(StreamingEvent::Data {
             interval,
@@ -391,27 +353,25 @@ impl PicoStreamingDevice {
                 .driver
                 .set_channel(handle, channel, &channel_settings.configuration)?;
 
-            // Only allocate buffers for devices that require them
-            if !self.base.driver.allocates_own_buffers() {
-                let buffer_size = self.sample_config.read().samples_per_second() as usize;
-                let mut buffers = self.data_buffers.lock();
+            let buffer_size = self.sample_config.read().samples_per_second() as usize;
+            let mut buffers = self.data_buffers.lock();
 
-                if channel_settings.configuration.enabled {
-                    // Add a buffer for this channel if it doesn't have one
-                    if !buffers.contains_key(&channel) {
-                        // We Pin the buffer because the drivers expect it to never move
-                        buffers.insert(channel, Pin::new(vec![0i16; buffer_size]));
-                    }
+            if channel_settings.configuration.enabled {
+                let ch_buf = buffers
+                    .entry(channel)
+                    .and_modify(|e| {
+                        if e.read().len() != buffer_size {
+                            *e = Arc::new(RwLock::new(Pin::new(vec![0i16; buffer_size])));
+                        }
+                    })
+                    .or_insert_with(|| Arc::new(RwLock::new(Pin::new(vec![0i16; buffer_size]))));
 
-                    let ch_buf = buffers.get_mut(&channel).expect("No buffer found");
-
-                    self.base
-                        .driver
-                        .set_data_buffer(handle, channel, ch_buf, ch_buf.len())?;
-                } else if buffers.contains_key(&channel) {
-                    // Remove the buffer if the channel is not enabled
-                    buffers.remove(&channel);
-                }
+                self.base
+                    .driver
+                    .set_data_buffer(handle, channel, ch_buf.clone(), buffer_size)?;
+            } else if buffers.contains_key(&channel) {
+                // Remove the buffer if the channel is not enabled
+                buffers.remove(&channel);
             }
         }
 

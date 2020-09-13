@@ -299,18 +299,16 @@ fn display_capture_stats(
         for (ch, _, first, unit) in data {
             let ch_col = get_colour(ch);
 
+            let value = match metric::Signifix::try_from(first) {
+                Ok(v) => format!("{}", v),
+                Err(metric::Error::OutOfLowerBound(_)) => "0".to_string(),
+                _ => panic!("unknown error"),
+            };
+
             println!(
                 "  {} - {}",
                 format!("{}", ch_col.apply_to(ch).bold()),
-                format!(
-                    "{}",
-                    style(format!(
-                        "{}{}",
-                        metric::Signifix::try_from(first).unwrap(),
-                        unit
-                    ))
-                    .bold()
-                )
+                format!("{}", style(format!("{} {}", value, unit)).bold())
             );
         }
     };
