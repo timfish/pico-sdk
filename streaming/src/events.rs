@@ -4,13 +4,14 @@ use std::collections::HashMap;
 #[derive(Clone)]
 /// Events returned by the `PicoStreamingDevice`
 pub enum StreamingEvent {
+    Start,
+    Stop,
     Data {
         length: usize,
         interval: f64,
         channels: HashMap<PicoChannel, RawChannelDataBlock>,
     },
-    Connected,
-    Disconnected,
+    LostConnection,
 }
 
 #[derive(Clone)]

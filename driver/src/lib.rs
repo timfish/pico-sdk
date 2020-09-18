@@ -86,7 +86,7 @@ pub trait PicoDriver: Send + Sync {
     /// Returns a list of discovered serial numbers
     fn enumerate_units(&self) -> PicoResult<Vec<String>>;
     /// Opens a device, optionally with a specific serial number
-    fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16>;
+    fn open_unit<'a>(&self, serial: Option<&'a str>) -> PicoResult<i16>;
     /// Ping a unit to see if it's still connected
     fn ping_unit(&self, handle: i16) -> PicoResult<()>;
     /// Get the maximum expected ADC value. This is required to scale to volts

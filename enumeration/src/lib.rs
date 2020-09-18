@@ -134,15 +134,13 @@ impl DeviceEnumerator {
         match driver.enumerate_units() {
             Ok(serials) => serials
                 .par_iter()
-                .map(
-                    |serial| match PicoDevice::try_load(driver.clone(), Some(serial)) {
-                        Ok(device) => Ok(device),
-                        Err(error) => Err(EnumerationError::DriverError {
-                            driver: driver_type,
-                            error,
-                        }),
-                    },
-                )
+                .map(|serial| match PicoDevice::try_load(&driver, Some(serial)) {
+                    Ok(device) => Ok(device),
+                    Err(error) => Err(EnumerationError::DriverError {
+                        driver: driver_type,
+                        error,
+                    }),
+                })
                 .collect(),
             Err(error) => vec![
                 Err(EnumerationError::DriverError {
@@ -200,27 +198,29 @@ impl DeviceEnumerator {
             loaded_drivers.get(&driver_type).cloned()
         };
 
-        if let Some(driver) = driver {
-            Ok(driver)
-        } else {
-            // Ensure we've loaded the dependencies if required
-            if driver_type != Driver::PS2000 && self.resolution != Resolution::Default {
-                // Only do this once
-                let mut dependencies = self.loaded_dependencies.lock();
-                if dependencies.is_none() {
-                    *dependencies = DependencyLoader::try_load(&self.resolution).ok();
+        match driver {
+            Some(driver) => Ok(driver),
+            None => {
+                // Ensure we've loaded the dependencies if required
+                if driver_type != Driver::PS2000 && self.resolution != Resolution::Default {
+                    // Only do this once
+                    let mut dependencies = self.loaded_dependencies.lock();
+                    if dependencies.is_none() {
+                        *dependencies = DependencyLoader::try_load(&self.resolution).ok();
+                    }
+                }
+
+                match driver_type.try_load_with_resolution(&self.resolution) {
+                    Ok(driver) => {
+                        self.loaded_drivers
+                            .write()
+                            .insert(driver_type, driver.clone());
+
+                        Ok(driver)
+                    }
+                    Err(e) => Err(e),
                 }
             }
-
-            let result = driver_type.try_load_with_resolution(&self.resolution);
-
-            if let Ok(driver) = &result {
-                self.loaded_drivers
-                    .write()
-                    .insert(driver_type, driver.clone());
-            }
-
-            result
         }
     }
 }

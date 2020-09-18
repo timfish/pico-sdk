@@ -1,23 +1,34 @@
-use crossbeam::{unbounded, Sender};
+use crossbeam::{bounded, Sender};
 use std::{
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
 
-#[derive(Clone)]
-pub struct Periodic {
+pub struct DropSignal {
     tx_terminate: Sender<()>,
 }
 
-impl Drop for Periodic {
+impl DropSignal {
+    pub fn new(tx_terminate: Sender<()>) -> Arc<Self> {
+        Arc::new(DropSignal { tx_terminate })
+    }
+}
+
+impl Drop for DropSignal {
     fn drop(&mut self) {
         let _ = self.tx_terminate.send(());
     }
 }
 
+#[derive(Clone)]
+pub struct Periodic {
+    drop_signal: Arc<DropSignal>,
+}
+
 impl Periodic {
     pub fn new<F: FnMut() + Send + 'static>(mut callback: F, duration: Duration) -> Self {
-        let (tx_terminate, rx_terminate) = unbounded::<()>();
+        let (tx_terminate, rx_terminate) = bounded::<()>(0);
 
         thread::Builder::new()
             .name(format!("Periodic tick ({:?})", duration))
@@ -50,6 +61,8 @@ impl Periodic {
             })
             .expect("Could not start thread");
 
-        Periodic { tx_terminate }
+        Periodic {
+            drop_signal: DropSignal::new(tx_terminate),
+        }
     }
 }

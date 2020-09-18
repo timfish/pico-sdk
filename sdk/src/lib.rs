@@ -50,7 +50,7 @@ Opening and configuring a specific ps2000 device as a `PicoDevice`:
 use pico_sdk::prelude::*;
 
 let driver = Driver::PS2000.try_load()?;
-let device = PicoDevice::try_load(driver, Some("ABC/123"))?;
+let device = PicoDevice::try_load(&driver, Some("ABC/123"))?;
 device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
 # Ok(())
 # }

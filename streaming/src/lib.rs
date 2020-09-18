@@ -20,7 +20,7 @@ each enabled channel that can easily be scaled to the channel units (ie. Volts, 
 # // Load the required driver
 # let driver = Driver::PS2000.try_load()?;
 # // Try and load the first available ps2000 device
-# let device = PicoDevice::try_load(driver, None)?;
+# let device = PicoDevice::try_load(&driver, None)?;
 # // Enable and configure 2 channels
 # device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
 # device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
@@ -158,7 +158,6 @@ impl PicoStreamingDevice {
     ) -> PicoResult<()> {
         self.config_changed.store(true, Ordering::SeqCst);
         self.base.enable_channel(channel, range, coupling);
-
         self.process_tick(true)?;
 
         Ok(())
@@ -225,7 +224,7 @@ impl PicoStreamingDevice {
         // We should only run tick if `force_tick == true` or we can acquire the
         // handle mutex.
         // If we can't acquire the handle, the previous tick is still running
-        if let Some(mut handle_opt) = {
+        if let Some(mut current_handle) = {
             if force_tick {
                 Some(self.handle.lock())
             } else {
@@ -233,13 +232,13 @@ impl PicoStreamingDevice {
             }
         } {
             if force_tick || self.is_streaming.load(Ordering::SeqCst) {
-                match *handle_opt {
+                match *current_handle {
                     Some(handle) => {
                         if self.config_changed.load(Ordering::SeqCst) {
                             self.config_changed.store(false, Ordering::SeqCst);
 
                             self.base.driver.stop_streaming(handle)?;
-                            *handle_opt = self.configure_and_start(handle)?;
+                            *current_handle = self.configure_and_start(handle)?;
 
                             return Ok(());
                         }
@@ -258,25 +257,25 @@ impl PicoStreamingDevice {
                             // the device
                             let _ = self.base.driver.stop_streaming(handle);
                             let _ = self.base.driver.close_unit(handle);
-                            *handle_opt = None;
-                            self.events.broadcast(StreamingEvent::Disconnected);
+                            *current_handle = None;
+                            self.events.broadcast(StreamingEvent::LostConnection);
                         };
                     }
                     None => {
                         // If we have no handle and should be streaming, open and configure the device
                         let handle = self.base.driver.open_unit(Some(&self.base.serial))?;
-                        *handle_opt = self.configure_and_start(handle)?;
-                        self.events.broadcast(StreamingEvent::Connected);
+                        *current_handle = self.configure_and_start(handle)?;
+                        self.events.broadcast(StreamingEvent::Start);
                     }
                 }
             } else {
                 // If we shouldn't be streaming but have a handle, stop and close
-                if let Some(handle) = *handle_opt {
-                    *handle_opt = None;
+                if let Some(handle) = *current_handle {
+                    *current_handle = None;
                     // We don't care much for the result
                     let _ = self.base.driver.stop_streaming(handle);
                     let _ = self.base.driver.close_unit(handle);
-                    self.events.broadcast(StreamingEvent::Disconnected);
+                    self.events.broadcast(StreamingEvent::Stop);
                 }
             }
         } else {
@@ -301,44 +300,6 @@ impl PicoStreamingDevice {
             }
             Err(e) => Err(e),
         }
-    }
-
-    fn handle_callback(&self, start_index: usize, length: usize) {
-        let buffers = self.data_buffers.lock();
-
-        let channels = self.base.channels.read();
-        let sample_config = self.sample_config.read();
-        let interval = sample_config.get_interval();
-
-        let enabled_channels = channels
-            .iter()
-            .filter(|(_, ch)| ch.configuration.enabled)
-            .collect::<HashMap<_, _>>();
-
-        let channels = enabled_channels
-            .iter()
-            .map(|(ch, config)| {
-                let ch_buf = buffers
-                    .get(&ch)
-                    .expect("channel is enabled but has no buffer")
-                    .read();
-
-                (
-                    **ch,
-                    RawChannelDataBlock {
-                        max_adc_value: self.base.get_max_adc_value(),
-                        max_scaled_value: config.configuration.range.get_max_scaled_value(),
-                        samples: ch_buf[start_index..(start_index + length)].to_vec(),
-                    },
-                )
-            })
-            .collect::<HashMap<_, _>>();
-
-        self.events.broadcast(StreamingEvent::Data {
-            interval,
-            length,
-            channels,
-        });
     }
 
     #[logfn(ok = "Trace", err = "Warn")]
@@ -377,13 +338,38 @@ impl PicoStreamingDevice {
 
         Ok(())
     }
-}
 
-impl Drop for PicoStreamingDevice {
-    #[logfn(Trace)]
-    fn drop(&mut self) {
-        // Once the reference to the device is dropped, stop and close it
-        self.stop();
-        let _ = self.process_tick(false);
+    fn handle_callback(&self, start_index: usize, length: usize) {
+        let buffers = self.data_buffers.lock();
+
+        let channels = self.base.channels.read();
+        let sample_config = self.sample_config.read();
+        let interval = sample_config.get_interval();
+
+        let channels = channels
+            .iter()
+            .filter(|(_, ch)| ch.configuration.enabled)
+            .map(|(ch, config)| {
+                let ch_buf = buffers
+                    .get(&ch)
+                    .expect("Channel is enabled but has no buffer")
+                    .read();
+
+                (
+                    *ch,
+                    RawChannelDataBlock {
+                        max_adc_value: self.base.get_max_adc_value(),
+                        max_scaled_value: config.configuration.range.get_max_scaled_value(),
+                        samples: ch_buf[start_index..(start_index + length)].to_vec(),
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        self.events.broadcast(StreamingEvent::Data {
+            interval,
+            length,
+            channels,
+        });
     }
 }

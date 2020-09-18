@@ -19,11 +19,11 @@ use pico_device::PicoDevice;
 let driver = Driver::PS2000.try_load()?;
 
 // Try and load the first available ps2000 device
-let device1 = PicoDevice::try_load(driver.clone(), None)?;
+let device1 = PicoDevice::try_load(&driver, None)?;
 
 // Try and load devices by serial
-let device2 = PicoDevice::try_load(driver.clone(), Some("ABC/123"))?;
-let device3 = PicoDevice::try_load(driver, Some("ABC/987"))?;
+let device2 = PicoDevice::try_load(&driver, Some("ABC/123"))?;
+let device3 = PicoDevice::try_load(&driver, Some("ABC/987"))?;
 # Ok(())
 # }
 ```
@@ -85,14 +85,14 @@ impl PicoDevice {
     ///
     /// // Load the required driver with a specific resolution
     /// let driver = Driver::PS2000.try_load().unwrap();
-    /// let device1 = PicoDevice::try_load(driver.clone(), Some("ABC/123")).unwrap();
-    /// let device2 = PicoDevice::try_load(driver, Some("ABC/987")).unwrap();
+    /// let device1 = PicoDevice::try_load(&driver, Some("ABC/123")).unwrap();
+    /// let device2 = PicoDevice::try_load(&driver, Some("ABC/987")).unwrap();
     ///
     /// assert_eq!(device1.variant, "2204A");
     /// assert_eq!(device2.variant, "2205A");
     /// ```
     pub fn try_load(
-        driver: Arc<Box<dyn PicoDriver>>,
+        driver: &Arc<Box<dyn PicoDriver>>,
         serial: Option<&str>,
     ) -> PicoResult<PicoDevice> {
         let handle = driver.open_unit(serial)?;
@@ -130,7 +130,7 @@ impl PicoDevice {
         driver.close_unit(handle)?;
 
         Ok(PicoDevice {
-            driver,
+            driver: driver.clone(),
             serial,
             variant,
             usb_version,
