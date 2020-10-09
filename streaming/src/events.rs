@@ -8,7 +8,7 @@ pub enum StreamingEvent {
     Stop,
     Data {
         length: usize,
-        interval: f64,
+        samples_per_second: u32,
         channels: HashMap<PicoChannel, RawChannelDataBlock>,
     },
     LostConnection,

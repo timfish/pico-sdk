@@ -85,7 +85,7 @@ let _stream_subscription = stream_device
     .events
     .subscribe_on_thread(Box::new(move |event| {
         // Handle the data event
-        if let StreamingEvent::Data { length, interval, channels } = event
+        if let StreamingEvent::Data { length, samples_per_second, channels } = event
         {
             // Do something with channel data
         }

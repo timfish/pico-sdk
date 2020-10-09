@@ -35,7 +35,7 @@ let _stream_subscription = stream_device
     .events
     .subscribe_on_thread(Box::new(move |event| {
         // Handle the data event
-        if let StreamingEvent::Data { length, interval, channels } = event
+        if let StreamingEvent::Data { length, samples_per_second, channels } = event
         {
             // iterate though the channels
             for (ch, raw_block) in channels.iter() {
@@ -344,7 +344,6 @@ impl PicoStreamingDevice {
 
         let channels = self.base.channels.read();
         let sample_config = self.sample_config.read();
-        let interval = sample_config.get_interval();
 
         let channels = channels
             .iter()
@@ -367,7 +366,7 @@ impl PicoStreamingDevice {
             .collect::<HashMap<_, _>>();
 
         self.events.broadcast(StreamingEvent::Data {
-            interval,
+            samples_per_second: sample_config.samples_per_second(),
             length,
             channels,
         });

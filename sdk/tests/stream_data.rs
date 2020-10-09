@@ -38,12 +38,12 @@ fn stream_data() {
             .subscribe_on_thread(Box::new(move |event| {
                 if let StreamingEvent::Data {
                     length,
-                    interval,
+                    samples_per_second,
                     channels,
                 } = event
                 {
                     assert!(channels.keys().len() == 2);
-                    assert!(interval == 0.001);
+                    assert!(samples_per_second == 1000);
 
                     if length > 0 {
                         done_tx.send(()).unwrap();

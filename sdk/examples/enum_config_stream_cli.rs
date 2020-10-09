@@ -261,7 +261,7 @@ fn display_capture_stats(
 ) {
     if let StreamingEvent::Data {
         length: _,
-        interval: _,
+        samples_per_second: _,
         channels,
     } = event
     {
