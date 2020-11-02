@@ -15,6 +15,7 @@ lazy_static! {
     /// We store buffers so the ps2000 emulates the same API as the other drivers
     static ref BUFFERS: Mutex<HashMap<i16, BufferMap>> = Default::default();
 }
+
 /// Wraps the ps2000 driver so that it implements the `PicoDriver` trait
 #[derive(Clone)]
 pub struct DriverPS2000 {
@@ -71,7 +72,7 @@ impl PicoDriver for DriverPS2000 {
     fn get_version(&self) -> PicoResult<String> {
         let raw_version = self.get_unit_info(0, PicoInfo::DRIVER_VERSION)?;
 
-        // On non-Windows platforms, the drivers return extra text after the
+        // On non-Windows platforms, the drivers return extra text before the
         // version string
         Ok(raw_version
             .split(|s| s == ' ' || s == ',')
@@ -160,8 +161,7 @@ impl PicoDriver for DriverPS2000 {
 
     #[logfn(err = "Warn")]
     fn ping_unit(&self, handle: i16) -> PicoResult<()> {
-        let ping_unit = self.loader.ping_unit;
-        PicoStatus::from(unsafe { ping_unit(handle) }).to_result((), "ping_unit")
+        PicoStatus::from(unsafe { (&self.loader.ping_unit)(handle) }).to_result((), "ping_unit")
     }
 
     fn maximum_value(&self, _: i16) -> PicoResult<i16> {
@@ -176,8 +176,7 @@ impl PicoDriver for DriverPS2000 {
         let mut buffers = BUFFERS.lock();
         buffers.remove(&handle);
 
-        let close_unit = self.loader.close_unit;
-        PicoStatus::from(unsafe { close_unit(handle) }).to_result((), "close_unit")
+        PicoStatus::from(unsafe { (&self.loader.close_unit)(handle) }).to_result((), "close_unit")
     }
 
     #[logfn(ok = "Trace", err = "Warn")]
@@ -185,9 +184,8 @@ impl PicoDriver for DriverPS2000 {
     fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String> {
         let mut string_buf: Vec<i8> = vec![0i8; 256];
 
-        let get_unit_info = self.loader.get_unit_info;
         let status = PicoStatus::from(unsafe {
-            get_unit_info(
+            (&self.loader.get_unit_info)(
                 handle,
                 string_buf.as_mut_ptr(),
                 string_buf.len() as i16,
@@ -232,10 +230,8 @@ impl PicoDriver for DriverPS2000 {
         channel: PicoChannel,
         config: &ChannelConfig,
     ) -> PicoResult<()> {
-        let set_channel = self.loader.set_channel;
-
         PicoStatus::from(unsafe {
-            set_channel(
+            (&self.loader.set_channel)(
                 handle,
                 channel.into(),
                 config.enabled.into(),
@@ -246,7 +242,7 @@ impl PicoDriver for DriverPS2000 {
         .to_result((), "set_channel")
     }
 
-    // This ps2000 driver doesn't copy data into supplied buffers. It passes the
+    // The ps2000 driver doesn't copy data into supplied buffers. It passes the
     // buffers in the callback. Here we store the buffers and try and emulate
     // the other drivers
     fn set_data_buffer(
@@ -279,10 +275,8 @@ impl PicoDriver for DriverPS2000 {
         handle: i16,
         sample_config: &SampleConfig,
     ) -> PicoResult<SampleConfig> {
-        let run_streaming = self.loader.run_streaming;
-
         let status = PicoStatus::from(unsafe {
-            run_streaming(
+            (&self.loader.run_streaming)(
                 handle,
                 sample_config.interval,
                 sample_config.units.into(),
@@ -343,7 +337,7 @@ impl PicoDriver for DriverPS2000 {
                     ch_buf.copy_from_slice(&raw_data);
                 };
 
-                // ps2000 devices only have up to two channels so we just handle them manually
+                // ps2000 devices always have two channels so we just handle them manually
                 if !buffer_pointers[0].is_null() {
                     copy_data(0, PicoChannel::A)
                 }
@@ -363,7 +357,7 @@ impl PicoDriver for DriverPS2000 {
     #[logfn(ok = "Trace", err = "Warn")]
     #[logfn_inputs(Trace)]
     fn stop_streaming(&self, handle: i16) -> PicoResult<()> {
-        let stop_streaming = self.loader.stop_streaming;
-        PicoStatus::from(unsafe { stop_streaming(handle) }).to_result((), "stop_streaming")
+        PicoStatus::from(unsafe { (&self.loader.stop_streaming)(handle) })
+            .to_result((), "stop_streaming")
     }
 }

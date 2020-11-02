@@ -100,7 +100,7 @@ impl PicoDriver for DriverCommon {
     fn get_version(&self) -> PicoResult<String> {
         let raw_version = self.get_unit_info(0, PicoInfo::DRIVER_VERSION)?;
 
-        // On non-Windows platforms, the drivers return extra text after the
+        // On non-Windows platforms, the drivers return extra text before the
         // version string
         Ok(raw_version
             .split(|s| s == ' ' || s == ',')
@@ -120,9 +120,8 @@ impl PicoDriver for DriverCommon {
         let mut serial_buf: Vec<i8> = vec![0i8; 1000];
         let mut serial_buf_len = vec![serial_buf.len() as i16];
 
-        let enumerate_units = self.loader.enumerate_units;
         let status = PicoStatus::from(unsafe {
-            enumerate_units(
+            (&self.loader.enumerate_units)(
                 device_count.as_mut_ptr(),
                 serial_buf.as_mut_ptr(),
                 serial_buf_len.as_mut_ptr(),
@@ -206,8 +205,7 @@ impl PicoDriver for DriverCommon {
 
     #[logfn(err = "Warn")]
     fn ping_unit(&self, handle: i16) -> PicoResult<()> {
-        let ping_unit = self.loader.ping_unit;
-        PicoStatus::from(unsafe { ping_unit(handle) }).to_result((), "ping_unit")
+        PicoStatus::from(unsafe { (&self.loader.ping_unit)(handle) }).to_result((), "ping_unit")
     }
 
     #[logfn(ok = "Trace", err = "Warn")]
@@ -232,12 +230,10 @@ impl PicoDriver for DriverCommon {
     fn close_unit(&self, handle: i16) -> PicoResult<()> {
         // Remove probes for 4000a devices when they are closed
         if self.driver == Driver::PS4000A {
-            let mut probes_4000a = PROBES_4000A.lock();
-            let _ = probes_4000a.remove(&handle);
+            PROBES_4000A.lock().remove(&handle);
         }
 
-        let close_unit = self.loader.close_unit;
-        PicoStatus::from(unsafe { close_unit(handle) }).to_result((), "close_unit")
+        PicoStatus::from(unsafe { (&self.loader.close_unit)(handle) }).to_result((), "close_unit")
     }
 
     #[logfn(ok = "Trace", err = "Warn")]
@@ -246,9 +242,8 @@ impl PicoDriver for DriverCommon {
         let mut string_buf: Vec<i8> = vec![0i8; 256];
         let mut string_buf_out_len = vec![0i16];
 
-        let get_unit_info = self.loader.get_unit_info;
         let status = PicoStatus::from(unsafe {
-            get_unit_info(
+            (&self.loader.get_unit_info)(
                 handle,
                 string_buf.as_mut_ptr(),
                 string_buf.len() as i16,
@@ -268,10 +263,8 @@ impl PicoDriver for DriverCommon {
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>> {
         // Some 4000a devices get the ranges from probes
         if self.driver == Driver::PS4000A {
-            let probes_4000a = PROBES_4000A.lock();
-
             // Only do this if we've had probes returned for this device
-            if let Some(probes) = probes_4000a.get(&handle) {
+            if let Some(probes) = PROBES_4000A.lock().get(&handle) {
                 return Ok(match probes.get(&channel.clone()) {
                     Some(ranges) => ranges.clone(),
                     None => Vec::new(),
@@ -439,7 +432,7 @@ impl PicoDriver for DriverCommon {
     #[logfn(ok = "Trace", err = "Warn")]
     #[logfn_inputs(Trace)]
     fn stop_streaming(&self, handle: i16) -> PicoResult<()> {
-        let stop_streaming = self.loader.stop_streaming;
-        PicoStatus::from(unsafe { stop_streaming(handle) }).to_result((), "stop_streaming")
+        PicoStatus::from(unsafe { (&self.loader.stop_streaming)(handle) })
+            .to_result((), "stop_streaming")
     }
 }

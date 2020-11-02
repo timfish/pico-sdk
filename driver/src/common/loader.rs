@@ -196,8 +196,7 @@ impl LoaderCommon {
             };
 
             // Apply Fix to disable splash dialog
-            let apply_fix = lib.apply_fix;
-            apply_fix(0x1ced_9168, 0x11e6);
+            (&lib.apply_fix)(0x1ced_9168, 0x11e6);
 
             Ok(lib)
         }
