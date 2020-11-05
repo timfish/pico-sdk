@@ -85,7 +85,7 @@ mod streaming_tests {
             .enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC)
             .unwrap();
 
-        streaming.start().unwrap();
+        streaming.start(100_000).unwrap();
 
         // Ensure that clone + drop doesn't cause any unexpected behaviour
         {

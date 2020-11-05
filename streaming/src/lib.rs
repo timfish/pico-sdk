@@ -27,8 +27,6 @@ each enabled channel that can easily be scaled to the channel units (ie. Volts, 
 
 // Get a streaming device from a configured PicoDevice
 let stream_device = device.to_streaming_device();
-// Set the sample rate
-stream_device.set_samples_per_second(1_000)?;
 
 // Subscribe to streaming events on a background thread
 let _stream_subscription = stream_device
@@ -45,15 +43,15 @@ let _stream_subscription = stream_device
         }
     }));
 
-// Start streaming
-stream_device.start()?;
+// Start streaming with a sample rate of 1k
+stream_device.start(1_000)?;
 # Ok(())
 # }
 ```
 
 */
 use double_decker::Bus;
-pub use double_decker::SubscribeToReader;
+pub use double_decker::{SubscribeToReader, Subscription};
 pub use events::{RawChannelDataBlock, StreamingEvent};
 use log::*;
 use log_derive::{logfn, logfn_inputs};
@@ -150,6 +148,12 @@ impl PicoStreamingDevice {
 
     #[logfn(Trace)]
     #[logfn_inputs(Trace)]
+    pub fn get_variant(&self) -> String {
+        self.base.variant.to_string()
+    }
+
+    #[logfn(Trace)]
+    #[logfn_inputs(Trace)]
     pub fn enable_channel(
         &self,
         channel: PicoChannel,
@@ -182,25 +186,19 @@ impl PicoStreamingDevice {
         self.base.get_valid_ranges(channel)
     }
 
-    #[logfn(Trace)]
-    #[logfn_inputs(Trace)]
-    pub fn set_samples_per_second(&self, samples_per_second: u32) -> PicoResult<()> {
-        if self.is_streaming.load(Ordering::SeqCst) {
-            return Err(PicoError::from_status(
-                PicoStatus::BUSY,
-                "set_samples_per_second",
-            ));
-        }
-
-        let mut sample_config = self.sample_config.write();
-        *sample_config = SampleConfig::from_samples_per_second(samples_per_second);
-
-        Ok(())
-    }
-
     /// Start streaming
     #[logfn(ok = "Trace", err = "Warn")]
-    pub fn start(&self) -> PicoResult<u32> {
+    pub fn start(&self, samples_per_second: u32) -> PicoResult<u32> {
+        if self.is_streaming.load(Ordering::SeqCst) {
+            return Err(PicoError::from_status(PicoStatus::BUSY, "start"));
+        }
+
+        let samples_per_second = {
+            let mut sample_config = self.sample_config.write();
+            *sample_config = SampleConfig::from_samples_per_second(samples_per_second);
+            sample_config.samples_per_second()
+        };
+
         // We force a tick which should configure the device and bubble up any config
         // errors immediately
         self.process_tick(true)?;
@@ -208,8 +206,7 @@ impl PicoStreamingDevice {
         // We only enable streaming if configuration was successful
         self.is_streaming.store(true, Ordering::SeqCst);
 
-        let sample_config = self.sample_config.read();
-        Ok(sample_config.samples_per_second())
+        Ok(samples_per_second)
     }
 
     /// Stop streaming
@@ -235,8 +232,6 @@ impl PicoStreamingDevice {
                 match *current_handle {
                     Some(handle) => {
                         if self.config_changed.load(Ordering::SeqCst) {
-                            self.config_changed.store(false, Ordering::SeqCst);
-
                             self.base.driver.stop_streaming(handle)?;
                             *current_handle = self.configure_and_start(handle)?;
 
@@ -289,6 +284,7 @@ impl PicoStreamingDevice {
         self.configure(handle)?;
 
         let mut sample_config = self.sample_config.write();
+        self.config_changed.store(false, Ordering::SeqCst);
 
         match self.base.driver.start_streaming(handle, &sample_config) {
             Ok(sc) => {

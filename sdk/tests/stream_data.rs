@@ -29,7 +29,6 @@ fn stream_data() {
         device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
 
         let stream_device = device.to_streaming_device();
-        stream_device.set_samples_per_second(1000).unwrap();
 
         let (done_tx, done_rx) = mpsc::channel();
 
@@ -51,7 +50,7 @@ fn stream_data() {
                 }
             }));
 
-        stream_device.start().unwrap();
+        stream_device.start(1000).unwrap();
 
         if let Err(::std::sync::mpsc::RecvTimeoutError::Timeout) =
             done_rx.recv_timeout(Duration::from_secs(10))

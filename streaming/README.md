@@ -15,8 +15,6 @@ each enabled channel that can easily be scaled to the channel units (ie. Volts, 
 
 // Get a streaming device from a configured PicoDevice
 let stream_device = device.to_streaming_device();
-// Set the sample rate
-stream_device.set_samples_per_second(1_000)?;
 
 // Subscribe to streaming events on a background thread
 let _stream_subscription = stream_device
@@ -33,8 +31,8 @@ let _stream_subscription = stream_device
         }
     }));
 
-// Start streaming
-stream_device.start()?;
+// Start streaming with a sample rate of 1k
+stream_device.start(1_000)?;
 ```
 
 

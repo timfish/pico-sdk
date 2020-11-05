@@ -10,7 +10,7 @@ repository = "https://github.com/meatysolutions/pico-sdk"
 readme = "README.md"
 
 [lib]
-crate-type = ["lib", "cdylib"]
+crate-type = ["lib"]
 path = "src/lib.rs"
 
 [dependencies]

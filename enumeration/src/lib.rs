@@ -9,11 +9,10 @@ Discovers Pico devices by USB Vendor ID, handles loading the required Pico drive
 enumerates them in parallel returning devices with their capabilities.
 
 */
-use anyhow::Error;
 pub use helpers::EnumResultHelpers;
 use parking_lot::{Mutex, RwLock};
 use pico_common::Driver;
-use pico_common::{PicoError, PicoStatus};
+use pico_common::PicoError;
 use pico_device::PicoDevice;
 use pico_driver::{
     ArcDriver, DependencyLoader, DriverLoadError, LoadDriverExt, PicoDriver, Resolution,
@@ -149,43 +148,6 @@ impl DeviceEnumerator {
                 });
                 device_count
             ],
-        }
-    }
-
-    /// Enumerate and find the first `PicoDevice` with the matching serial
-    pub fn find_device_with_serial(&self, serial: Option<&str>) -> Result<PicoDevice, Error> {
-        let devices = self.enumerate();
-
-        let mut found_devices: Vec<PicoDevice> = devices.into_iter().flatten().collect();
-
-        if let Some(serial) = serial {
-            found_devices = found_devices
-                .into_iter()
-                .filter(|d| d.serial == serial)
-                .collect();
-        }
-
-        if found_devices.is_empty() {
-            Err(Error::new(PicoError::from(PicoStatus::NOT_FOUND)))
-        } else if found_devices.len() > 1 {
-            match serial {
-                None => {
-                    Err(
-                        Error::new(PicoError::from(PicoStatus::MULTIPLE_DEVICES_FOUND)).context(
-                            format!(
-                                "Multiple matching devices found. Try passing one of the discovered serial numbers ({:?})",
-                                found_devices.iter().map(|d| d.serial.to_string())
-                            ),
-                        ),
-                    )
-            }
-                Some(_) => Err(Error::new(PicoError::from(
-                    PicoStatus::MULTIPLE_DEVICES_FOUND,
-                ))),
-
-            }
-        } else {
-            Ok(found_devices[0].clone())
         }
     }
 

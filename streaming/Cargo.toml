@@ -18,9 +18,9 @@ pico-common = { path = "../common" }
 pico-driver = { path = "../driver" }
 pico-device = { path = "../device"}
 parking_lot = "0.11"
-double_decker = "0.0.2"
+double_decker = "0.0.3"
 log-derive = "0.3"
-crossbeam = "0.7.3"
+crossbeam = "0.8"
 log = "0.4"
 
 [dev-dependencies]

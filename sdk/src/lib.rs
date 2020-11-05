@@ -77,8 +77,6 @@ device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
 
 // Get a streaming device
 let stream_device = device.to_streaming_device();
-// Set the sample rate
-stream_device.set_samples_per_second(1_000)?;
 
 // Subscribe to streaming events on a background thread
 let _stream_subscription = stream_device
@@ -91,8 +89,8 @@ let _stream_subscription = stream_device
         }
     }));
 
-// Start streaming
-stream_device.start()?;
+// Start streaming with 1k sample rate
+stream_device.start(1_000)?;
 # Ok(())
 # }
 ```
@@ -132,7 +130,9 @@ pub mod prelude {
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{DriverLoadError, LoadDriverExt, PicoDriver, Resolution};
     pub use pico_enumeration::{DeviceEnumerator, EnumResultHelpers, EnumerationError};
-    pub use pico_streaming::{StreamingEvent, SubscribeToReader, ToStreamDevice};
+    pub use pico_streaming::{
+        PicoStreamingDevice, StreamingEvent, SubscribeToReader, Subscription, ToStreamDevice,
+    };
 }
 
 /// Common enums, structs and traits

@@ -73,8 +73,6 @@ device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
 
 // Get a streaming device
 let stream_device = device.to_streaming_device();
-// Set the sample rate
-stream_device.set_samples_per_second(1_000)?;
 
 // Subscribe to streaming events on a background thread
 let _stream_subscription = stream_device
@@ -87,8 +85,8 @@ let _stream_subscription = stream_device
         }
     }));
 
-// Start streaming
-stream_device.start()?;
+// Start streaming with 1k sample rate
+stream_device.start(1_000)?;
 ```
 
 Enumerate all required Pico oscilloscope drivers. If a device is found but no matching

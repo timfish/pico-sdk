@@ -94,14 +94,17 @@ mod tests {
         let sc = SampleConfig::from_samples_per_second(1);
         assert_eq!(sc.interval, 1_000_000_000);
         assert_eq!(sc.units, TimeUnits::NS);
+        assert_eq!(sc.samples_per_second(), 1);
 
         let sc = SampleConfig::from_samples_per_second(1000);
         assert_eq!(sc.interval, 1_000_000);
         assert_eq!(sc.units, TimeUnits::NS);
+        assert_eq!(sc.samples_per_second(), 1000);
 
         let sc = SampleConfig::from_samples_per_second(15657);
         assert_eq!(sc.interval, 63_869);
         assert_eq!(sc.units, TimeUnits::NS);
+        assert_eq!(sc.samples_per_second(), 15657);
     }
 
     #[test]

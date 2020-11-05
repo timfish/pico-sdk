@@ -1,4 +1,4 @@
-use crossbeam::{bounded, Sender};
+use crossbeam::channel::{bounded, Sender};
 use std::{
     sync::Arc,
     thread,

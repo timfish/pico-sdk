@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     let ch_units = configure_channels(&device);
 
     let streaming_device = device.to_streaming_device();
-    streaming_device.set_samples_per_second(get_capture_rate())?;
+    let capture_rate = get_capture_rate();
 
     let term = Term::stdout();
     let rate_calc = RateCalc::new();
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
 
     println!("Press Enter to stop streaming");
 
-    streaming_device.start().unwrap();
+    streaming_device.start(capture_rate).unwrap();
 
     Term::stdout().read_line().unwrap();
 
