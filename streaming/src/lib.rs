@@ -50,13 +50,13 @@ stream_device.start(1_000)?;
 ```
 
 */
+use crossbeam::channel::{bounded, Sender};
 use double_decker::Bus;
 pub use double_decker::{SubscribeToReader, Subscription};
 pub use events::{RawChannelDataBlock, StreamingEvent};
 use log::*;
 use log_derive::{logfn, logfn_inputs};
 use parking_lot::{Mutex, RwLock};
-use periodic::Periodic;
 use pico_common::{
     PicoChannel, PicoCoupling, PicoError, PicoRange, PicoResult, PicoStatus, SampleConfig,
 };
@@ -69,11 +69,13 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
+    thread,
+    thread::JoinHandle,
     time::Duration,
+    time::Instant,
 };
 
 mod events;
-mod periodic;
 
 /// Converts `PicoDevice` into `PicoStreamingDevice`
 pub trait ToStreamDevice {
@@ -83,6 +85,27 @@ pub trait ToStreamDevice {
 impl ToStreamDevice for PicoDevice {
     fn to_streaming_device(self) -> PicoStreamingDevice {
         PicoStreamingDevice::new(self)
+    }
+}
+
+pub struct BackgroundThreadHandle {
+    tx_terminate: Sender<()>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl BackgroundThreadHandle {
+    pub fn new(tx_terminate: Sender<()>, handle: JoinHandle<()>) -> Arc<Self> {
+        Arc::new(BackgroundThreadHandle {
+            tx_terminate,
+            handle: Some(handle),
+        })
+    }
+}
+
+impl Drop for BackgroundThreadHandle {
+    fn drop(&mut self) {
+        self.tx_terminate.send(()).unwrap();
+        self.handle.take().unwrap().join().unwrap();
     }
 }
 
@@ -99,9 +122,9 @@ pub struct PicoStreamingDevice {
     handle: Arc<Mutex<OptionalHandle>>,
     data_buffers: Arc<Mutex<BufferMap>>,
     is_streaming: Arc<AtomicBool>,
-    config_changed: Arc<AtomicBool>,
-    sample_config: Arc<RwLock<SampleConfig>>,
-    subscriptions: Option<Periodic>,
+    channels_changed: Arc<AtomicBool>,
+    samples_per_second: Arc<RwLock<u32>>,
+    background: Option<Arc<BackgroundThreadHandle>>,
     pub events: Bus<StreamingEvent>,
 }
 
@@ -109,6 +132,7 @@ impl fmt::Debug for PicoStreamingDevice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PicoStreamingDevice")
             .field("device", &self.base)
+            .field("samples_per_second", &self.samples_per_second.read())
             .field("is_streaming", &self.is_streaming)
             .finish()
     }
@@ -119,23 +143,15 @@ impl PicoStreamingDevice {
         let mut device = PicoStreamingDevice {
             base: device,
             events: Default::default(),
-            sample_config: Default::default(),
+            samples_per_second: Default::default(),
             is_streaming: Default::default(),
-            config_changed: Default::default(),
+            channels_changed: Default::default(),
             handle: Default::default(),
             data_buffers: Default::default(),
-            subscriptions: Default::default(),
+            background: Default::default(),
         };
 
-        device.subscriptions = Some(Periodic::new(
-            {
-                let device = device.clone();
-                move || {
-                    let _ = device.process_tick(false);
-                }
-            },
-            Duration::from_millis(100),
-        ));
+        device.start_background_thread();
 
         device
     }
@@ -160,7 +176,7 @@ impl PicoStreamingDevice {
         range: PicoRange,
         coupling: PicoCoupling,
     ) -> PicoResult<()> {
-        self.config_changed.store(true, Ordering::SeqCst);
+        self.channels_changed.store(true, Ordering::SeqCst);
         self.base.enable_channel(channel, range, coupling);
         self.process_tick(true)?;
 
@@ -170,7 +186,7 @@ impl PicoStreamingDevice {
     #[logfn(Trace)]
     #[logfn_inputs(Trace)]
     pub fn disable_channel(&self, channel: PicoChannel) {
-        self.config_changed.store(true, Ordering::SeqCst);
+        self.channels_changed.store(true, Ordering::SeqCst);
         self.base.disable_channel(channel);
     }
 
@@ -193,45 +209,87 @@ impl PicoStreamingDevice {
             return Err(PicoError::from_status(PicoStatus::BUSY, "start"));
         }
 
-        let samples_per_second = {
-            let mut sample_config = self.sample_config.write();
-            *sample_config = SampleConfig::from_samples_per_second(samples_per_second);
-            sample_config.samples_per_second()
-        };
+        {
+            let mut sample_config = self.samples_per_second.write();
+            *sample_config = samples_per_second;
+        }
+
+        self.is_streaming.store(true, Ordering::SeqCst);
 
         // We force a tick which should configure the device and bubble up any config
         // errors immediately
-        self.process_tick(true)?;
+        if let Err(e) = self.process_tick(true) {
+            self.is_streaming.store(false, Ordering::SeqCst);
+            return Err(e);
+        }
 
-        // We only enable streaming if configuration was successful
-        self.is_streaming.store(true, Ordering::SeqCst);
-
-        Ok(samples_per_second)
+        Ok(*self.samples_per_second.read())
     }
 
     /// Stop streaming
-    #[logfn(ok = "Trace", err = "Warn")]
+    #[logfn(Trace)]
     pub fn stop(&self) {
-        // Just update the state and the tick task will do the rest
         self.is_streaming.store(false, Ordering::SeqCst);
+        let _ = self.process_tick(true);
+    }
+
+    fn start_background_thread(&mut self) {
+        let (tx_terminate, rx_terminate) = bounded::<()>(0);
+        let duration = Duration::from_millis(100);
+
+        let handle = thread::Builder::new()
+            .name(format!("Streaming background task ({:?})", duration))
+            .spawn({
+                let device = self.clone();
+
+                move || {
+                    let start_time = Instant::now();
+                    let mut count = 0;
+
+                    loop {
+                        let _ = device.process_tick(false);
+
+                        count += 1;
+                        let expected_micros = count * duration.as_micros();
+                        let elapsed_micros = start_time.elapsed().as_micros();
+
+                        let wait_micros = if expected_micros > elapsed_micros {
+                            expected_micros - elapsed_micros
+                        } else {
+                            0
+                        };
+
+                        if rx_terminate
+                            .recv_timeout(Duration::from_micros(wait_micros as u64))
+                            .is_ok()
+                        {
+                            device.stop();
+                            return;
+                        }
+                    }
+                }
+            })
+            .expect("Could not start thread");
+
+        self.background = Some(BackgroundThreadHandle::new(tx_terminate, handle));
     }
 
     #[logfn(err = "Warn")]
-    fn process_tick(&self, force_tick: bool) -> PicoResult<()> {
+    fn process_tick(&self, force_lock: bool) -> PicoResult<()> {
         // We should only run tick if `force_tick == true` or we can acquire the
         // handle mutex.
         // If we can't acquire the handle, the previous tick is still running
         if let Some(mut current_handle) = {
-            if force_tick {
+            if force_lock {
                 Some(self.handle.lock())
             } else {
                 self.handle.try_lock()
             }
         } {
-            if force_tick || self.is_streaming.load(Ordering::SeqCst) {
+            if self.is_streaming.load(Ordering::SeqCst) {
                 match *current_handle {
                     Some(handle) => {
-                        if self.config_changed.load(Ordering::SeqCst) {
+                        if self.channels_changed.load(Ordering::SeqCst) {
                             self.base.driver.stop_streaming(handle)?;
                             *current_handle = self.configure_and_start(handle)?;
 
@@ -283,14 +341,17 @@ impl PicoStreamingDevice {
     fn configure_and_start(&self, handle: i16) -> PicoResult<Option<i16>> {
         self.configure(handle)?;
 
-        let mut sample_config = self.sample_config.write();
-        self.config_changed.store(false, Ordering::SeqCst);
+        let mut samples_per_second = self.samples_per_second.write();
+        self.channels_changed.store(false, Ordering::SeqCst);
 
-        match self.base.driver.start_streaming(handle, &sample_config) {
+        match self.base.driver.start_streaming(
+            handle,
+            &SampleConfig::from_samples_per_second(*samples_per_second),
+        ) {
             Ok(sc) => {
                 // We get an updated SampleConfig as it could have been changed
                 // by the driver
-                *sample_config = sc;
+                *samples_per_second = sc.samples_per_second();
 
                 Ok(Some(handle))
             }
@@ -310,7 +371,7 @@ impl PicoStreamingDevice {
                 .driver
                 .set_channel(handle, channel, &channel_settings.configuration)?;
 
-            let buffer_size = self.sample_config.read().samples_per_second() as usize;
+            let buffer_size = *self.samples_per_second.read() as usize;
             let mut buffers = self.data_buffers.lock();
 
             if channel_settings.configuration.enabled {
@@ -339,7 +400,7 @@ impl PicoStreamingDevice {
         let buffers = self.data_buffers.lock();
 
         let channels = self.base.channels.read();
-        let sample_config = self.sample_config.read();
+        let samples_per_second = self.samples_per_second.read();
 
         let channels = channels
             .iter()
@@ -362,7 +423,7 @@ impl PicoStreamingDevice {
             .collect::<HashMap<_, _>>();
 
         self.events.broadcast(StreamingEvent::Data {
-            samples_per_second: sample_config.samples_per_second(),
+            samples_per_second: *samples_per_second,
             length,
             channels,
         });
