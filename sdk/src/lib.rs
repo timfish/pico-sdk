@@ -29,7 +29,7 @@ To run these tests, ensure that ignored tests are run too:
 
 There are a number of examples which demonstrate how the wrappers can be used
 
-`cargo run --example enum_config_stream_cli`
+`cargo run --example streaming_cli`
 
 Displays an interactive command line interface that allows selection of device, channel configuration
 and sample rate. Once capturing, the streaming rate is displayed along with channel values.
