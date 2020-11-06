@@ -1,114 +1,88 @@
 # pico-sdk
 
-## Unofficial Rust bindings and wrappers for Pico Technology oscilloscope drivers
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/meatysolutions/pico-sdk/Build%20&%20Package)
+![GitHub](https://img.shields.io/github/license/meatysolutions/pico-sdk?style=flat)
 
-This is a meta-crate re-exporting functionality from a number of sub-crates. These
-crates expose common, high-performance, simplified APIs that hide the differences between the
-numerous Pico drivers.
+### High performance, cross-platform, gap-free streaming from any Pico Technology oscilloscope
 
-|  | Crate | Description |
-|--|-------|-------------|
-|`pico-common`|[![Crates.io](https://img.shields.io/crates/v/pico-common)](https://crates.io/crates/pico-common)| Common enums, structs and traits. |
-|`pico-driver`|[![Crates.io](https://img.shields.io/crates/v/pico-driver)](https://crates.io/crates/pico-driver)| Dynamic loading and both unsafe and safe wrappers for Pico drivers. **This is the only crate with unsafe code.** |
-|`pico-download`|[![Crates.io](https://img.shields.io/crates/v/pico-download)](https://crates.io/crates/pico-download)| Download missing drivers on any platform. |
-|`pico-device`|[![Crates.io](https://img.shields.io/crates/v/pico-device)](https://crates.io/crates/pico-device)| Device abstraction over `PicoDriver`. Detects available channels and valid ranges. |
-|`pico-enumeration`|[![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)| Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers. |
-|`pico-streaming`|[![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)| Implements continuous gap-less streaming on top of `PicoDevice`. |
+This package wraps all current Pico oscilloscope drivers in a high-level, common
+API written in Rust. This API is compiled to native code and exposed to other
+programming languages through simple C bindings.
 
-Pull Requests are welcome, especially if they add support for block capture or triggering!
+## Issues, Feature Requests and Contributions
 
-Eventually, these simplified APIs will be exposed via bindings for use in other programming languages.
+This library is still in the early stages of development so you should expect
+breaking changes on any release before v1.0.0.
 
-## Tests
-Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.
-To run these tests, ensure that ignored tests are run too:
+Please report any issues or feature requests in
+[the issue tracker](https://github.com/meatysolutions/pico-sdk/issues). Pull
+requests are welcome and encouraged!
 
-`cargo test -- --ignored`
+## Building
 
-## Examples
+The Rust code will build and test on any platform via `cargo build` and
+`cargo test`.
 
-There are a number of examples which demonstrate how the wrappers can be used
+To support multiple platforms, the language bindings require the native build
+artifacts from every supported platform. This is achieved via GitHub Actions
+with a pipelined build.
 
-`cargo run --example streaming_cli`
+- On Windows, macOS and Linux we run `node scripts/build.js` which compiles the
+  Rust code to native libraries.
+- In the final step we run `node scripts/bindings.js` which copies the native
+  libraries to the correct directories and builds/packages for each language.
 
-Displays an interactive command line interface that allows selection of device, channel configuration
-and sample rate. Once capturing, the streaming rate is displayed along with channel values.
+You can build packages supporting only your current platform by running these
+scripts yourself. However, the dotnet build currently fails if any native
+artifacts are missing so you'll need to modify `PicoSDK.csproj` to negate this.
 
-`cargo run --example enumerate`
+## Rust
 
-Attempts to enumerate devices and downloads drivers which were not found in the cache location.
+![Crates.io](https://img.shields.io/crates/v/pico-sdk)
 
-`cargo run --example open <driver> <serial>`
+Add `pico-sdk` to dependencies in `Cargo.toml`:
 
-Loads the specified driver and attempts open the optionally specified device serial.
-
-
-## Usage Examples
-Opening and configuring a specific ps2000 device as a `PicoDevice`:
-```rust
-use pico_sdk::prelude::*;
-
-let driver = Driver::PS2000.try_load()?;
-let device = PicoDevice::try_load(&driver, Some("ABC/123"))?;
-device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+```toml
+[dependencies]
+pico-sdk = "0.1.1"
 ```
 
-Enumerate all required Pico oscilloscope drivers, configure the first device that's returned and stream
-gap-less data from it:
-```rust
-use pico_sdk::prelude::*;
+Check out the usage examples in the [Rust README](rust/sdk).
 
-let enumerator = DeviceEnumerator::new();
-// Enumerate, ignore all failures and get the first device
-let device = enumerator
-                .enumerate()
-                .into_iter()
-                .flatten()
-                .next()
-                .expect("No device found");
+## .NET
 
-// Enable and configure 2 channels
-device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
+![Nuget](https://img.shields.io/nuget/v/PicoSDK)
 
-// Get a streaming device
-let stream_device = device.to_streaming_device();
+Add the `PicoSDK` NuGet package:
 
-// Subscribe to streaming events on a background thread
-let _stream_subscription = stream_device
-    .events
-    .subscribe_on_thread(Box::new(move |event| {
-        // Handle the data event
-        if let StreamingEvent::Data { length, samples_per_second, channels } = event
-        {
-            // Do something with channel data
-        }
-    }));
-
-// Start streaming with 1k sample rate
-stream_device.start(1_000)?;
+```shell
+dotnet add package PicoSDK
 ```
 
-Enumerate all required Pico oscilloscope drivers. If a device is found but no matching
-driver is available, attempt to download missing drivers and try enumerating again:
-```rust
-use pico_sdk::prelude::*;
+Check out the usage example in the [dotnet README](dotnet)
 
-let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
+## Python
 
-loop {
-    let results = enumerator.enumerate();
+![PyPI](https://img.shields.io/pypi/v/pico_sdk)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pico_sdk)
 
-    println!("{:#?}", results);
+Install the `pico_sdk` package:
 
-    let missing_drivers = results.missing_drivers();
-
-    if !missing_drivers.is_empty() {
-        download_drivers_to_cache(&missing_drivers)?;
-    } else {
-        break;
-    }
-}
+```shell
+pip install pico_sdk
 ```
 
-License: MIT
+Check out the usage example in the [Python README](python)
+
+## Node.js
+
+![npm](https://img.shields.io/npm/v/pico-sdk)
+![node-current](https://img.shields.io/node/v/pico-sdk)
+
+Add the `pico-sdk` package:
+
+```shell
+npm i pico-sdk
+```
+
+Check out the usage example in the [node.js README](nodejs)

@@ -1,0 +1,148 @@
+name: Build & Package
+
+on: [push, pull_request]
+
+jobs:
+  build-windows:
+    name: Build Rust - Windows
+    runs-on: windows-latest
+    steps:
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: i686-pc-windows-msvc
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Test Rust
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+      - name: Build Rust
+        run: node scripts/build.js
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: windows-x86_64
+          path: target/x86_64-pc-windows-msvc/release/*.dll
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: windows-i686
+          path: target/i686-pc-windows-msvc/release/*.dll
+
+  build-macos:
+    name: Build Rust - macOS
+    runs-on: macos-latest
+    steps:
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install dependencies
+        run: brew install autoconf automake libtool libffi
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Test Rust
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+      - name: Build Rust
+        run: node scripts/build.js
+      - name: Strip symbols
+        run: strip -x target/release/libpico_native.dylib
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: macos-x86_64
+          path: target/release/*.dylib
+
+  build-linux-x64:
+    name: Build Rust - Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Test Rust
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+      - name: Build Rust
+        run: node scripts/build.js
+      - name: Strip symbols
+        run: strip target/release/libpico_native.so
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: linux-x86_64
+          path: target/release/*.so
+      - name: Upload headers
+        uses: actions/upload-artifact@v2
+        with:
+          name: headers
+          path: rust/native/pico_sdk.h
+
+  build-bindings:
+    name: Build Bindings
+    needs: [build-windows, build-macos, build-linux-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '3.1.x'
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Download artifacts from previous jobs
+        uses: actions/download-artifact@v2
+        with:
+          path: artifacts
+      - name: Package Bindings
+        run: node scripts/package.js
+      - name: Upload Python output
+        uses: actions/upload-artifact@v2
+        with:
+          name: python
+          path: python/dist/*
+      - name: Upload dotnet output
+        uses: actions/upload-artifact@v2
+        with:
+          name: dotnet
+          path: dotnet/bin/Release/*.nupkg
+      - name: Upload nodejs output
+        uses: actions/upload-artifact@v2
+        with:
+          name: nodejs
+          path: nodejs/*.tgz
+      - name: Upload GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          files: |
+            artifacts/**/*
+            python/dist/*
+            dotnet/bin/Release/*.nupkg
+            nodejs/*.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Packages
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          PYPI_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node scripts/publish.js

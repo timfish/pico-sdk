@@ -1,14 +1,8 @@
 [workspace]
 members = [
-    "./common",
-    "./driver",
-    "./download",
-    "./device",
-    "./streaming",
-    "./enumeration",
-    "./sdk",
+  "./rust/*",
 ]
 
 [profile.release]
-lto = true
 debug = true
+lto = true

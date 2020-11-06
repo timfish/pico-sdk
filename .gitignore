@@ -1,5 +1,69 @@
+# Common 
+artifacts/
+
 # Rust
 /target/
 Cargo.lock
 **/*.rs.bk
 .env
+
+# Generated header
+rust/native/pico_sdk.h
+
+# dotnet
+*.swp
+*.*~
+.DS_Store
+*.pyc
+nupkg/
+
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+msbuild.log
+msbuild.err
+msbuild.wrn
+
+docs.xml
+
+# Python 
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+*/python/dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# nodejs
+node_modules
+yarn.lock
+dist/
+*.tgz
