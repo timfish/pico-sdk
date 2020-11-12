@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "strict": true,
+        "declaration": true,
+        "downlevelIteration": true,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noUnusedLocals": true,
+        "removeComments": true,
+        "pretty": true,
+        "sourceMap": true,
+        "target": "ES2018",
+        "lib": [
+            "ES6",
+        ],
+        "module": "commonjs",
+        "moduleResolution": "node"
+    }
+}
