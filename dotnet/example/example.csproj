@@ -4,7 +4,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="PicoSDK" Version="0.1.1" />
+    <PackageReference Include="PicoSDK" Version="0.1.2" />
   </ItemGroup>
 
   <PropertyGroup>

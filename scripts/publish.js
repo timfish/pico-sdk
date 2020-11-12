@@ -9,32 +9,28 @@ try {
     run('cargo release --no-confirm --no-dev-version');
   }
 } catch (e) {
-  console.error('Failed to publish Rust');
+  console.error('Failed to publish Rust', e);
 }
 
 // dotnet
 try {
   if (process.env.NUGET_API_KEY) {
-    walkDir(
-      /\.nupkg/,
-      (path) => {
-        run(
-          `dotnet nuget push ${path} --api-key ${process.env.NUGET_API_KEY} --skip-duplicate --source https://api.nuget.org/v3/index.json`
-        );
-      },
-      { cwd: 'dotnet/bin/Release' }
-    );
+    walkDir([/\.nupkg/], (path) => {
+      run(
+        `dotnet nuget push ${path} --api-key ${process.env.NUGET_API_KEY} --skip-duplicate --source https://api.nuget.org/v3/index.json`
+      );
+    });
   }
 } catch (e) {
-  console.error('Failed to publish dotnet');
+  console.error('Failed to publish dotnet', e);
 }
 
 // Python
 try {
   if (process.env.PYPI_PASSWORD) {
+    run('python -m pip install --user --upgrade twine');
     run(
-      `python -m twine upload --skip-existing --non-interactive --disable-progress-bar --verbose ./dist`,
-      'python',
+      `cd python && python -m twine upload --skip-existing --non-interactive --disable-progress-bar --verbose ./dist`,
       {
         TWINE_USERNAME: '__TOKEN__',
         TWINE_PASSWORD: process.env.PYPI_PASSWORD,
@@ -42,7 +38,7 @@ try {
     );
   }
 } catch (e) {
-  console.error('Failed to publish Python');
+  console.error('Failed to publish Python', e);
 }
 
 // nodejs
@@ -51,8 +47,8 @@ try {
     const npmrc = `//registry.npmjs.org/:_authToken=${process.env.NPM_TOKEN}`;
     writeFileSync('.npmrc', npmrc);
 
-    run('npm publish', 'nodejs');
+    run('cd nodejs && npm publish');
   }
 } catch (e) {
-  console.error('Failed to publish nodejs');
+  console.error('Failed to publish nodejs', e);
 }

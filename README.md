@@ -44,7 +44,7 @@ Add `pico-sdk` to dependencies in `Cargo.toml`:
 
 ```toml
 [dependencies]
-pico-sdk = "0.1.1"
+pico-sdk = "0.1.2"
 ```
 
 Check out the usage examples in the [Rust README](rust/sdk).

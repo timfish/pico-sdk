@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='pico_sdk',
-    version='0.1.1',
+    version='0.1.2',
     author='Meaty Solutions',
     author_email='info@meaty.io',
     description='Stream gap-less data from Pico Technology oscilloscopes',
