@@ -6,7 +6,7 @@ try {
   if (process.env.CRATES_IO_TOKEN) {
     run(`cargo login ${process.env.CRATES_IO_TOKEN}`);
     run('cargo install cargo-release');
-    run('cargo release --no-confirm --no-dev-version');
+    run('cargo release --no-confirm --no-dev-version --skip-tag --skip-push');
   }
 } catch (e) {
   console.error('Failed to publish Rust', e);
@@ -30,9 +30,10 @@ try {
   if (process.env.PYPI_PASSWORD) {
     run('python -m pip install --user --upgrade twine');
     run(
-      `cd python && python -m twine upload --skip-existing --non-interactive --disable-progress-bar --verbose ./dist`,
+      `python -m twine upload dist/* --skip-existing --non-interactive --disable-progress-bar --verbose`,
+      'python',
       {
-        TWINE_USERNAME: '__TOKEN__',
+        TWINE_USERNAME: '__token__',
         TWINE_PASSWORD: process.env.PYPI_PASSWORD,
       }
     );
@@ -47,7 +48,9 @@ try {
     const npmrc = `//registry.npmjs.org/:_authToken=${process.env.NPM_TOKEN}`;
     writeFileSync('.npmrc', npmrc);
 
-    run('cd nodejs && npm publish');
+    walkDir([/pico-sdk-.*\.tgz/], (path) => {
+      run(`npm publish ${path}`);
+    });
   }
 } catch (e) {
   console.error('Failed to publish nodejs', e);
