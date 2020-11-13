@@ -43,13 +43,18 @@ fn get_devices(download_missing_drivers: bool) -> Result<Vec<PicoDevice>> {
 
     let mut devices = enumerator.enumerate();
 
-    if download_missing_drivers {
-        let missing_drivers = devices.missing_drivers();
-        if !missing_drivers.is_empty() {
+    let missing_drivers = devices.missing_drivers();
+    if !missing_drivers.is_empty() {
+        if download_missing_drivers {
             println!("Downloading missing drivers... {:?}", missing_drivers);
             download_drivers_to_cache(&missing_drivers)?;
             println!("Download complete");
             devices = enumerator.enumerate();
+        } else {
+            return Err(anyhow!(
+                "The following Pico drivers are required but could not be found: {:?}",
+                missing_drivers
+            ));
         }
     }
 

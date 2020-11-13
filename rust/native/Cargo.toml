@@ -8,7 +8,7 @@ name = "pico-native"
 publish = false
 readme = "README.md"
 repository = "https://github.com/meatysolutions/pico-sdk"
-version = "0.1.2"
+version = "0.1.3"
 
 [lib]
 crate-type = ["cdylib"]

@@ -2,9 +2,10 @@
 
 from ctypes import *
 from pathlib import Path
-from numpy import ctypeslib
+from numpy import ctypeslib, ndarray
 from sys import platform
 from platform import machine
+from typing import Callable, List, Dict
 
 
 class PicoDeviceS(Structure):
@@ -14,8 +15,8 @@ class PicoDeviceS(Structure):
 prefix = {'win32': ''}.get(platform, 'lib')
 extension = {'darwin': '.dylib', 'win32': '.dll'}.get(platform, '.so')
 targets = {'win32': {'i686': 'windows-i686', 'AMD64': 'windows-x86_64'},
-           'darwin': {'x86_x64': 'macos-x86_64'},
-           'linux': {'x86_x64': 'linux-x86_64', 'armv7l': 'linux-arm'}}
+           'darwin': {'x86_64': 'macos-x86_64'},
+           'linux': {'x86_64': 'linux-x86_64', 'armv7l': 'linux-arm'}}
 target = targets.get(platform, None).get(machine(), None)
 
 path = Path(__file__, '..', 'artifacts', target,
@@ -80,13 +81,16 @@ def raise_exception():
 
 
 class DiscoveredDevice:
-    def __init__(self, variant, serial):
+    def __init__(self, variant: str, serial: str) -> None:
         self.variant = variant
         self.serial = serial
 
+    def __str__(self) -> str:
+        return 'DiscoveredDevice(variant=' + self.variant + ', serial='+self.serial+')'
+
 
 class PicoDevice:
-    def enumerate(downloadMissingDrivers=True):
+    def enumerate(downloadMissingDrivers: bool = False) -> List[DiscoveredDevice]:
         ptr = lib.enumerate_devices(downloadMissingDrivers)
         try:
             if ptr:
@@ -105,7 +109,7 @@ class PicoDevice:
         finally:
             lib.string_free(ptr)
 
-    def open(serial=None, downloadMissingDrivers=False):
+    def open(serial: str = None, downloadMissingDrivers: bool = False):
         serial = serial.encode('utf-8') if serial else None
         device_ptr = lib.device_open(serial, downloadMissingDrivers)
 
@@ -152,7 +156,7 @@ class PicoDevice:
         if self.obj:
             lib.device_free(self.obj)
 
-    def get_serial(self):
+    def get_serial(self) -> str:
         ptr = lib.device_get_serial(self.obj)
         try:
             if ptr:
@@ -162,7 +166,7 @@ class PicoDevice:
         finally:
             lib.string_free(ptr)
 
-    def get_variant(self):
+    def get_variant(self) -> str:
         ptr = lib.device_get_variant(self.obj)
         try:
             if ptr:
@@ -172,7 +176,7 @@ class PicoDevice:
         finally:
             lib.string_free(ptr)
 
-    def get_channel_ranges(self, channel):
+    def get_channel_ranges(self, channel: str) -> List[str]:
         channel = channel.encode('utf-8')
         ptr = lib.device_get_channel_ranges(self.obj, channel)
         try:
@@ -184,7 +188,7 @@ class PicoDevice:
         finally:
             lib.string_free(ptr)
 
-    def enable_channel(self, channel, range, coupling='DC'):
+    def enable_channel(self, channel: str, range: str, coupling: str = 'DC'):
         channel = channel.encode('utf-8')
         range = range.encode('utf-8')
         coupling = coupling.encode('utf-8')
@@ -193,14 +197,14 @@ class PicoDevice:
         if result == False:
             raise_exception()
 
-    def disable_channel(self, channel):
+    def disable_channel(self, channel: str):
         channel = channel.encode('utf-8')
 
         result = lib.device_disable_channel(self.obj, channel)
         if result == False:
             raise_exception()
 
-    def start_streaming(self, samples_per_second):
+    def start_streaming(self, samples_per_second: int):
         result = lib.device_start_streaming(self.obj, samples_per_second)
 
         if result == 0:
@@ -213,5 +217,5 @@ class PicoDevice:
         if result == False:
             raise_exception()
 
-    def set_callback(self, callback):
+    def set_callback(self, callback: Callable[[Dict[str, ndarray]], None]):
         self.callback = callback

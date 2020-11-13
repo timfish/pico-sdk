@@ -1,10 +1,8 @@
 from pico_sdk import PicoDevice
 
-found = PicoDevice.enumerate(True)
 for device in found:
-    print('PicoScope ' + device.variant + ' with serial ' + device.serial)
+    print(device)
 
-device = PicoDevice.open(None, True)
 
 print('Device Serial: ' + device.get_serial())
 print('Device variant: ' + device.get_variant())

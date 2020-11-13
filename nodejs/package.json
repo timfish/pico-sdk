@@ -1,6 +1,6 @@
 {
   "name": "pico-sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "High performance, gap-free streaming from any Pico Technology oscilloscope",
   "main": "./dist/index.js",
   "repository": "https://github.com/meatysolutions/pico-sdk/",

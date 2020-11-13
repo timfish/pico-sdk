@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='pico_sdk',
-    version='0.1.2',
+    version='0.1.3',
     author='Meaty Solutions',
     author_email='info@meaty.io',
     description='Stream gap-less data from Pico Technology oscilloscopes',
@@ -14,6 +14,7 @@ setuptools.setup(
     url='https://github.com/meatysolutions/pico-sdk',
     package_data={'': ['artifacts/*', 'artifacts/*/*']},
     packages=setuptools.find_packages(),
+    install_requires=['numpy'],
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',

@@ -110,7 +110,7 @@ namespace PicoSDK
         /// <param name="downloadMissingDrivers">If the required drivers cannot
         /// be found, they will be downloaded</param>
         /// <returns>Returns an array of DiscoveredDevice</returns>
-        public static DiscoveredDevice[] Enumerate(bool downloadMissingDrivers = true)
+        public static DiscoveredDevice[] Enumerate(bool downloadMissingDrivers = false)
         {
             using (var deviceListHandle = Native.enumerate_devices(downloadMissingDrivers))
             {
