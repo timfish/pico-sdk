@@ -5,14 +5,16 @@
 
 ### High performance, cross-platform, gap-free streaming from any Pico Technology oscilloscope
 
+> **Note**: These are not official Pico Technology packages
+
 This package wraps all current Pico oscilloscope drivers in a high-level, common
 API written in Rust. This API is compiled to native code and exposed to other
 programming languages through simple C bindings.
 
 ## Issues, Feature Requests and Contributions
 
-This library is still in the early stages of development so you should expect
-breaking changes with any release before v1.0.0.
+Until a 1.0 release, the libraries in this repository are considered work in
+progress and do not follow semver semantics.
 
 Please report any issues or feature requests in
 [the issue tracker](https://github.com/meatysolutions/pico-sdk/issues). Pull
@@ -47,7 +49,7 @@ Add `pico-sdk` to dependencies in `Cargo.toml`:
 
 ```toml
 [dependencies]
-pico-sdk = "0.1.2"
+pico-sdk = "0.1.4"
 ```
 
 Check out the usage examples in the [Rust README](rust/sdk).

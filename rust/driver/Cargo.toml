@@ -7,7 +7,7 @@ license = "MIT"
 name = "pico-driver"
 readme = "README.md"
 repository = "https://github.com/meatysolutions/pico-sdk"
-version = "0.1.2"
+version = "0.1.4"
 
 [lib]
 crate-type = ["lib"]
@@ -21,7 +21,7 @@ libloading = "0.6.2"
 log = "^0.4"
 log-derive = "0.3"
 parking_lot = "0.11"
-pico-common = {path = "../common", version = "0.1.2"}
+pico-common = {path = "../common", version = "0.1.4"}
 thiserror = "^1.0.9"
 version-compare = "0.0.10"
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -99,6 +99,9 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<PicoDevice> {
                 Err(EnumerationError::DriverError { driver, error }) => {
                     format!("PicoScope {} (Driver Error - {})", driver, error)
                 }
+                Err(EnumerationError::KernelDriverError { driver }) => {
+                    format!("PicoScope {} (Kernel Driver Missing)", driver)
+                }
                 Err(EnumerationError::VersionError {
                     driver,
                     found: _,

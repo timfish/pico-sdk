@@ -30,12 +30,6 @@ pub type DataCallback =
     extern "C" fn(channel_names: *const c_char, samples: *const f32, num_samples_per_ch: u32);
 
 fn get_devices(download_missing_drivers: bool) -> Result<Vec<PicoDevice>> {
-    if !is_kernel_driver_installed() {
-        return Err(anyhow!(
-            "The Pico Technology kernel driver appears to be missing. Install PicoScope, PicoLog or the SDK to ensure it's available."
-        ));
-    }
-
     let enumerator = match download_missing_drivers {
         true => DeviceEnumerator::with_resolution(cache_resolution()),
         false => DeviceEnumerator::default(),
@@ -49,6 +43,7 @@ fn get_devices(download_missing_drivers: bool) -> Result<Vec<PicoDevice>> {
             println!("Downloading missing drivers... {:?}", missing_drivers);
             download_drivers_to_cache(&missing_drivers)?;
             println!("Download complete");
+
             devices = enumerator.enumerate();
         } else {
             return Err(anyhow!(
@@ -58,7 +53,22 @@ fn get_devices(download_missing_drivers: bool) -> Result<Vec<PicoDevice>> {
         }
     }
 
-    Ok(devices.into_iter().flatten().collect())
+    let (devices, errors) = devices.devices_and_errors();
+
+    if !errors.is_empty() {
+        let errors = errors
+            .iter()
+            .map(|e| format!("  - {}", e))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        return Err(anyhow!(
+            "The following errors were encountered: \n{}",
+            errors
+        ));
+    }
+
+    Ok(devices)
 }
 
 /// # Lists available devices

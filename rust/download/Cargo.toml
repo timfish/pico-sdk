@@ -7,7 +7,7 @@ license = "MIT"
 name = "pico-download"
 readme = "README.md"
 repository = "https://github.com/meatysolutions/pico-sdk"
-version = "0.1.2"
+version = "0.1.4"
 
 [lib]
 crate-type = ["lib"]
@@ -16,8 +16,8 @@ path = "src/lib.rs"
 [dependencies]
 directories = "3.0"
 http_req = "^0.7.0"
-pico-common = {path = "../common", version = "0.1.2"}
-pico-driver = {path = "../driver", version = "0.1.2"}
+pico-common = {path = "../common", version = "0.1.4"}
+pico-driver = {path = "../driver", version = "0.1.4"}
 ring = "0.16.15"
 thiserror = "^1.0.9"
 

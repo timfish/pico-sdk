@@ -1,6 +1,8 @@
 # PicoSDK
 
-High performance, gap-free streaming from any Pico Technology oscilloscope.
+### High performance, gap-free streaming from any Pico Technology oscilloscope.
+
+> **Note**: This is not an official Pico Technology package
 
 This package wraps all current Pico oscilloscope drivers in a high-level, common
 API written in Rust. This API is compiled to native code and exposed to dotnet

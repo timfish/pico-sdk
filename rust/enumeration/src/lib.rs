@@ -15,7 +15,8 @@ use pico_common::Driver;
 use pico_common::PicoError;
 use pico_device::PicoDevice;
 use pico_driver::{
-    ArcDriver, DependencyLoader, DriverLoadError, LoadDriverExt, PicoDriver, Resolution,
+    is_kernel_driver_installed, ArcDriver, DependencyLoader, DriverLoadError, LoadDriverExt,
+    PicoDriver, Resolution,
 };
 use rayon::prelude::*;
 use std::{collections::HashMap, sync::Arc};
@@ -34,7 +35,10 @@ pub enum EnumerationError {
         error: PicoError,
     },
 
-    #[error("Driver load error")]
+    #[error("The {driver} driver could not find any devices. The Pico Technology kernel driver appears to be missing.")]
+    KernelDriverError { driver: Driver },
+
+    #[error("The {driver} driver could not be found or failed to load")]
     DriverLoadError { driver: Driver },
 
     #[error("Invalid Driver Version: Requires >= {required}, Found: {found}")]
@@ -131,16 +135,27 @@ impl DeviceEnumerator {
         };
 
         match driver.enumerate_units() {
-            Ok(serials) => serials
-                .par_iter()
-                .map(|serial| match PicoDevice::try_load(&driver, Some(serial)) {
-                    Ok(device) => Ok(device),
-                    Err(error) => Err(EnumerationError::DriverError {
+            Ok(serials) => {
+                // This driver was enumerated because devices with a matching
+                // USB product ID were found. Check whether the kernel driver
+                // appears to be missing.
+                if serials.is_empty() && !is_kernel_driver_installed() {
+                    vec![Err(EnumerationError::KernelDriverError {
                         driver: driver_type,
-                        error,
-                    }),
-                })
-                .collect(),
+                    })]
+                } else {
+                    serials
+                        .par_iter()
+                        .map(|serial| match PicoDevice::try_load(&driver, Some(serial)) {
+                            Ok(device) => Ok(device),
+                            Err(error) => Err(EnumerationError::DriverError {
+                                driver: driver_type,
+                                error,
+                            }),
+                        })
+                        .collect()
+                }
+            }
             Err(error) => vec![
                 Err(EnumerationError::DriverError {
                     driver: driver_type,
