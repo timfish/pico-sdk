@@ -1,6 +1,13 @@
 [workspace]
 members = [
-  "./rust/*",
+  "./common",
+  "./device",
+  "./download",
+  "./driver",
+  "./enumeration",
+  "./sdk",
+  "./streaming",
+  "./sys",
 ]
 
 [profile.release]

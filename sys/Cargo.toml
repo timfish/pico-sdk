@@ -1,0 +1,17 @@
+[package]
+authors = ["Tim Fish <tim@timfish.uk>"]
+description = "Unofficial Rust bindings and wrappers for Pico Technology oscilloscope drivers"
+edition = "2018"
+keywords = ["Oscilloscope", "Streaming", "PicoScope", "Pico-Technology"]
+license = "MIT"
+name = "pico-sys-dynamic"
+readme = "README.md"
+repository = "https://github.com/meatysolutions/pico-sdk"
+version = "0.2.0"
+
+[lib]
+crate-type = ["lib"]
+path = "src/lib.rs"
+
+[dependencies]
+libloading = "0.6"

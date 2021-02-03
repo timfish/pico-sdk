@@ -1,0 +1,29 @@
+use std::env;
+use std::path::PathBuf;
+
+fn build(header: &str, name: &str) {
+    let bindings = bindgen::Builder::default()
+        .header(format!("./inc/{}.h", header))
+        .dynamic_library_name(name)
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .generate()
+        .expect("Unable to generate bindings");
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    bindings
+        .write_to_file(out_path.join(format!("{}.rs", name)))
+        .expect("Couldn't write bindings!");
+}
+
+fn main() {
+    build("ps2000", "PS2000Loader");
+    build("ps2000aApi", "PS2000ALoader");
+    build("ps3000", "PS3000Loader");
+    build("ps3000aApi", "PS3000ALoader");
+    build("ps4000Api", "PS4000Loader");
+    build("ps4000aApi", "PS4000ALoader");
+    build("ps5000Api", "PS5000Loader");
+    build("ps5000aApi", "PS5000ALoader");
+    build("ps6000Api", "PS6000Loader");
+    build("ps6000aApi", "PS6000ALoader");
+}

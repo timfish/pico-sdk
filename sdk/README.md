@@ -11,20 +11,20 @@ numerous Pico drivers.
 
 ### Sub Crates
 
-- ### `pico-common` [![Crates.io](https://img.shields.io/crates/v/pico-common)](https://crates.io/crates/pico-common)
-  Common enums, structs and traits.
-- ### `pico-sys-dynamic` [![Crates.io](https://img.shields.io/crates/v/pico-sys-dynamic)](https://crates.io/crates/pico-sys-dynamic)
-  Dynamically loaded unsafe bindings for every Pico oscilloscope driver. **This crate contains unsafe code.**
-- ### `pico-driver` [![Crates.io](https://img.shields.io/crates/v/pico-driver)](https://crates.io/crates/pico-driver)
-  Common, safe wrappers implementing the `PicoDriver` trait. **This crate contains unsafe code.**
-- ### `pico-download` [![Crates.io](https://img.shields.io/crates/v/pico-download)](https://crates.io/crates/pico-download)
-  Download missing drivers on any platform.
-- ### `pico-device` [![Crates.io](https://img.shields.io/crates/v/pico-device)](https://crates.io/crates/pico-device)
-  Device abstraction over `PicoDriver` trait. Detects available channels and valid ranges.
-- ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
-  Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
-- ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
-  Implements continuous gap-less streaming on top of `PicoDevice`.
+ - ### `pico-common` [![Crates.io](https://img.shields.io/crates/v/pico-common)](https://crates.io/crates/pico-common)
+    Common enums, structs and traits.
+ - ### `pico-sys-dynamic` [![Crates.io](https://img.shields.io/crates/v/pico-sys-dynamic)](https://crates.io/crates/pico-sys-dynamic)
+    Dynamically loaded unsafe bindings for every Pico oscilloscope driver. **This crate contains unsafe code.**
+ - ### `pico-driver` [![Crates.io](https://img.shields.io/crates/v/pico-driver)](https://crates.io/crates/pico-driver)
+    Common, safe wrappers implementing the `PicoDriver` trait. **This crate contains unsafe code.**
+ - ### `pico-download` [![Crates.io](https://img.shields.io/crates/v/pico-download)](https://crates.io/crates/pico-download)
+    Download missing drivers on any platform.
+ - ### `pico-device` [![Crates.io](https://img.shields.io/crates/v/pico-device)](https://crates.io/crates/pico-device)
+    Device abstraction over `PicoDriver` trait. Detects available channels and valid ranges.
+ - ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
+    Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
+ - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
+    Implements continuous gap-less streaming on top of `PicoDevice`.
 
 ## Tests
 Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.
