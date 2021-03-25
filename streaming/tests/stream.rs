@@ -86,7 +86,7 @@ mod streaming_tests {
         mock.expect_stop().return_const(Ok(()));
         mock.expect_stop().return_const(Ok(()));
         mock.expect_get_latest_streaming_values()
-            .times(8..25)
+            .times(3..25)
             .return_const(Ok(()));
         mock.expect_start_streaming()
             .return_const(Ok(SampleConfig::default()));
