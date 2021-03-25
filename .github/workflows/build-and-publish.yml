@@ -34,13 +34,13 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: brew install automake
       - name: ⚡ Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v2.1.4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ matrix.os }}-${{ hashFiles('**/Cargo.toml') }}
       - name: 🔎 Test
         uses: actions-rs/cargo@v1
         with:
@@ -65,13 +65,13 @@ jobs:
           toolchain: stable
           override: true
       - name: ⚡ Cache
-        uses: actions/cache@v2
+        uses: actions/cache@v2.1.4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: windows-latest-cargo-${{ hashFiles('**/Cargo.toml') }}
+          key: windows-latest-${{ hashFiles('**/Cargo.toml') }}
       - name: 🚀 Publish
         run: |
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
