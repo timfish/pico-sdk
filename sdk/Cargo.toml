@@ -7,7 +7,7 @@ license = "MIT"
 name = "pico-sdk"
 readme = "README.md"
 repository = "https://github.com/meatysolutions/pico-sdk"
-version = "0.2.0"
+version = "0.2.1"
 
 [lib]
 crate-type = ["lib"]
@@ -17,13 +17,13 @@ path = "src/lib.rs"
 serde = ["pico-common/serde", "pico-device/serde", "pico-enumeration/serde", "pico-streaming/serde"]
 
 [dependencies]
-pico-common = {path = "../common", version = "0.2.0"}
-pico-device = {path = "../device", version = "0.2.0"}
-pico-download = {path = "../download", version = "0.2.0"}
-pico-driver = {path = "../driver", version = "0.2.0"}
-pico-enumeration = {path = "../enumeration", version = "0.2.0"}
-pico-streaming = {path = "../streaming", version = "0.2.0"}
-pico-sys-dynamic = {path = "../sys", version = "0.2.0"}
+pico-common = {path = "../common", version = "0.2.1"}
+pico-device = {path = "../device", version = "0.2.1"}
+pico-download = {path = "../download", version = "0.2.1"}
+pico-driver = {path = "../driver", version = "0.2.1"}
+pico-enumeration = {path = "../enumeration", version = "0.2.1"}
+pico-streaming = {path = "../streaming", version = "0.2.1"}
+pico-sys-dynamic = {path = "../sys", version = "0.2.1"}
 
 [dev-dependencies]
 anyhow = "1.0"
