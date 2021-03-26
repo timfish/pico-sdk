@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![allow(clippy::upper_case_acronyms)]
 
 //! Common enums, structs and traits used for communication with Pico Technology oscilloscope drivers.
 //!

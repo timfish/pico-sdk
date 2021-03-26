@@ -175,3 +175,8 @@ pub mod enumeration {
 pub mod streaming {
     pub use pico_streaming::*;
 }
+
+/// Dynamically loaded unsafe bindings for every Pico oscilloscope driver
+pub mod sys {
+    pub use pico_sys_dynamic::*;
+}

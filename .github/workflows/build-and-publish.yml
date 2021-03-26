@@ -72,8 +72,14 @@ jobs:
             ~/.cargo/git
             target
           key: windows-latest-${{ hashFiles('**/Cargo.toml') }}
+      - name: ⚡ Cache Bin
+        uses: actions/cache@v2.1.4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-release
+          key: cargo-bin
       - name: 🚀 Publish
         run: |
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
           cargo install cargo-release
-          cargo release --no-confirm --no-dev-version --skip-tag --skip-push'
+          cargo release --no-confirm --no-dev-version --skip-tag --skip-push

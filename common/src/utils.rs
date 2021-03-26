@@ -4,11 +4,11 @@ use std::{ffi::CString, str};
 /// to Pico string format
 pub trait ToPicoStr {
     /// Converts Rust strings to Pico null terminated Vec<i8> format
-    fn to_pico_i8_string(self) -> Vec<i8>;
+    fn into_pico_i8_string(self) -> Vec<i8>;
 }
 
 impl<'a> ToPicoStr for &'a str {
-    fn to_pico_i8_string(self) -> Vec<i8> {
+    fn into_pico_i8_string(self) -> Vec<i8> {
         CString::new(self)
             .expect("invalid CString")
             .into_bytes_with_nul()
@@ -22,6 +22,7 @@ impl<'a> ToPicoStr for &'a str {
 /// formats
 pub trait FromPicoStr {
     /// Converts from Pico null terminated Vec<i8> string format to Rust Strings
+    #[allow(clippy::wrong_self_convention)]
     fn from_pico_i8_string(self, buf_len: usize) -> String;
 }
 
@@ -46,7 +47,7 @@ mod tests {
     #[test]
     fn pico_strings() {
         let s1 = "something here";
-        let ps = s1.to_pico_i8_string();
+        let ps = s1.into_pico_i8_string();
 
         assert_eq!(
             ps,
@@ -61,7 +62,7 @@ mod tests {
     fn pico_strings_ps5000a_bug() {
         let s1 = "something here";
         // Add a load of nulls on the end
-        let ps = [s1.to_pico_i8_string(), vec![0; 200]].concat();
+        let ps = [s1.into_pico_i8_string(), vec![0; 200]].concat();
         let s2 = ps.from_pico_i8_string(ps.len());
         assert_eq!(s1, s2)
     }

@@ -51,7 +51,7 @@ impl PicoDriver for PS6000Driver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn enumerate_units(&self) -> PicoResult<Vec<EnumerationResult>> {
         let mut device_count = 0;
-        let mut serial_buf = "-v".to_pico_i8_string();
+        let mut serial_buf = "-v".into_pico_i8_string();
         serial_buf.extend(vec![0i8; 1000]);
         let mut serial_buf_len = serial_buf.len() as i16;
 
@@ -72,7 +72,7 @@ impl PicoDriver for PS6000Driver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
-        let serial = serial.map(|s| s.to_pico_i8_string());
+        let serial = serial.map(|s| s.into_pico_i8_string());
 
         let mut handle = -1i16;
         let status = PicoStatus::from(unsafe {

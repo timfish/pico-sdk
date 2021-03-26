@@ -23,6 +23,7 @@ pico-download = {path = "../download", version = "0.2.0"}
 pico-driver = {path = "../driver", version = "0.2.0"}
 pico-enumeration = {path = "../enumeration", version = "0.2.0"}
 pico-streaming = {path = "../streaming", version = "0.2.0"}
+pico-sys-dynamic = {path = "../sys", version = "0.2.0"}
 
 [dev-dependencies]
 anyhow = "1.0"
