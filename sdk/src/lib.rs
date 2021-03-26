@@ -96,10 +96,11 @@
 //!     }
 //! }
 //!
+//! // When handler goes out of scope, the subscription is dropped
 //! let handler = Arc::new(StdoutHandler);
 //!
 //! // Subscribe to streaming events
-//! stream_device.new_data.subscribe(handler);
+//! stream_device.new_data.subscribe(handler.clone());
 //!
 //! // Start streaming with 1k sample rate
 //! stream_device.start(1_000)?;
