@@ -4,11 +4,6 @@ use pico_enumeration::{DeviceEnumerator, EnumResultHelpers};
 #[test]
 #[ignore]
 fn enum_and_configure_device() {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-        .init();
-
     let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
 
     let mut results = enumerator.enumerate();

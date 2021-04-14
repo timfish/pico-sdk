@@ -48,11 +48,12 @@ use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
     SampleConfig,
 };
-pub use resolution::{DependencyLoader, Resolution};
+pub use resolution::Resolution;
 use std::{fmt, pin::Pin, sync::Arc};
 use thiserror::Error;
 use version_compare::Version;
 
+mod dependencies;
 pub mod kernel_driver;
 pub mod ps2000;
 pub mod ps2000a;
@@ -232,7 +233,9 @@ impl LoadDriverExt for Driver {
             Driver::PS5000A => Arc::new(ps5000a::PS5000ADriver::new(path)?),
             Driver::PS6000 => Arc::new(ps6000::PS6000Driver::new(path)?),
             Driver::PS6000A => Arc::new(ps6000a::PS6000ADriver::new(path)?),
-            Driver::PicoIPP | Driver::IOMP5 => panic!("This type of driver cannot be loaded"),
+            Driver::PicoIPP | Driver::IOMP5 => {
+                panic!("These are libraries used by Pico drivers and cannot be loaded directly")
+            }
         })
     }
 }

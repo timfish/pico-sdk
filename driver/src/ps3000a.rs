@@ -1,4 +1,8 @@
-use crate::{get_version_string, parse_enum_result, EnumerationResult, PicoDriver};
+use crate::{
+    get_version_string, parse_enum_result,
+    dependencies::{load_dependencies, LoadedDependencies},
+    EnumerationResult, PicoDriver,
+};
 use libffi::high::ClosureMut8;
 use parking_lot::RwLock;
 use pico_common::{
@@ -9,6 +13,7 @@ use pico_sys_dynamic::ps3000a::PS3000ALoader;
 use std::{pin::Pin, sync::Arc};
 
 pub struct PS3000ADriver {
+    _dependencies: LoadedDependencies,
     bindings: PS3000ALoader,
 }
 
@@ -23,9 +28,12 @@ impl PS3000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS3000ALoader::new(path)? };
-
-        Ok(PS3000ADriver { bindings })
+        Ok(PS3000ADriver {
+            bindings,
+            _dependencies: dependencies,
+        })
     }
 }
 

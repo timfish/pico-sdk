@@ -26,6 +26,15 @@
 //!  - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
 //!     Implements continuous gap-less streaming on top of `PicoDevice`.
 //!
+//! # Prerequisites
+//! `pico-driver` uses a C library called `libffi` to call into older Pico
+//! drivers that don't allow us to pass context through callbacks. To build this
+//! you will need a working C compiler and on Unix based platforms you'll also
+//! [require `automake`, and
+//! `autoconf`](https://github.com/meatysolutions/pico-sdk/issues/5).
+//!
+//! On linux `pico-enumeration` [requires `libudev-dev`](https://github.com/meatysolutions/pico-sdk/blob/700ab24efe81063316baffff638988cf626c6ffe/.github/workflows/build-and-publish.yml#L32).
+//!
 //! # Tests
 //! Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.
 //! To run these tests, ensure that ignored tests are run too:
@@ -143,13 +152,20 @@ pub mod prelude {
     pub use pico_driver::{
         kernel_driver, DriverLoadError, EnumerationResult, LoadDriverExt, PicoDriver, Resolution,
     };
-    pub use pico_enumeration::{DeviceEnumerator, EnumResultHelpers, EnumerationError};
+    pub use pico_enumeration::{
+        DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,
+    };
     pub use pico_streaming::{NewDataHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
 }
 
 /// Common enums, structs and traits
 pub mod common {
     pub use pico_common::*;
+}
+
+/// Dynamically loaded unsafe bindings for every Pico oscilloscope driver
+pub mod sys {
+    pub use pico_sys_dynamic::*;
 }
 
 /// Dynamic loading, unsafe and safe wrappers for Pico drivers
@@ -175,9 +191,4 @@ pub mod enumeration {
 /// Implements gap-less streaming on top of `PicoDevice`
 pub mod streaming {
     pub use pico_streaming::*;
-}
-
-/// Dynamically loaded unsafe bindings for every Pico oscilloscope driver
-pub mod sys {
-    pub use pico_sys_dynamic::*;
 }

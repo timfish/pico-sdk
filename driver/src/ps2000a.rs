@@ -1,4 +1,7 @@
-use crate::{get_version_string, parse_enum_result, EnumerationResult, PicoDriver};
+use crate::{
+    dependencies::{load_dependencies, LoadedDependencies},
+    get_version_string, parse_enum_result, EnumerationResult, PicoDriver,
+};
 use libffi::high::ClosureMut8;
 use parking_lot::RwLock;
 use pico_common::{
@@ -9,6 +12,7 @@ use pico_sys_dynamic::ps2000a::PS2000ALoader;
 use std::{pin::Pin, sync::Arc};
 
 pub struct PS2000ADriver {
+    _dependencies: LoadedDependencies,
     bindings: PS2000ALoader,
 }
 
@@ -23,9 +27,12 @@ impl PS2000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS2000ALoader::new(path)? };
-
-        Ok(PS2000ADriver { bindings })
+        Ok(PS2000ADriver {
+            bindings,
+            _dependencies: dependencies,
+        })
     }
 
     /// Wraps the c callback with libffi so we can use closures

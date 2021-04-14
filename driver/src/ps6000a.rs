@@ -1,4 +1,7 @@
-use crate::{get_version_string, parse_enum_result, EnumerationResult, PicoDriver};
+use crate::{
+    dependencies::{load_dependencies, LoadedDependencies},
+    get_version_string, parse_enum_result, EnumerationResult, PicoDriver,
+};
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
@@ -12,6 +15,7 @@ use pico_sys_dynamic::ps6000a::{
 use std::{mem::MaybeUninit, pin::Pin, sync::Arc};
 
 pub struct PS6000ADriver {
+    _dependencies: LoadedDependencies,
     bindings: PS6000ALoader,
 }
 
@@ -26,9 +30,12 @@ impl PS6000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS6000ALoader::new(path)? };
-
-        Ok(PS6000ADriver { bindings })
+        Ok(PS6000ADriver {
+            bindings,
+            _dependencies: dependencies,
+        })
     }
 }
 
