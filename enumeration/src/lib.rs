@@ -128,9 +128,8 @@ impl DeviceEnumerator {
     /// discovered for each `Driver` type
     #[tracing::instrument(level = "debug")]
     pub fn enumerate_raw() -> HashMap<Driver, usize> {
-        usb_enumeration::enumerate()
+        usb_enumeration::enumerate(Some(PICO_VENDOR_ID), None)
             .iter()
-            .filter(|u| u.vendor_id == PICO_VENDOR_ID)
             .map(|d| Driver::from_pid(d.product_id))
             .flatten()
             .fold(HashMap::new(), |mut map, x| {
