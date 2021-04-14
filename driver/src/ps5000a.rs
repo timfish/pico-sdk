@@ -1,4 +1,7 @@
-use crate::{get_version_string, parse_enum_result, EnumerationResult, PicoDriver};
+use crate::{
+    dependencies::{load_dependencies, LoadedDependencies},
+    get_version_string, parse_enum_result, EnumerationResult, PicoDriver,
+};
 use libffi::high::ClosureMut8;
 use parking_lot::RwLock;
 use pico_common::{
@@ -9,6 +12,7 @@ use pico_sys_dynamic::ps5000a::{enPicoDeviceResolution_PICO_DR_14BIT, PS5000ALoa
 use std::{pin::Pin, sync::Arc};
 
 pub struct PS5000ADriver {
+    _dependencies: LoadedDependencies,
     bindings: PS5000ALoader,
 }
 
@@ -23,9 +27,12 @@ impl PS5000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS5000ALoader::new(path)? };
-
-        Ok(PS5000ADriver { bindings })
+        Ok(PS5000ADriver {
+            bindings,
+            _dependencies: dependencies,
+        })
     }
 }
 

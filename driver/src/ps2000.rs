@@ -1,4 +1,7 @@
-use crate::{get_version_string, EnumerationResult, PicoDriver};
+use crate::{
+    dependencies::{load_dependencies, LoadedDependencies},
+    get_version_string, EnumerationResult, PicoDriver,
+};
 use lazy_static::lazy_static;
 use libffi::high::ClosureMut6;
 use parking_lot::{Mutex, RwLock};
@@ -17,6 +20,7 @@ lazy_static! {
 }
 
 pub struct PS2000Driver {
+    _dependencies: LoadedDependencies,
     bindings: PS2000Loader,
 }
 
@@ -31,9 +35,12 @@ impl PS2000Driver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS2000Loader::new(path)? };
-
-        Ok(PS2000Driver { bindings })
+        Ok(PS2000Driver {
+            bindings,
+            _dependencies: dependencies,
+        })
     }
 
     fn open_unit_base(&self) -> Result<i16, PicoStatus> {

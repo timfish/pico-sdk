@@ -143,13 +143,20 @@ pub mod prelude {
     pub use pico_driver::{
         kernel_driver, DriverLoadError, EnumerationResult, LoadDriverExt, PicoDriver, Resolution,
     };
-    pub use pico_enumeration::{DeviceEnumerator, EnumResultHelpers, EnumerationError};
+    pub use pico_enumeration::{
+        DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,
+    };
     pub use pico_streaming::{NewDataHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
 }
 
 /// Common enums, structs and traits
 pub mod common {
     pub use pico_common::*;
+}
+
+/// Dynamically loaded unsafe bindings for every Pico oscilloscope driver
+pub mod sys {
+    pub use pico_sys_dynamic::*;
 }
 
 /// Dynamic loading, unsafe and safe wrappers for Pico drivers
@@ -175,9 +182,4 @@ pub mod enumeration {
 /// Implements gap-less streaming on top of `PicoDevice`
 pub mod streaming {
     pub use pico_streaming::*;
-}
-
-/// Dynamically loaded unsafe bindings for every Pico oscilloscope driver
-pub mod sys {
-    pub use pico_sys_dynamic::*;
 }

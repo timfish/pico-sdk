@@ -10,13 +10,11 @@
 //!
 
 pub use helpers::EnumResultHelpers;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use pico_common::PicoError;
 use pico_common::{Driver, PicoResult};
 use pico_device::PicoDevice;
-use pico_driver::{
-    kernel_driver, ArcDriver, DependencyLoader, DriverLoadError, LoadDriverExt, Resolution,
-};
+use pico_driver::{kernel_driver, ArcDriver, DriverLoadError, LoadDriverExt, Resolution};
 use rayon::prelude::*;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -110,7 +108,6 @@ impl EnumerationError {
 pub struct DeviceEnumerator {
     resolution: Resolution,
     loaded_drivers: Arc<RwLock<HashMap<Driver, ArcDriver>>>,
-    loaded_dependencies: Arc<Mutex<Option<DependencyLoader>>>,
 }
 
 impl DeviceEnumerator {
@@ -124,7 +121,6 @@ impl DeviceEnumerator {
         DeviceEnumerator {
             resolution,
             loaded_drivers: Default::default(),
-            loaded_dependencies: Default::default(),
         }
     }
 
@@ -208,27 +204,16 @@ impl DeviceEnumerator {
 
         match driver {
             Some(driver) => Ok(driver),
-            None => {
-                // Ensure we've loaded the dependencies if required
-                if driver_type != Driver::PS2000 && self.resolution != Resolution::Default {
-                    // Only do this once
-                    let mut dependencies = self.loaded_dependencies.lock();
-                    if dependencies.is_none() {
-                        *dependencies = DependencyLoader::try_load(&self.resolution).ok();
-                    }
-                }
+            None => match driver_type.try_load_with_resolution(&self.resolution) {
+                Ok(driver) => {
+                    self.loaded_drivers
+                        .write()
+                        .insert(driver_type, driver.clone());
 
-                match driver_type.try_load_with_resolution(&self.resolution) {
-                    Ok(driver) => {
-                        self.loaded_drivers
-                            .write()
-                            .insert(driver_type, driver.clone());
-
-                        Ok(driver)
-                    }
-                    Err(e) => Err(e),
+                    Ok(driver)
                 }
-            }
+                Err(e) => Err(e),
+            },
         }
     }
 }

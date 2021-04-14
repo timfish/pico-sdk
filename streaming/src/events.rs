@@ -78,6 +78,7 @@ impl RawChannelDataBlock {
             .collect()
     }
 
+    #[inline(always)]
     pub fn scale_sample(&self, index: usize) -> f64 {
         self.samples[index] as f64 * self.multiplier
     }

@@ -14,4 +14,4 @@ crate-type = ["lib"]
 path = "src/lib.rs"
 
 [dependencies]
-libloading = "0.6"
+libloading = "0.7"

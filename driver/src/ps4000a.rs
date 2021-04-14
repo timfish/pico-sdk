@@ -1,4 +1,7 @@
-use crate::{get_version_string, parse_enum_result, EnumerationResult, PicoDriver};
+use crate::{
+    dependencies::{load_dependencies, LoadedDependencies},
+    get_version_string, parse_enum_result, EnumerationResult, PicoDriver,
+};
 use c_vec::CVec;
 use lazy_static::lazy_static;
 use libffi::high::ClosureMut8;
@@ -54,6 +57,7 @@ extern "C" fn probes_callback_4000a(
 }
 
 pub struct PS4000ADriver {
+    _dependencies: LoadedDependencies,
     bindings: PS4000ALoader,
 }
 
@@ -68,9 +72,12 @@ impl PS4000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS4000ALoader::new(path)? };
-
-        Ok(PS4000ADriver { bindings })
+        Ok(PS4000ADriver {
+            bindings,
+            _dependencies: dependencies,
+        })
     }
 }
 

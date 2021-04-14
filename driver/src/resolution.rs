@@ -1,10 +1,6 @@
 use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf};
 
-mod dependency_loader;
-
-pub use dependency_loader::DependencyLoader;
-
 /// Instructs the loader where to load drivers from
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Resolution {

@@ -17,7 +17,7 @@ path = "src/lib.rs"
 c_vec = "2.0"
 lazy_static = "1.4"
 libffi = "1.0"
-libloading = "0.6"
+libloading = "0.7"
 parking_lot = "0.11"
 pico-common = {path = "../common", version = "0.2.1"}
 pico-sys-dynamic = {path = "../sys", version = "0.2.1"}
