@@ -34,42 +34,44 @@ pub fn load_dependencies<P: AsRef<Path>>(path: P) -> LoadedDependencies {
 
     for dependency in to_load {
         let path = resolution.get_path(dependency);
-        output.push(load_dependency(&path, dependency));
+        if let Some(dep) = load_dependency(&path, dependency) {
+            output.push(dep);
+        }
     }
 
     output
 }
 
-fn load_dependency(path: &Path, dependency: Driver) -> Arc<LoadedDependency> {
+fn load_dependency(path: &Path, dependency: Driver) -> Option<Arc<LoadedDependency>> {
     let mut cache = DEPENDENCY_CACHE.lock();
 
     let load = || {
-        let dep = match dependency {
-            Driver::IOMP5 => load_iomp5(path).unwrap(),
-            Driver::PicoIPP => load_ipp(path).unwrap(),
+        match dependency {
+            Driver::IOMP5 => load_iomp5(path),
+            Driver::PicoIPP => load_ipp(path),
             _ => panic!("This method should only be used to load dependencies"),
-        };
-
-        let strong = Arc::new(dep);
-        #[allow(clippy::redundant_clone)]
-        let weak = Arc::downgrade(&strong.clone());
-        (strong, weak)
+        }
+        .ok()
+        .map(|dep| {
+            let strong = Arc::new(dep);
+            #[allow(clippy::redundant_clone)]
+            let weak = Arc::downgrade(&strong.clone());
+            (strong, weak)
+        })
     };
 
     match cache.get(path) {
         Some(weak) => match weak.upgrade() {
-            Some(strong) => strong,
-            None => {
-                let (strong, weak) = load();
+            Some(strong) => Some(strong),
+            None => load().map(|(strong, weak)| {
                 cache.insert(path.to_path_buf(), weak);
                 strong
-            }
+            }),
         },
-        None => {
-            let (strong, weak) = load();
+        None => load().map(|(strong, weak)| {
             cache.insert(path.to_path_buf(), weak);
             strong
-        }
+        }),
     }
 }
 
