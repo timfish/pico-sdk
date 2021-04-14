@@ -26,6 +26,15 @@ numerous Pico drivers.
  - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
     Implements continuous gap-less streaming on top of `PicoDevice`.
 
+## Prerequisites
+`pico-driver` uses a C library called `libffi` to call into older Pico
+drivers that don't allow us to pass context through callbacks. To build this
+you will need a working C compiler and on Unix based platforms you'll also
+[require `automake`, and
+`autoconf`](https://github.com/meatysolutions/pico-sdk/issues/5).
+
+On linux `pico-enumeration` [requires `libudev-dev`](https://github.com/meatysolutions/pico-sdk/blob/700ab24efe81063316baffff638988cf626c6ffe/.github/workflows/build-and-publish.yml#L32).
+
 ## Tests
 Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.
 To run these tests, ensure that ignored tests are run too:
