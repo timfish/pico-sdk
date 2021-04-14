@@ -7,7 +7,7 @@ license = "MIT"
 name = "pico-driver"
 readme = "README.md"
 repository = "https://github.com/meatysolutions/pico-sdk"
-version = "0.2.1"
+version = "0.2.2"
 
 [lib]
 crate-type = ["lib"]
@@ -19,8 +19,8 @@ lazy_static = "1.4"
 libffi = "1.0"
 libloading = "0.7"
 parking_lot = "0.11"
-pico-common = {path = "../common", version = "0.2.1"}
-pico-sys-dynamic = {path = "../sys", version = "0.2.1"}
+pico-common = {path = "../common", version = "0.2.2"}
+pico-sys-dynamic = {path = "../sys", version = "0.2.2"}
 thiserror = "^1.0"
 tracing = {version = "0.1", features = ["attributes"]}
 version-compare = "0.0.11"
