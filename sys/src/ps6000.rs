@@ -346,7 +346,7 @@ pub const enPS6000Temperatures_PS6000_INTERNAL_TEMPERATURE: enPS6000Temperatures
 pub type enPS6000Temperatures = ::std::os::raw::c_uint;
 pub use self::enPS6000Temperatures as PS6000_TEMPERATURES;
 pub type ps6000BlockReady = ::std::option::Option<
-    extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
+    unsafe extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
 >;
 pub type ps6000StreamingReady = ::std::option::Option<
     unsafe extern "C" fn(

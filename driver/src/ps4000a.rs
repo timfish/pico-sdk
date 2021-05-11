@@ -75,6 +75,7 @@ impl PS4000ADriver {
     {
         let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS4000ALoader::new(path)? };
+        // Disables the splash screen on Windows
         unsafe { bindings.ps4000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS4000ADriver {
             bindings,

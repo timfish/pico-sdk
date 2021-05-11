@@ -30,6 +30,7 @@ impl PS3000ADriver {
     {
         let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS3000ALoader::new(path)? };
+        // Disables the splash screen on Windows
         unsafe { bindings.ps3000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS3000ADriver {
             bindings,
