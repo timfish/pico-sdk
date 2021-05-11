@@ -60,11 +60,14 @@ impl RateCalc {
             .unwrap_or(0)
     }
 }
+
 fn main() -> Result<()> {
-    // tracing_subscriber::fmt()
-    //     .with_max_level(tracing::Level::TRACE)
-    //     .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-    //     .init();
+    if std::env::args().any(|a| a.contains("--trace")) {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+            .init();
+    }
 
     let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
     let device = select_device(&enumerator)?;

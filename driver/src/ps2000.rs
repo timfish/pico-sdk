@@ -9,7 +9,7 @@ use pico_common::{
     PicoResult, PicoStatus, SampleConfig,
 };
 use pico_sys_dynamic::ps2000::PS2000Loader;
-use std::{collections::HashMap, pin::Pin, sync::Arc, time::Duration};
+use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 type BufferMap = HashMap<PicoChannel, Arc<RwLock<Pin<Vec<i16>>>>>;
 
@@ -23,12 +23,6 @@ struct CallbackRef {
     index: usize,
 }
 
-impl CallbackRef {
-    pub fn new(handle: i16) -> Self {
-        CallbackRef { handle, index: 0 }
-    }
-}
-
 #[derive(Default)]
 struct LockedCallbackRef {
     inner: Mutex<Option<CallbackRef>>,
@@ -39,11 +33,13 @@ impl LockedCallbackRef {
         loop {
             let mut inner = self.inner.lock();
 
+            // Check if another device is already waiting on a callback and if
+            // so, we yield and check again
             if inner.is_none() {
-                *inner = Some(CallbackRef::new(handle));
+                *inner = Some(CallbackRef { handle, index: 0 });
                 return;
             } else {
-                std::thread::sleep(Duration::from_millis(1));
+                std::thread::yield_now();
             }
         }
     }
@@ -88,6 +84,8 @@ impl LockedCallbackRef {
 
             callback_ref.index += n_values as usize;
             *inner = Some(callback_ref);
+        } else {
+            panic!("Streaming callback was called without a device reference");
         }
     }
 
@@ -98,6 +96,13 @@ impl LockedCallbackRef {
 }
 
 lazy_static! {
+    // The callbacks passed to the ps2000 driver don't support passing context
+    // which is an issue if you want to stream from more than one device at the
+    // same time.
+    //
+    // However, the callback passed to ps2000_get_streaming_last_values is
+    // called before the function returns and we can rely on this to track which
+    // device the callback refers to.
     static ref CALLBACK_REF: LockedCallbackRef = Default::default();
 }
 
