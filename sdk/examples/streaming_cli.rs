@@ -9,6 +9,7 @@ use std::{
     collections::{HashMap, VecDeque},
     convert::TryFrom,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 fn better_theme() -> ColorfulTheme {
@@ -23,32 +24,46 @@ fn better_theme() -> ColorfulTheme {
 
 #[derive(Clone)]
 struct RateCalc {
-    queue: Arc<Mutex<VecDeque<u64>>>,
+    queue: Arc<Mutex<VecDeque<(Instant, u64)>>>,
+    window_size: Duration,
 }
 
 impl RateCalc {
-    pub fn new() -> Self {
+    pub fn new(window_size: Duration) -> Self {
         RateCalc {
             queue: Default::default(),
+            window_size,
         }
     }
 
     pub fn get_value(&self, latest: usize) -> u64 {
-        let mut calc = self.queue.lock().unwrap();
-        calc.push_back(latest as u64);
+        let mut queue = self.queue.lock().unwrap();
+        queue.push_back((Instant::now(), latest as u64));
 
-        while calc.len() > 20 {
-            calc.pop_front();
+        let mut max = 0;
+        let mut total = 0;
+        for (index, (timestamp, value)) in queue.iter_mut().enumerate() {
+            if timestamp.elapsed() > self.window_size {
+                max = index;
+            } else {
+                total += *value;
+            }
         }
 
-        (calc.iter().sum::<u64>() * 20) / calc.len() as u64
+        for _ in 0..max {
+            queue.pop_front();
+        }
+
+        queue
+            .front()
+            .map(|(f, _)| (total as f64 / f.elapsed().as_secs_f64()) as u64)
+            .unwrap_or(0)
     }
 }
-
 fn main() -> Result<()> {
     // tracing_subscriber::fmt()
-    //     .with_max_level(Level::TRACE)
-    //     .with_span_events(FmtSpan::ACTIVE)
+    //     .with_max_level(tracing::Level::TRACE)
+    //     .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
     //     .init();
 
     let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
@@ -245,7 +260,7 @@ impl CaptureStats {
     pub fn new(ch_units: HashMap<PicoChannel, String>) -> Arc<Self> {
         Arc::new(CaptureStats {
             term: Term::stdout(),
-            rate_calc: RateCalc::new(),
+            rate_calc: RateCalc::new(Duration::from_secs(5)),
             ch_units,
         })
     }
@@ -270,8 +285,6 @@ impl NewDataHandler for CaptureStats {
             })
             .collect();
 
-        let (_, samples, _, _) = data[0];
-
         data.sort_by(|a, b| a.0.cmp(&b.0));
 
         self.term.clear_last_lines(data.len() + 1).unwrap();
@@ -283,7 +296,11 @@ impl NewDataHandler for CaptureStats {
                 "{}",
                 style(format!(
                     "{}S/s",
-                    metric::Signifix::try_from(self.rate_calc.get_value(samples)).unwrap()
+                    match metric::Signifix::try_from(self.rate_calc.get_value(event.length)) {
+                        Ok(v) => format!("{}", v),
+                        Err(metric::Error::OutOfLowerBound(_)) => "0".to_string(),
+                        _ => panic!("unknown error"),
+                    }
                 ))
                 .bold()
             )

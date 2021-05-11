@@ -1,8 +1,9 @@
 use crate::{
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, parse_enum_result, EnumerationResult, PicoDriver,
+    get_version_string, parse_enum_result,
+    trampoline::split_closure,
+    EnumerationResult, PicoDriver,
 };
-use libffi::high::ClosureMut8;
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
@@ -29,6 +30,7 @@ impl PS5000ADriver {
     {
         let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS5000ALoader::new(path)? };
+        unsafe { bindings.ps5000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS5000ADriver {
             bindings,
             _dependencies: dependencies,
@@ -267,17 +269,16 @@ impl PicoDriver for PS5000ADriver {
         _channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
-        let mut simplify_args = |_, sample_count, start_index, _, _, _, _, _| {
-            callback(start_index as usize, sample_count as usize);
-        };
-        let closure = ClosureMut8::new(&mut simplify_args);
+        let mut simplify_args =
+            |_: i16, sample_count: i32, start_index: u32, _: i16, _: u32, _: i16, _: i16| {
+                callback(start_index as usize, sample_count as usize);
+            };
 
         let status = PicoStatus::from(unsafe {
-            self.bindings.ps5000aGetStreamingLatestValues(
-                handle,
-                Some(*closure.code_ptr()),
-                std::ptr::null_mut(),
-            )
+            let (state, callback) = split_closure(&mut simplify_args);
+
+            self.bindings
+                .ps5000aGetStreamingLatestValues(handle, Some(callback), state)
         });
 
         match status {

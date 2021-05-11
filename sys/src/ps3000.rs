@@ -199,6 +199,7 @@ pub struct __va_list_tag {
 extern crate libloading;
 pub struct PS3000Loader {
     __library: ::libloading::Library,
+    pub ps3000_apply_fix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps3000_open_unit: Result<unsafe extern "C" fn() -> i16, ::libloading::Error>,
     pub ps3000_get_unit_info: Result<
         unsafe extern "C" fn(handle: i16, string: *mut i8, string_length: i16, line: i16) -> i16,
@@ -438,6 +439,7 @@ impl PS3000Loader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps3000_apply_fix = __library.get(b"ps3000_apply_fix\0").map(|sym| *sym);
         let ps3000_open_unit = __library.get(b"ps3000_open_unit\0").map(|sym| *sym);
         let ps3000_get_unit_info = __library.get(b"ps3000_get_unit_info\0").map(|sym| *sym);
         let ps3000_flash_led = __library.get(b"ps3000_flash_led\0").map(|sym| *sym);
@@ -498,6 +500,7 @@ impl PS3000Loader {
         let ps3000PingUnit = __library.get(b"ps3000PingUnit\0").map(|sym| *sym);
         Ok(PS3000Loader {
             __library,
+            ps3000_apply_fix,
             ps3000_open_unit,
             ps3000_get_unit_info,
             ps3000_flash_led,
@@ -531,6 +534,13 @@ impl PS3000Loader {
             ps3000SetAdvTriggerDelay,
             ps3000PingUnit,
         })
+    }
+    pub unsafe fn ps3000_apply_fix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps3000_apply_fix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps3000_open_unit(&self) -> i16 {
         let sym = self

@@ -452,7 +452,7 @@ pub type ps3000aBlockReady = ::std::option::Option<
     extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
 >;
 pub type ps3000aStreamingReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         noOfSamples: i32,
         startIndex: u32,
@@ -464,7 +464,7 @@ pub type ps3000aStreamingReady = ::std::option::Option<
     ),
 >;
 pub type ps3000aDataReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         status: PICO_STATUS,
         noOfSamples: u32,
@@ -476,6 +476,7 @@ pub type ps3000aDataReady = ::std::option::Option<
 extern crate libloading;
 pub struct PS3000ALoader {
     __library: ::libloading::Library,
+    pub ps3000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps3000aOpenUnit: Result<
         unsafe extern "C" fn(handle: *mut i16, serial: *mut i8) -> PICO_STATUS,
         ::libloading::Error,
@@ -1092,6 +1093,7 @@ impl PS3000ALoader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps3000aApplyFix = __library.get(b"ps3000aApplyFix\0").map(|sym| *sym);
         let ps3000aOpenUnit = __library.get(b"ps3000aOpenUnit\0").map(|sym| *sym);
         let ps3000aOpenUnitAsync = __library.get(b"ps3000aOpenUnitAsync\0").map(|sym| *sym);
         let ps3000aOpenUnitProgress = __library.get(b"ps3000aOpenUnitProgress\0").map(|sym| *sym);
@@ -1231,6 +1233,7 @@ impl PS3000ALoader {
         let ps3000aGetScalingValues = __library.get(b"ps3000aGetScalingValues\0").map(|sym| *sym);
         Ok(PS3000ALoader {
             __library,
+            ps3000aApplyFix,
             ps3000aOpenUnit,
             ps3000aOpenUnitAsync,
             ps3000aOpenUnitProgress,
@@ -1303,6 +1306,13 @@ impl PS3000ALoader {
             ps3000aSetOutputEdgeDetect,
             ps3000aGetScalingValues,
         })
+    }
+    pub unsafe fn ps3000aApplyFix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps3000aApplyFix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps3000aOpenUnit(&self, handle: *mut i16, serial: *mut i8) -> PICO_STATUS {
         let sym = self

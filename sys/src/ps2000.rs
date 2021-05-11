@@ -196,6 +196,7 @@ pub type PS2000_PWQ_CONDITIONS = tPS2000PwqConditions;
 extern crate libloading;
 pub struct PS2000Loader {
     __library: ::libloading::Library,
+    pub ps2000_apply_fix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps2000_open_unit: Result<unsafe extern "C" fn() -> i16, ::libloading::Error>,
     pub ps2000_get_unit_info: Result<
         unsafe extern "C" fn(handle: i16, string: *mut i8, string_length: i16, line: i16) -> i16,
@@ -441,6 +442,7 @@ impl PS2000Loader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps2000_apply_fix = __library.get(b"ps2000_apply_fix\0").map(|sym| *sym);
         let ps2000_open_unit = __library.get(b"ps2000_open_unit\0").map(|sym| *sym);
         let ps2000_get_unit_info = __library.get(b"ps2000_get_unit_info\0").map(|sym| *sym);
         let ps2000_flash_led = __library.get(b"ps2000_flash_led\0").map(|sym| *sym);
@@ -500,6 +502,7 @@ impl PS2000Loader {
         let ps2000PingUnit = __library.get(b"ps2000PingUnit\0").map(|sym| *sym);
         Ok(PS2000Loader {
             __library,
+            ps2000_apply_fix,
             ps2000_open_unit,
             ps2000_get_unit_info,
             ps2000_flash_led,
@@ -534,6 +537,13 @@ impl PS2000Loader {
             ps2000SetAdvTriggerDelay,
             ps2000PingUnit,
         })
+    }
+    pub unsafe fn ps2000_apply_fix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps2000_apply_fix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps2000_open_unit(&self) -> i16 {
         let sym = self

@@ -1114,7 +1114,7 @@ pub type ps5000aBlockReady = ::std::option::Option<
     extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
 >;
 pub type ps5000aStreamingReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         noOfSamples: i32,
         startIndex: u32,
@@ -1126,7 +1126,7 @@ pub type ps5000aStreamingReady = ::std::option::Option<
     ),
 >;
 pub type ps5000aDataReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         status: PICO_STATUS,
         noOfSamples: u32,
@@ -1138,6 +1138,7 @@ pub type ps5000aDataReady = ::std::option::Option<
 extern crate libloading;
 pub struct PS5000ALoader {
     __library: ::libloading::Library,
+    pub ps5000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps5000aOpenUnit: Result<
         unsafe extern "C" fn(
             handle: *mut i16,
@@ -1848,6 +1849,7 @@ impl PS5000ALoader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps5000aApplyFix = __library.get(b"ps5000aApplyFix\0").map(|sym| *sym);
         let ps5000aOpenUnit = __library.get(b"ps5000aOpenUnit\0").map(|sym| *sym);
         let ps5000aOpenUnitAsync = __library.get(b"ps5000aOpenUnitAsync\0").map(|sym| *sym);
         let ps5000aOpenUnitProgress = __library.get(b"ps5000aOpenUnitProgress\0").map(|sym| *sym);
@@ -2023,6 +2025,7 @@ impl PS5000ALoader {
             .map(|sym| *sym);
         Ok(PS5000ALoader {
             __library,
+            ps5000aApplyFix,
             ps5000aOpenUnit,
             ps5000aOpenUnitAsync,
             ps5000aOpenUnitProgress,
@@ -2107,6 +2110,13 @@ impl PS5000ALoader {
             ps5000aCheckForUpdate,
             ps5000aStartFirmwareUpdate,
         })
+    }
+    pub unsafe fn ps5000aApplyFix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps5000aApplyFix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps5000aOpenUnit(
         &self,

@@ -438,7 +438,7 @@ impl PicoStreamingDevice {
         buffers: BufferMap,
         actual_sample_rate: u32,
     ) -> (State, Duration) {
-        let closure = |start_index, sample_count| {
+        let callback = |start_index, sample_count| {
             let channels = self.enabled_channels.read();
 
             let channels = channels
@@ -472,7 +472,7 @@ impl PicoStreamingDevice {
         if let Err(error) =
             self.device
                 .driver
-                .get_latest_streaming_values(handle, &channels, Box::new(closure))
+                .get_latest_streaming_values(handle, &channels, Box::new(callback))
         {
             if error.status == PicoStatus::WAITING_FOR_DATA_BUFFERS {
                 for (channel, buffer) in &buffers {

@@ -349,7 +349,7 @@ pub type ps6000BlockReady = ::std::option::Option<
     extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
 >;
 pub type ps6000StreamingReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         noOfSamples: u32,
         startIndex: u32,
@@ -361,7 +361,7 @@ pub type ps6000StreamingReady = ::std::option::Option<
     ),
 >;
 pub type ps6000DataReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         status: PICO_STATUS,
         noOfSamples: u32,
@@ -373,6 +373,7 @@ pub type ps6000DataReady = ::std::option::Option<
 extern crate libloading;
 pub struct PS6000Loader {
     __library: ::libloading::Library,
+    pub ps6000ApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps6000OpenUnit: Result<
         unsafe extern "C" fn(handle: *mut i16, serial: *mut i8) -> PICO_STATUS,
         ::libloading::Error,
@@ -934,6 +935,7 @@ impl PS6000Loader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps6000ApplyFix = __library.get(b"ps6000ApplyFix\0").map(|sym| *sym);
         let ps6000OpenUnit = __library.get(b"ps6000OpenUnit\0").map(|sym| *sym);
         let ps6000OpenUnitAsync = __library.get(b"ps6000OpenUnitAsync\0").map(|sym| *sym);
         let ps6000OpenUnitProgress = __library.get(b"ps6000OpenUnitProgress\0").map(|sym| *sym);
@@ -1041,6 +1043,7 @@ impl PS6000Loader {
             .map(|sym| *sym);
         Ok(PS6000Loader {
             __library,
+            ps6000ApplyFix,
             ps6000OpenUnit,
             ps6000OpenUnitAsync,
             ps6000OpenUnitProgress,
@@ -1103,6 +1106,13 @@ impl PS6000Loader {
             ps6000QueryOutputEdgeDetect,
             ps6000SetOutputEdgeDetect,
         })
+    }
+    pub unsafe fn ps6000ApplyFix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps6000ApplyFix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps6000OpenUnit(&self, handle: *mut i16, serial: *mut i8) -> PICO_STATUS {
         let sym = self

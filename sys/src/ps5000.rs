@@ -322,6 +322,7 @@ pub type ps5000DataReady = ::std::option::Option<
 extern crate libloading;
 pub struct PS5000Loader {
     __library: ::libloading::Library,
+    pub ps5000ApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps5000OpenUnit:
         Result<unsafe extern "C" fn(handle: *mut i16) -> PICO_STATUS, ::libloading::Error>,
     pub ps5000OpenUnitAsync:
@@ -732,6 +733,7 @@ impl PS5000Loader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps5000ApplyFix = __library.get(b"ps5000ApplyFix\0").map(|sym| *sym);
         let ps5000OpenUnit = __library.get(b"ps5000OpenUnit\0").map(|sym| *sym);
         let ps5000OpenUnitAsync = __library.get(b"ps5000OpenUnitAsync\0").map(|sym| *sym);
         let ps5000OpenUnitProgress = __library.get(b"ps5000OpenUnitProgress\0").map(|sym| *sym);
@@ -810,6 +812,7 @@ impl PS5000Loader {
         let ps5000SetNoOfCaptures = __library.get(b"ps5000SetNoOfCaptures\0").map(|sym| *sym);
         Ok(PS5000Loader {
             __library,
+            ps5000ApplyFix,
             ps5000OpenUnit,
             ps5000OpenUnitAsync,
             ps5000OpenUnitProgress,
@@ -857,6 +860,13 @@ impl PS5000Loader {
             ps5000PingUnit,
             ps5000SetNoOfCaptures,
         })
+    }
+    pub unsafe fn ps5000ApplyFix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps5000ApplyFix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps5000OpenUnit(&self, handle: *mut i16) -> PICO_STATUS {
         let sym = self

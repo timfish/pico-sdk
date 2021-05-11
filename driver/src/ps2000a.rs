@@ -1,8 +1,9 @@
 use crate::{
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, parse_enum_result, EnumerationResult, PicoDriver,
+    get_version_string, parse_enum_result,
+    trampoline::split_closure,
+    EnumerationResult, PicoDriver,
 };
-use libffi::high::ClosureMut8;
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
@@ -29,32 +30,11 @@ impl PS2000ADriver {
     {
         let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS2000ALoader::new(path)? };
+        unsafe { bindings.ps2000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS2000ADriver {
             bindings,
             _dependencies: dependencies,
         })
-    }
-
-    /// Wraps the c callback with libffi so we can use closures
-    ///
-    /// libffi isn't the only way to do this because we have c_void context.
-    /// However, we already need libffi for the ps2000 driver and this is easy.
-    pub fn get_latest_streaming_values_wrap<
-        F: FnMut(i16, i32, u32, i16, u32, i16, i16, *mut ::std::os::raw::c_void),
-    >(
-        &self,
-        handle: i16,
-        mut callback: F,
-    ) -> u32 {
-        let closure = ClosureMut8::new(&mut callback);
-
-        unsafe {
-            self.bindings.ps2000aGetStreamingLatestValues(
-                handle,
-                Some(*closure.code_ptr()),
-                std::ptr::null_mut(),
-            )
-        }
     }
 }
 
@@ -277,12 +257,17 @@ impl PicoDriver for PS2000ADriver {
         _channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
-        let status = PicoStatus::from(self.get_latest_streaming_values_wrap(
-            handle,
-            |_, sample_count, start_index, _, _, _, _, _| {
-                callback(start_index as usize, sample_count as usize);
-            },
-        ));
+        let mut full_closure =
+            |_: i16, no_of_samples: i32, start_index: u32, _: i16, _: u32, _: i16, _: i16| {
+                callback(start_index as usize, no_of_samples as usize);
+            };
+
+        let status = PicoStatus::from(unsafe {
+            let (state, callback) = split_closure(&mut full_closure);
+
+            self.bindings
+                .ps2000aGetStreamingLatestValues(handle, Some(callback), state)
+        });
 
         match status {
             PicoStatus::OK | PicoStatus::BUSY => Ok(()),
