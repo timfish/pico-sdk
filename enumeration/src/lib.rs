@@ -142,9 +142,9 @@ impl DeviceEnumerator {
     /// Enumerates required drivers and returns a flattened list of results
     pub fn enumerate(&self) -> Vec<Result<EnumeratedDevice, EnumerationError>> {
         DeviceEnumerator::enumerate_raw()
-            .par_iter()
+            .into_par_iter()
             .flat_map(|(driver_type, device_count)| {
-                self.enumerate_driver(*driver_type, Some(*device_count))
+                self.enumerate_driver(driver_type, Some(device_count))
             })
             .collect()
     }

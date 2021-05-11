@@ -793,6 +793,7 @@ pub type ps6000aProbeInteractions = ::std::option::Option<
 extern crate libloading;
 pub struct PS6000ALoader {
     __library: ::libloading::Library,
+    pub ps6000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps6000aOpenUnit: Result<
         unsafe extern "C" fn(
             handle: *mut i16,
@@ -1395,6 +1396,7 @@ impl PS6000ALoader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps6000aApplyFix = __library.get(b"ps6000aApplyFix\0").map(|sym| *sym);
         let ps6000aOpenUnit = __library.get(b"ps6000aOpenUnit\0").map(|sym| *sym);
         let ps6000aOpenUnitAsync = __library.get(b"ps6000aOpenUnitAsync\0").map(|sym| *sym);
         let ps6000aOpenUnitProgress = __library.get(b"ps6000aOpenUnitProgress\0").map(|sym| *sym);
@@ -1545,6 +1547,7 @@ impl PS6000ALoader {
             .map(|sym| *sym);
         Ok(PS6000ALoader {
             __library,
+            ps6000aApplyFix,
             ps6000aOpenUnit,
             ps6000aOpenUnitAsync,
             ps6000aOpenUnitProgress,
@@ -1624,6 +1627,13 @@ impl PS6000ALoader {
             ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus,
             ps6000aReportAllChannelsOvervoltageTripStatus,
         })
+    }
+    pub unsafe fn ps6000aApplyFix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps6000aApplyFix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps6000aOpenUnit(
         &self,

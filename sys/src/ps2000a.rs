@@ -1214,6 +1214,7 @@ pub struct __va_list_tag {
 extern crate libloading;
 pub struct PS2000ALoader {
     __library: ::libloading::Library,
+    pub ps2000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps2000aOpenUnit: Result<
         unsafe extern "C" fn(handle: *mut i16, serial: *mut i8) -> PICO_STATUS,
         ::libloading::Error,
@@ -1783,6 +1784,7 @@ impl PS2000ALoader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps2000aApplyFix = __library.get(b"ps2000aApplyFix\0").map(|sym| *sym);
         let ps2000aOpenUnit = __library.get(b"ps2000aOpenUnit\0").map(|sym| *sym);
         let ps2000aOpenUnitAsync = __library.get(b"ps2000aOpenUnitAsync\0").map(|sym| *sym);
         let ps2000aOpenUnitProgress = __library.get(b"ps2000aOpenUnitProgress\0").map(|sym| *sym);
@@ -1908,6 +1910,7 @@ impl PS2000ALoader {
         let ps2000aGetScalingValues = __library.get(b"ps2000aGetScalingValues\0").map(|sym| *sym);
         Ok(PS2000ALoader {
             __library,
+            ps2000aApplyFix,
             ps2000aOpenUnit,
             ps2000aOpenUnitAsync,
             ps2000aOpenUnitProgress,
@@ -1974,6 +1977,13 @@ impl PS2000ALoader {
             ps2000aSetOutputEdgeDetect,
             ps2000aGetScalingValues,
         })
+    }
+    pub unsafe fn ps2000aApplyFix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps2000aApplyFix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps2000aOpenUnit(&self, handle: *mut i16, serial: *mut i8) -> PICO_STATUS {
         let sym = self

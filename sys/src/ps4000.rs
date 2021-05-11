@@ -365,7 +365,7 @@ pub type ps4000BlockReady = ::std::option::Option<
     extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
 >;
 pub type ps4000StreamingReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         noOfSamples: i32,
         startIndex: u32,
@@ -377,7 +377,7 @@ pub type ps4000StreamingReady = ::std::option::Option<
     ),
 >;
 pub type ps4000DataReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         noOfSamples: i32,
         overflow: i16,
@@ -399,6 +399,7 @@ pub struct __va_list_tag {
 extern crate libloading;
 pub struct PS4000Loader {
     __library: ::libloading::Library,
+    pub ps4000ApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps4000OpenUnit:
         Result<unsafe extern "C" fn(handle: *mut i16) -> PICO_STATUS, ::libloading::Error>,
     pub ps4000OpenUnitAsync:
@@ -930,6 +931,7 @@ impl PS4000Loader {
         P: AsRef<::std::ffi::OsStr>,
     {
         let __library = ::libloading::Library::new(path)?;
+        let ps4000ApplyFix = __library.get(b"ps4000ApplyFix\0").map(|sym| *sym);
         let ps4000OpenUnit = __library.get(b"ps4000OpenUnit\0").map(|sym| *sym);
         let ps4000OpenUnitAsync = __library.get(b"ps4000OpenUnitAsync\0").map(|sym| *sym);
         let ps4000OpenUnitEx = __library.get(b"ps4000OpenUnitEx\0").map(|sym| *sym);
@@ -1045,6 +1047,7 @@ impl PS4000Loader {
         let ps4000GetNoOfCaptures = __library.get(b"ps4000GetNoOfCaptures\0").map(|sym| *sym);
         Ok(PS4000Loader {
             __library,
+            ps4000ApplyFix,
             ps4000OpenUnit,
             ps4000OpenUnitAsync,
             ps4000OpenUnitEx,
@@ -1111,6 +1114,13 @@ impl PS4000Loader {
             ps4000TriggerWithinPreTriggerSamples,
             ps4000GetNoOfCaptures,
         })
+    }
+    pub unsafe fn ps4000ApplyFix(&self, a: u32, b: u16) {
+        let sym = self
+            .ps4000ApplyFix
+            .as_ref()
+            .expect("Expected function, got error.");
+        (sym)(a, b)
     }
     pub unsafe fn ps4000OpenUnit(&self, handle: *mut i16) -> PICO_STATUS {
         let sym = self

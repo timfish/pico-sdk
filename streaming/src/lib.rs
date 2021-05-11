@@ -68,7 +68,7 @@ mod events;
 enum Target {
     Closed,
     Open,
-    Streaming { requested_samples_rate: u32 },
+    Streaming { requested_sample_rate: u32 },
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -246,15 +246,15 @@ impl PicoStreamingDevice {
 
     /// Start streaming
     #[tracing::instrument(level = "info")]
-    pub fn start(&self, requested_samples_rate: u32) -> PicoResult<u32> {
+    pub fn start(&self, requested_sample_rate: u32) -> PicoResult<u32> {
         // Set the target state
         {
             self.target_state.set(Target::Streaming {
-                requested_samples_rate,
+                requested_sample_rate,
             });
         }
 
-        // Drive the state until we get the correct state or error
+        // Drive the state until we get the correct state or an error we can return
         let mut count = 0;
         loop {
             self.run_state()?;
@@ -339,8 +339,8 @@ impl PicoStreamingDevice {
                 }
                 Target::Open => self.ping(handle),
                 Target::Streaming {
-                    requested_samples_rate,
-                } => self.configure_and_start(handle, requested_samples_rate)?,
+                    requested_sample_rate,
+                } => self.configure_and_start(handle, requested_sample_rate)?,
             },
             State::Streaming {
                 handle,
@@ -438,7 +438,7 @@ impl PicoStreamingDevice {
         buffers: BufferMap,
         actual_sample_rate: u32,
     ) -> (State, Duration) {
-        let closure = |start_index, sample_count| {
+        let callback = |start_index, sample_count| {
             let channels = self.enabled_channels.read();
 
             let channels = channels
@@ -472,7 +472,7 @@ impl PicoStreamingDevice {
         if let Err(error) =
             self.device
                 .driver
-                .get_latest_streaming_values(handle, &channels, Box::new(closure))
+                .get_latest_streaming_values(handle, &channels, Box::new(callback))
         {
             if error.status == PicoStatus::WAITING_FOR_DATA_BUFFERS {
                 for (channel, buffer) in &buffers {

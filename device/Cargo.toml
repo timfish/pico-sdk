@@ -7,7 +7,7 @@ license = "MIT"
 name = "pico-device"
 readme = "README.md"
 repository = "https://github.com/meatysolutions/pico-sdk"
-version = "0.3.0"
+version = "0.3.1"
 
 [lib]
 crate-type = ["lib"]
@@ -15,7 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 parking_lot = "0.11"
-pico-common = {path = "../common", version = "0.3.0"}
-pico-driver = {path = "../driver", version = "0.3.0"}
+pico-common = {path = "../common", version = "0.3.1"}
+pico-driver = {path = "../driver", version = "0.3.1"}
 serde = {version = "1.0", features = ["derive", "rc"], optional = true}
 tracing = {version = "0.1", features = ["attributes"]}

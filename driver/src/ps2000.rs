@@ -3,7 +3,6 @@ use crate::{
     get_version_string, EnumerationResult, PicoDriver,
 };
 use lazy_static::lazy_static;
-use libffi::high::ClosureMut6;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
@@ -17,6 +16,105 @@ type BufferMap = HashMap<PicoChannel, Arc<RwLock<Pin<Vec<i16>>>>>;
 lazy_static! {
     /// We store buffers so the ps2000 emulates the same API as the other drivers
     static ref BUFFERS: Mutex<HashMap<i16, BufferMap>> = Default::default();
+}
+
+struct CallbackRef {
+    handle: i16,
+    index: usize,
+}
+
+#[derive(Default)]
+struct LockedCallbackRef {
+    inner: Mutex<Option<CallbackRef>>,
+}
+
+impl LockedCallbackRef {
+    fn start(&self, handle: i16) {
+        loop {
+            let mut inner = self.inner.lock();
+
+            // Check if another device is already waiting on a callback and if
+            // so, we yield and check again
+            if inner.is_none() {
+                *inner = Some(CallbackRef { handle, index: 0 });
+                return;
+            } else {
+                std::thread::yield_now();
+            }
+        }
+    }
+
+    fn callback(&self, overview_buffers: *const *const usize, n_values: usize) {
+        let mut inner = self.inner.lock();
+
+        if let Some(mut callback_ref) = inner.take() {
+            let buffer_pointers =
+                unsafe { std::slice::from_raw_parts::<*const usize>(overview_buffers, 4) };
+
+            let mut all_buffers = BUFFERS.lock();
+            let buffers = all_buffers
+                .get_mut(&callback_ref.handle)
+                .expect("Could not find buffers for this device");
+
+            let mut copy_data = |index: usize, ch: PicoChannel| {
+                let raw_data = unsafe {
+                    std::slice::from_raw_parts::<i16>(
+                        buffer_pointers[index] as *const i16,
+                        n_values,
+                    )
+                };
+                // fetch the buffer to copy the data into it
+                let mut ch_buf = buffers
+                    .get_mut(&ch)
+                    .expect("Could not find buffers for this channel")
+                    .write();
+
+                ch_buf[callback_ref.index..callback_ref.index + n_values]
+                    .copy_from_slice(&raw_data);
+            };
+
+            // ps2000 devices always have two channels so we just handle them manually
+            if !buffer_pointers[0].is_null() {
+                copy_data(0, PicoChannel::A)
+            }
+
+            if !buffer_pointers[2].is_null() {
+                copy_data(2, PicoChannel::B)
+            }
+
+            callback_ref.index += n_values as usize;
+            *inner = Some(callback_ref);
+        } else {
+            panic!("Streaming callback was called without a device reference");
+        }
+    }
+
+    fn end(&self) -> Option<usize> {
+        let mut inner = self.inner.lock();
+        inner.take().map(|cb| cb.index)
+    }
+}
+
+lazy_static! {
+    // The callbacks passed to the ps2000 driver don't support passing context
+    // which is an issue if you want to stream from more than one device at the
+    // same time.
+    //
+    // However, the callback passed to ps2000_get_streaming_last_values is
+    // called before the function returns and we can rely on this to track which
+    // device the callback refers to.
+    static ref CALLBACK_REF: LockedCallbackRef = Default::default();
+}
+
+extern "C" fn streaming_callback(
+    overview_buffers: *mut *mut i16,
+    _overflow: i16,
+    _triggered_at: u32,
+    _triggered: i16,
+    _auto_stop: i16,
+    n_values: u32,
+) {
+    CALLBACK_REF.callback(overview_buffers as *const *const usize, n_values as usize);
 }
 
 pub struct PS2000Driver {
@@ -37,6 +135,7 @@ impl PS2000Driver {
     {
         let dependencies = load_dependencies(&path.as_ref());
         let bindings = unsafe { PS2000Loader::new(path)? };
+        unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {
             bindings,
             _dependencies: dependencies,
@@ -48,23 +147,6 @@ impl PS2000Driver {
             -1 => Err(PicoStatus::OPERATION_FAILED),
             0 => Err(PicoStatus::NOT_FOUND),
             handle => Ok(handle),
-        }
-    }
-
-    /// Wraps the c callback with libffi so we can use closures
-    ///
-    /// This is required because the ps2000 driver doesn't pass a context object
-    /// through to the callback. Without a context object, we cannot know which
-    /// device the callback refers to. libffi lets us keep the context.
-    fn get_latest_streaming_values_wrap<F: FnMut(*mut *mut i16, i16, u32, i16, i16, u32)>(
-        &self,
-        handle: i16,
-        mut callback: F,
-    ) -> i16 {
-        let closure = ClosureMut6::new(&mut callback);
-        unsafe {
-            self.bindings
-                .ps2000_get_streaming_last_values(handle, Some(*closure.code_ptr()))
         }
     }
 }
@@ -104,7 +186,7 @@ impl PicoDriver for PS2000Driver {
 
                     let serial = self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?;
                     let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-                    output.push(EnumerationResult { serial, variant });
+                    output.push(EnumerationResult { variant, serial });
                 }
                 Err(PicoStatus::NOT_FOUND) => break,
                 Err(e) => {
@@ -308,55 +390,16 @@ impl PicoDriver for PS2000Driver {
         _channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
-        self.get_latest_streaming_values_wrap(
-            handle,
-            |overview_buffers: *mut *mut i16, _: i16, _: u32, _: i16, _: i16, n_values: u32| {
-                let buffer_pointers = unsafe {
-                    std::slice::from_raw_parts::<*const usize>(
-                        overview_buffers as *const *const usize,
-                        4,
-                    )
-                };
+        CALLBACK_REF.start(handle);
 
-                let mut all_buffers = BUFFERS.lock();
-                let buffers = all_buffers
-                    .get_mut(&handle)
-                    .expect("Could not find buffers for this device");
+        unsafe {
+            self.bindings
+                .ps2000_get_streaming_last_values(handle, Some(streaming_callback))
+        };
 
-                let mut copy_data = |index: usize, ch: PicoChannel| {
-                    let raw_data = unsafe {
-                        std::slice::from_raw_parts::<i16>(
-                            buffer_pointers[index] as *const i16,
-                            n_values as usize,
-                        )
-                    };
-                    // fetch the buffer to copy the data into it
-                    let mut ch_buf = buffers
-                        .get_mut(&ch)
-                        .expect("Could not find buffers for this channel")
-                        .write();
-
-                    // We need to resize the buffer so we can copy it
-                    // straight into ch_buf
-                    let mut raw_data = raw_data.to_vec();
-                    raw_data.resize(ch_buf.len(), 0);
-
-                    ch_buf.copy_from_slice(&raw_data);
-                };
-
-                // ps2000 devices always have two channels so we just handle them manually
-                if !buffer_pointers[0].is_null() {
-                    copy_data(0, PicoChannel::A)
-                }
-
-                if !buffer_pointers[2].is_null() {
-                    copy_data(2, PicoChannel::B)
-                }
-
-                // The data is always copied into the start of the buffer
-                callback(0, n_values as usize);
-            },
-        );
+        if let Some(sample_count) = CALLBACK_REF.end() {
+            callback(0, sample_count);
+        }
 
         Ok(())
     }
