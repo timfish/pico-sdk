@@ -54,6 +54,7 @@ pub use events::{NewDataHandler, RawChannelDataBlock, StreamingEvent};
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
+    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
 };
 use pico_device::PicoDevice;
 use std::{
@@ -509,6 +510,59 @@ impl PicoStreamingDevice {
                 Duration::from_millis(50),
             )
         }
+    }
+
+    pub fn set_sig_gen_arbitrary(&self) {
+        // Start an AWG function -
+        let offset_voltage: i32 = 0;
+        let pk_to_pk: u32 = 200_000;
+        let start_delta_phase: u32 = 0;
+        let stop_delta_phase: u32 = 0;
+        let delta_phase_increment: u32 = 0;
+        let dwell_count: u32 = 1;
+        let arbitrary_waveform = vec![1, 1, 1, 1, 0, 0, 0, 0];
+        let shots: u32 = 0;
+        let sweeps: u32 = 0;
+        let ext_in_threshold: i16 = 0;
+
+        let current_state = self.current_state.read();
+        let handle = match *current_state {
+            State::Closed => {
+                panic!("attempt to sig gen on closed device, no handle");
+            }
+            State::Open {
+                handle
+            } => {
+                handle
+            },
+            State::Streaming {
+                handle,
+                ..
+            } => {
+                handle
+            },
+        };
+    
+        println!("calling set_sig_gen_arbitrary");
+        self.device.driver.set_sig_gen_arbitrary(
+            handle,
+            offset_voltage,
+            pk_to_pk,
+            start_delta_phase,
+            stop_delta_phase,
+            delta_phase_increment,
+            dwell_count,
+            &arbitrary_waveform,
+            PicoSweepType::SweepUp,
+            PicoExtraOperations::ExtraOperationsOff,
+            PicoIndexMode::IndexModeSingle,
+            shots,
+            sweeps,
+            PicoSigGenTrigType::SigGenTrigTypeRising,
+            PicoSigGenTrigSource::SigGenTrigSourceNone,
+            ext_in_threshold,
+        ).unwrap();
+        println!("called set_sig_gen_arbitrary");
     }
 }
 
