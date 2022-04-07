@@ -280,6 +280,45 @@ impl PicoDriver for PS2000ADriver {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_built_in_v2(
+        &self,
+        handle: i16,
+        offset_voltage: i32,
+        pk_to_pk: u32,
+        wave_type: i16,
+        start_frequency: f64,
+        stop_frequency: f64,
+        increment: f64,
+        dwell_time: f64,
+        sweep_type: PicoSweepType,
+        operation: PicoExtraOperations,
+        shots: u32,
+        sweeps: u32,
+        trigger_type: PicoSigGenTrigType,
+        trigger_source: PicoSigGenTrigSource,
+        ext_in_threshold: i16,
+     ) ->  PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings.ps2000aSetSigGenBuiltInV2(
+                handle,
+                offset_voltage,
+                pk_to_pk,
+                wave_type,
+                start_frequency,
+                stop_frequency,
+                increment,
+                dwell_time,
+                sweep_type as PS2000A_SWEEP_TYPE,
+                operation as PS2000A_EXTRA_OPERATIONS,
+                shots,
+                sweeps,
+                trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
+                trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
+                ext_in_threshold,
+        )}).to_result((), "set_sig_gen_arbitrary")
+     }
+
+    #[tracing::instrument(level = "trace", skip(self))]
     fn set_sig_gen_arbitrary(
         &self,
         handle: i16,
@@ -304,25 +343,25 @@ impl PicoDriver for PS2000ADriver {
         // go read the SDK to see if the memory is caller responsibility or
         // copied by the library.
         let mut arbitrary_waveform = arbitrary_waveform.clone();
-         PicoStatus::from(unsafe {
-             self.bindings.ps2000aSetSigGenArbitrary(
-                 handle,
-                 offset_voltage,
-                 pk_to_pk,
-                 start_delta_phase,
-                 stop_delta_phase,
-                 delta_phase_increment,
-                 dwell_count,
-                 arbitrary_waveform.as_mut_ptr(),
-                 arbitrary_waveform.len() as i32,
-                 sweep_type as PS2000A_SWEEP_TYPE,
-                 operation as PS2000A_EXTRA_OPERATIONS,
-                 index_mode as PS2000A_INDEX_MODE,
-                 shots,
-                 sweeps,
-                 trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
-                 trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
-                 ext_in_threshold)
-         }).to_result((), "set_sig_gen_arbitrary")
+        PicoStatus::from(unsafe {
+            self.bindings.ps2000aSetSigGenArbitrary(
+                handle,
+                offset_voltage,
+                pk_to_pk,
+                start_delta_phase,
+                stop_delta_phase,
+                delta_phase_increment,
+                dwell_count,
+                arbitrary_waveform.as_mut_ptr(),
+                arbitrary_waveform.len() as i32,
+                sweep_type as PS2000A_SWEEP_TYPE,
+                operation as PS2000A_EXTRA_OPERATIONS,
+                index_mode as PS2000A_INDEX_MODE,
+                shots,
+                sweeps,
+                trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
+                trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
+                ext_in_threshold)
+        }).to_result((), "set_sig_gen_arbitrary")
      }
 }

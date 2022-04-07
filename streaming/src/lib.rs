@@ -512,6 +512,46 @@ impl PicoStreamingDevice {
         }
     }
 
+    pub fn set_sig_gen_built_in_v2(&self) {
+        let current_state = self.current_state.write();
+        let handle = match current_state.clone() {
+            State::Closed => {
+                panic!("attempt to sig gen on closed device, no handle");
+            }
+            State::Open {
+                handle
+            } => {
+                handle
+            },
+            State::Streaming {
+                handle,
+                ..
+            } => {
+                handle
+            },
+        };
+            
+        println!("calling set_sig_gen_built_in_v2, handle = {}", handle);
+        self.device.driver.set_sig_gen_built_in_v2(
+            handle,
+            0 /* offset_voltage */,
+            200_000 /* pk to pk */,
+            0 /* wave type */,
+            20_000.0 /* start frequency */,
+            40_000.0 /* stop frequency */,
+            1.0 /* increment */,
+            1.0 /* dwell time */,
+            PicoSweepType::SweepUp,
+            PicoExtraOperations::ExtraOperationsOff,
+            0 /* shots */,
+            1 /* sweeps */,
+            PicoSigGenTrigType::SigGenTrigTypeRising,
+            PicoSigGenTrigSource::SigGenTrigSourceNone,
+            0/* ext in threshold */,
+        ).unwrap();
+        println!("called set_sig_gen_built_in_v2");
+    }
+
     pub fn set_sig_gen_arbitrary(&self) {
         // Start an AWG function -
         let offset_voltage: i32 = 0;
@@ -525,8 +565,8 @@ impl PicoStreamingDevice {
         let sweeps: u32 = 0;
         let ext_in_threshold: i16 = 0;
 
-        let current_state = self.current_state.read();
-        let handle = match *current_state {
+        let current_state = self.current_state.write();
+        let handle = match current_state.clone() {
             State::Closed => {
                 panic!("attempt to sig gen on closed device, no handle");
             }
@@ -543,7 +583,7 @@ impl PicoStreamingDevice {
             },
         };
     
-        println!("calling set_sig_gen_arbitrary");
+        println!("calling set_sig_gen_arbitrary, handle = {}", handle);
         self.device.driver.set_sig_gen_arbitrary(
             handle,
             offset_voltage,

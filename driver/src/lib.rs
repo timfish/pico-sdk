@@ -158,7 +158,29 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         }
     }
 
-     fn set_sig_gen_arbitrary(
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_built_in_v2(
+        &self,
+        _handle: i16,
+        _offset_voltage: i32,
+        _pk_to_pk: u32,
+        _wave_type: i16,
+        _start_frequency: f64,
+        _stop_frequency: f64,
+        _increment: f64,
+        _dwell_time: f64,
+        _sweep_type: PicoSweepType,
+        _operation: PicoExtraOperations,
+        _shots: u32,
+        _sweeps: u32,
+        _trigger_type: PicoSigGenTrigType,
+        _trigger_source: PicoSigGenTrigSource,
+        _ext_in_threshold: i16,
+    ) -> PicoResult<()> {
+        unimplemented!()
+    }
+
+    fn set_sig_gen_arbitrary(
         &self,
         _handle: i16,
         _offset_voltage: i32,
@@ -176,9 +198,9 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         _trigger_type: PicoSigGenTrigType,
         _trigger_source: PicoSigGenTrigSource,
         _ext_in_threshold: i16,
-     ) ->  PicoResult<()> {
-         unimplemented!()
-     }
+    ) -> PicoResult<()> {
+        unimplemented!()
+    }
 }
 
 pub type ArcDriver = Arc<dyn PicoDriver>;
