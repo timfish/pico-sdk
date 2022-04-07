@@ -44,10 +44,8 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use parking_lot::RwLock;
-use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    SampleConfig,
-};
+use pico_common::{ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
+                  PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource};
 pub use resolution::Resolution;
 use std::{fmt, pin::Pin, sync::Arc};
 use thiserror::Error;
@@ -159,6 +157,28 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
             Ok(())
         }
     }
+
+     fn set_sig_gen_arbitrary(
+        &self,
+        _handle: i16,
+        _offset_voltage: i32,
+        _pk_to_pk: u32,
+        _start_delta_phase: u32,
+        _stop_delta_phase: u32,
+        _delta_phase_increment: u32,
+        _dwell_count: u32,
+        _arbitrary_waveform: &Vec<i16>,
+        _sweep_type: PicoSweepType,
+        _operation: PicoExtraOperations,
+        _index_mode: PicoIndexMode,
+        _shots: u32,
+        _sweeps: u32,
+        _trigger_type: PicoSigGenTrigType,
+        _trigger_source: PicoSigGenTrigSource,
+        _ext_in_threshold: i16,
+     ) ->  PicoResult<()> {
+         unimplemented!()
+     }
 }
 
 pub type ArcDriver = Arc<dyn PicoDriver>;

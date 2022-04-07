@@ -5,11 +5,9 @@ use crate::{
     EnumerationResult, PicoDriver,
 };
 use parking_lot::RwLock;
-use pico_common::{
-    ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
-    PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
-};
-use pico_sys_dynamic::ps2000a::PS2000ALoader;
+use pico_common::{ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
+                  PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource};
+use pico_sys_dynamic::ps2000a::{PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE, PS2000ALoader};
 use std::{pin::Pin, sync::Arc};
 
 pub struct PS2000ADriver {
@@ -280,4 +278,51 @@ impl PicoDriver for PS2000ADriver {
     fn stop(&self, handle: i16) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps2000aStop(handle) }).to_result((), "stop")
     }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_arbitrary(
+        &self,
+        handle: i16,
+        offset_voltage: i32,
+        pk_to_pk: u32,
+        start_delta_phase: u32,
+        stop_delta_phase: u32,
+        delta_phase_increment: u32,
+        dwell_count: u32,
+        arbitrary_waveform: &Vec<i16>,
+        sweep_type: PicoSweepType,
+        operation: PicoExtraOperations,
+        index_mode: PicoIndexMode,
+        shots: u32,
+        sweeps: u32,
+        trigger_type: PicoSigGenTrigType,
+        trigger_source: PicoSigGenTrigSource,
+        ext_in_threshold: i16,
+     ) ->  PicoResult<()> {
+        // TODO: no idea how to do this better
+        // to avoid the data being taken away, store a copy here?
+        // go read the SDK to see if the memory is caller responsibility or
+        // copied by the library.
+        let mut arbitrary_waveform = arbitrary_waveform.clone();
+         PicoStatus::from(unsafe {
+             self.bindings.ps2000aSetSigGenArbitrary(
+                 handle,
+                 offset_voltage,
+                 pk_to_pk,
+                 start_delta_phase,
+                 stop_delta_phase,
+                 delta_phase_increment,
+                 dwell_count,
+                 arbitrary_waveform.as_mut_ptr(),
+                 arbitrary_waveform.len() as i32,
+                 sweep_type as PS2000A_SWEEP_TYPE,
+                 operation as PS2000A_EXTRA_OPERATIONS,
+                 index_mode as PS2000A_INDEX_MODE,
+                 shots,
+                 sweeps,
+                 trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
+                 trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
+                 ext_in_threshold)
+         }).to_result((), "set_sig_gen_arbitrary")
+     }
 }
