@@ -218,42 +218,42 @@ impl From<PicoInfo> for i16 {
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoWaveType
 {
-        WaveTypeSine = 0,
-        WaveTypeSquare = 1,
-        WaveTypeTriangle = 2,
-        WaveTypeRampUp = 3,
-        WaveTypeRampDown = 4,
-        WaveTypeSinc = 5,
-        WaveTypeGaussian = 6,
-        WaveTypeHalfSine = 7,
-        WaveTypeDCVoltage = 8,
+    Sine = 0,
+    Square = 1,
+    Triangle = 2,
+    RampUp = 3,
+    RampDown = 4,
+    Sinc = 5,
+    Gaussian = 6,
+    HalfSine = 7,
+    DCVoltage = 8,
 }
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoSweepType
 {
-        SweepUp = 0,
-        SweepDown = 1,
-        SweepUpDown = 2,
-        SweepDownUp = 3,
+    SweepUp = 0,
+    SweepDown = 1,
+    SweepUpDown = 2,
+    SweepDownUp = 3,
 }
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoExtraOperations
 {
-        /// <summary>
-        /// Normal signal generator operation specified by wavetype.
-        /// </summary>
-        ExtraOperationsOff = 0,
-        /// <summary>
-        /// The signal generator produces white noise and ignores all settings except pkToPk and offsetVoltage.
-        /// </summary>
-        ExtraOperationsWhiteNoise = 1,
-        /// <summary>
-        /// produces a pseudorandom random binary sequence with a bit rate
-        /// specified by the start and stop frequency.
-        /// </summary>
-        ExtraOperationsPRBS = 2, // Pseudo-Random Bit Stream
+    /// <summary>
+    /// Normal signal generator operation specified by wavetype.
+    /// </summary>
+    ExtraOperationsOff = 0,
+    /// <summary>
+    /// The signal generator produces white noise and ignores all settings except pkToPk and offsetVoltage.
+    /// </summary>
+    ExtraOperationsWhiteNoise = 1,
+    /// <summary>
+    /// produces a pseudorandom random binary sequence with a bit rate
+    /// specified by the start and stop frequency.
+    /// </summary>
+    ExtraOperationsPRBS = 2, // Pseudo-Random Bit Stream
 }
 
 /// <summary>
@@ -262,19 +262,19 @@ pub enum PicoExtraOperations
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoIndexMode
 {
-        /// <summary>
-        /// The generator outputs the raw contents of the buffer repeatedly .
-        /// </summary>
-        IndexModeSingle = 0,
-        /// <summary>
-        /// The generator outputs the contents of the buffer from beginning to end, and then does a second pass in the reverse
-        /// direction through the buffer
-        /// </summary>
-        IndexModeDual = 1,
-        /// <summary>
-        /// This is similiar to the Dual but passes through the buffer four time inverting, and inverting reversed
-        /// </summary>
-        IndexModeQuad = 2,
+    /// <summary>
+    /// The generator outputs the raw contents of the buffer repeatedly .
+    /// </summary>
+    IndexModeSingle = 0,
+    /// <summary>
+    /// The generator outputs the contents of the buffer from beginning to end, and then does a second pass in the reverse
+    /// direction through the buffer
+    /// </summary>
+    IndexModeDual = 1,
+    /// <summary>
+    /// This is similiar to the Dual but passes through the buffer four time inverting, and inverting reversed
+    /// </summary>
+    IndexModeQuad = 2,
 }
 
 /// <summary>
@@ -283,22 +283,22 @@ pub enum PicoIndexMode
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoSigGenTrigType
 {
-        /// <summary>
-        /// Trigger on rising edge
-        /// </summary>
-        SigGenTrigTypeRising = 0,
-        /// <summary>
-        /// Trigger on falling edge
-        /// </summary>
-        SigGenTripTypeFalling = 1,
-        /// <summary>
-        /// Run while trigger is high
-        /// </summary>
-        SigGenTrigTypeGateHigh = 2,
-        /// <summary>
-        /// Run while trigger is low
-        /// </summary>
-        SigGenTrigTypeGateLow = 3,
+    /// <summary>
+    /// Trigger on rising edge
+    /// </summary>
+    SigGenTrigTypeRising = 0,
+    /// <summary>
+    /// Trigger on falling edge
+    /// </summary>
+    SigGenTripTypeFalling = 1,
+    /// <summary>
+    /// Run while trigger is high
+    /// </summary>
+    SigGenTrigTypeGateHigh = 2,
+    /// <summary>
+    /// Run while trigger is low
+    /// </summary>
+    SigGenTrigTypeGateLow = 3,
 }
 
 /// <summary>
@@ -307,24 +307,24 @@ pub enum PicoSigGenTrigType
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoSigGenTrigSource
 {
-        /// <summary>
-        /// Run without waiting for trigger
-        /// </summary>
-        SigGenTrigSourceNone = 0,
-        /// <summary>
-        /// Use scope trigger
-        /// </summary
-        SigGenTrigSourceScopeTrig = 1,
-        /// <summary>
-        /// Use AUXIO input
-        /// </summary>
-        SigGenTrigSourceAuxIn = 2,
-        /// <summary>
-        /// Use external input
-        /// </summary>
-        SigGenTrigSourceExtIn = 3,
-        /// <summary>
-        /// Wait for software trigger
-        /// </summary>
-        SigGenTrigSourceSoftTrig = 4,
+    /// <summary>
+    /// Run without waiting for trigger
+    /// </summary>
+    SigGenTrigSourceNone = 0,
+    /// <summary>
+    /// Use scope trigger
+    /// </summary
+    SigGenTrigSourceScopeTrig = 1,
+    /// <summary>
+    /// Use AUXIO input
+    /// </summary>
+    SigGenTrigSourceAuxIn = 2,
+    /// <summary>
+    /// Use external input
+    /// </summary>
+    SigGenTrigSourceExtIn = 3,
+    /// <summary>
+    /// Wait for software trigger
+    /// </summary>
+    SigGenTrigSourceSoftTrig = 4,
 }
