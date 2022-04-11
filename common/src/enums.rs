@@ -304,7 +304,7 @@ pub enum PicoSigGenTrigType
 /// <summary>
 /// The source that will trigger the signal generator
 /// </summary>
-#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum PicoSigGenTrigSource
 {
     /// <summary>
