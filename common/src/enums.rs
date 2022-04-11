@@ -216,6 +216,20 @@ impl From<PicoInfo> for i16 {
 }
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
+pub enum PicoWaveType
+{
+        WaveTypeSine = 0,
+        WaveTypeSquare = 1,
+        WaveTypeTriangle = 2,
+        WaveTypeRampUp = 3,
+        WaveTypeRampDown = 4,
+        WaveTypeSinc = 5,
+        WaveTypeGaussian = 6,
+        WaveTypeHalfSine = 7,
+        WaveTypeDCVoltage = 8,
+}
+
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoSweepType
 {
         SweepUp = 0,

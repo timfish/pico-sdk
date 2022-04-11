@@ -55,6 +55,7 @@ use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
     PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
+    PicoWaveType,
 };
 use pico_device::PicoDevice;
 use std::{
@@ -631,7 +632,7 @@ impl PicoStreamingDevice {
         &self,
         offset_voltage: i32,
         pk_to_pk: u32,
-        wave_type: i16, /* TODO: use enum */
+        wave_type: PicoWaveType,
         start_frequency: f64,
         stop_frequency: f64,
         increment: f64,

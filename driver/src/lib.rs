@@ -44,8 +44,10 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use parking_lot::RwLock;
-use pico_common::{ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
-                  PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource};
+use pico_common::{
+    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
+    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
+};
 pub use resolution::Resolution;
 use std::{fmt, pin::Pin, sync::Arc};
 use thiserror::Error;
@@ -191,7 +193,7 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         _handle: i16,
         _offset_voltage: i32,
         _pk_to_pk: u32,
-        _wave_type: i16,
+        _wave_type: PicoWaveType,
         _start_frequency: f64,
         _stop_frequency: f64,
         _increment: f64,

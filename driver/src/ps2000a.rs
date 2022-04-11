@@ -5,8 +5,10 @@ use crate::{
     EnumerationResult, PicoDriver,
 };
 use parking_lot::RwLock;
-use pico_common::{ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
-                  PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource};
+use pico_common::{
+    ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange,
+    PicoResult, PicoStatus, SampleConfig, ToPicoStr, PicoSweepType,
+    PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType};
 use pico_sys_dynamic::ps2000a::{PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE, PS2000ALoader};
 use std::{pin::Pin, sync::Arc};
 
@@ -330,7 +332,7 @@ impl PicoDriver for PS2000ADriver {
         handle: i16,
         offset_voltage: i32,
         pk_to_pk: u32,
-        wave_type: i16,
+        wave_type: PicoWaveType,
         start_frequency: f64,
         stop_frequency: f64,
         increment: f64,
@@ -348,7 +350,7 @@ impl PicoDriver for PS2000ADriver {
                 handle,
                 offset_voltage,
                 pk_to_pk,
-                wave_type,
+                wave_type as i16,
                 start_frequency,
                 stop_frequency,
                 increment,
