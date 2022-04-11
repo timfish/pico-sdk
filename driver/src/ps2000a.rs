@@ -279,6 +279,51 @@ impl PicoDriver for PS2000ADriver {
         PicoStatus::from(unsafe { self.bindings.ps2000aStop(handle) }).to_result((), "stop")
     }
 
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_properties_built_in(
+        &self,
+        handle: i16,
+        start_frequency: f64,
+        stop_frequency: f64,
+        increment: f64,
+        dwell_time: f64,
+        sweep_type: PicoSweepType,
+        shots: u32,
+        sweeps: u32,
+        trigger_type: PicoSigGenTrigType,
+        trigger_source: PicoSigGenTrigSource,
+        ext_in_threshold: i16
+    ) -> PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings.ps2000aSetSigGenPropertiesBuiltIn(
+                handle,
+                start_frequency,
+                stop_frequency,
+                increment,
+                dwell_time,
+                sweep_type as u32,
+                shots,
+                sweeps,
+                trigger_type as u32,
+                trigger_source as u32,
+                ext_in_threshold
+            )
+        }).to_result((), "set_sig_gen_properties_build_in")
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn sig_gen_software_control(
+        &self,
+        handle: i16,
+        state: i16,
+    ) -> PicoResult<()> {
+
+        PicoStatus::from(unsafe {
+            self.bindings.ps2000aSigGenSoftwareControl(handle, state)
+        }).to_result((), "sig_gen_software_control")
+    }
+
     #[tracing::instrument(level = "trace", skip(self))]
     fn set_sig_gen_built_in_v2(
         &self,

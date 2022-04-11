@@ -512,7 +512,8 @@ impl PicoStreamingDevice {
         }
     }
 
-    pub fn set_sig_gen_built_in_v2(&self) {
+    #[tracing::instrument(skip(self), level = "trace")]
+    pub fn sig_gen_start(&self) {
         let current_state = self.current_state.write();
         let handle = match current_state.clone() {
             State::Closed => {
@@ -530,28 +531,157 @@ impl PicoStreamingDevice {
                 handle
             },
         };
-            
-        println!("calling set_sig_gen_built_in_v2, handle = {}", handle);
-        self.device.driver.set_sig_gen_built_in_v2(
-            handle,
-            0 /* offset_voltage */,
-            200_000 /* pk to pk */,
-            0 /* wave type */,
-            20_000.0 /* start frequency */,
-            40_000.0 /* stop frequency */,
-            1.0 /* increment */,
-            1.0 /* dwell time */,
-            PicoSweepType::SweepUp,
-            PicoExtraOperations::ExtraOperationsOff,
-            0 /* shots */,
-            1 /* sweeps */,
-            PicoSigGenTrigType::SigGenTrigTypeRising,
-            PicoSigGenTrigSource::SigGenTrigSourceNone,
-            0/* ext in threshold */,
-        ).unwrap();
-        println!("called set_sig_gen_built_in_v2");
+        self.device.driver.sig_gen_software_control(handle, 0).unwrap();
     }
 
+    #[tracing::instrument(skip(self), level = "trace")]
+    pub fn sig_gen_stop(&self) {
+        let current_state = self.current_state.write();
+        let handle = match current_state.clone() {
+            State::Closed => {
+                panic!("attempt to sig gen on closed device, no handle");
+            }
+            State::Open {
+                handle
+            } => {
+                handle
+            },
+            State::Streaming {
+                handle,
+                ..
+            } => {
+                handle
+            },
+        };
+        self.device.driver.sig_gen_software_control(handle, 1).unwrap();
+    }
+
+    #[tracing::instrument(skip(self), level = "trace")]
+    pub fn set_sig_gen_properties_built_in(
+        &self,
+        start_frequency: f64,
+        stop_frequency: f64,
+        increment: f64,
+        dwell_time: f64,
+        sweep_type: PicoSweepType,
+        shots: u32,
+        sweeps: u32,
+        trigger_type: PicoSigGenTrigType,
+        trigger_source: PicoSigGenTrigSource,
+        ext_in_threshold: i16
+    ) {
+        let current_state = self.current_state.write();
+        let handle = match current_state.clone() {
+            State::Closed => {
+                panic!("attempt to sig gen on closed device, no handle");
+            }
+            State::Open {
+                handle
+            } => {
+                handle
+            },
+            State::Streaming {
+                handle,
+                ..
+            } => {
+                handle
+            },
+        };
+        self.device.driver.set_sig_gen_properties_built_in(
+            handle,
+            start_frequency,
+            stop_frequency,
+            increment,
+            dwell_time,
+            sweep_type,
+            shots,
+            sweeps,
+            trigger_type,
+            trigger_source,
+            ext_in_threshold).unwrap();
+    }
+
+    #[tracing::instrument(skip(self), level = "trace")]
+    pub fn sig_gen_software_trigger(
+        &self,
+        state: i16,
+    ) {
+        let current_state = self.current_state.write();
+        let handle = match current_state.clone() {
+            State::Closed => {
+                panic!("attempt to sig gen on closed device, no handle");
+            }
+            State::Open {
+                handle
+            } => {
+                handle
+            },
+            State::Streaming {
+                handle,
+                ..
+            } => {
+                handle
+            },
+        };
+        self.device.driver.sig_gen_software_control(handle, state).unwrap();
+    }
+
+    #[tracing::instrument(skip(self), level = "trace")]
+    pub fn set_sig_gen_built_in_v2(
+        &self,
+        offset_voltage: i32,
+        pk_to_pk: u32,
+        wave_type: i16, /* TODO: use enum */
+        start_frequency: f64,
+        stop_frequency: f64,
+        increment: f64,
+        dwell_time: f64,
+        sweep_type: PicoSweepType,
+        extra_operations: PicoExtraOperations,
+        shots: u32,
+        sweeps: u32,
+        trig_type: PicoSigGenTrigType,
+        trig_source: PicoSigGenTrigSource,
+        ext_in_threshold: i16
+    ) {
+        let current_state = self.current_state.write();
+        let handle = match current_state.clone() {
+            State::Closed => {
+                panic!("attempt to sig gen on closed device, no handle");
+            }
+            State::Open {
+                handle
+            } => {
+                handle
+            },
+            State::Streaming {
+                handle,
+                ..
+            } => {
+                handle
+            },
+        };
+
+        self.device.driver.set_sig_gen_built_in_v2(
+            handle,
+            offset_voltage,
+            pk_to_pk,
+            wave_type,
+            start_frequency,
+            stop_frequency,
+            increment,
+            dwell_time,
+            sweep_type,
+            extra_operations,
+            shots,
+            sweeps,
+            trig_type,
+            trig_source,
+            ext_in_threshold,
+        ).unwrap();
+    }
+
+    #[tracing::instrument(skip(self), level = "trace")]
     pub fn set_sig_gen_arbitrary(&self) {
         // Start an AWG function -
         let offset_voltage: i32 = 0;
@@ -583,7 +713,6 @@ impl PicoStreamingDevice {
             },
         };
     
-        println!("calling set_sig_gen_arbitrary, handle = {}", handle);
         self.device.driver.set_sig_gen_arbitrary(
             handle,
             offset_voltage,
@@ -602,7 +731,6 @@ impl PicoStreamingDevice {
             PicoSigGenTrigSource::SigGenTrigSourceNone,
             ext_in_threshold,
         ).unwrap();
-        println!("called set_sig_gen_arbitrary");
     }
 }
 
