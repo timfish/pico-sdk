@@ -630,13 +630,13 @@ impl PicoStreamingDevice {
     #[tracing::instrument(skip(self), level = "trace")]
     pub fn set_sig_gen_built_in_v2(
         &self,
-        offset_voltage: i32,
-        pk_to_pk: u32,
+        offset_voltage: i32, /* microvolts */
+        pk_to_pk: u32,  /* microvolts */
         wave_type: PicoWaveType,
-        start_frequency: f64,
-        stop_frequency: f64,
-        increment: f64,
-        dwell_time: f64,
+        start_frequency: f64, /* Hertz */
+        stop_frequency: f64, /* Hertz */
+        increment: f64, /* delta frequency jumps in Hertz */
+        dwell_time: f64, /* amount to stay at each frequency in seconds */
         sweep_type: PicoSweepType,
         extra_operations: PicoExtraOperations,
         shots: u32,
