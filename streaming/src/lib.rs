@@ -596,7 +596,7 @@ impl PicoStreamingDevice {
         trig_type: PicoSigGenTrigType,
         trig_source: PicoSigGenTrigSource,
         ext_in_threshold: i16
-    ) {
+    ) -> PicoResult<()> {
         let current_state = self.current_state.write();
         let handle = match current_state.clone() {
             State::Closed => {
@@ -631,7 +631,7 @@ impl PicoStreamingDevice {
             trig_type,
             trig_source,
             ext_in_threshold,
-        ).unwrap();
+        )
     }
 
     #[tracing::instrument(skip(self), level = "trace")]
