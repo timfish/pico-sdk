@@ -238,6 +238,47 @@ pub enum PicoSweepType
     DownUp = 3,
 }
 
+// Rust addition: encode the potential values of sweeps and shots
+#[derive(Debug, Clone)]
+pub enum SweepShotCount {
+    Regular(u32),
+    Continuous,
+}
+
+
+// TODO: this value is copied from sys/src/ps2000a - should we import it here?
+// should there be a crate for identical symbols?
+// should build.rs check for identity?
+const COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN: u32 = 4294967295;
+
+impl num_traits::FromPrimitive for SweepShotCount {
+    fn from_u64(n: u64) -> Option<Self> {
+        if n as u32 == COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN {
+            Some(SweepShotCount::Continuous)
+        } else {
+            Some(SweepShotCount::Regular(n as u32))
+        }
+    }
+
+    fn from_i64(_: i64) -> Option<Self> {
+        None
+    }
+}
+
+impl num_traits::ToPrimitive for SweepShotCount {
+    fn to_u64(&self) -> Option<u64> {
+        Some((match self {
+            SweepShotCount::Continuous => COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN,
+            SweepShotCount::Regular(x) => *x,
+        }) as u64)
+    }
+
+    fn to_i64(&self) -> Option<i64> {
+        None
+    }
+}
+
+
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoExtraOperations
 {

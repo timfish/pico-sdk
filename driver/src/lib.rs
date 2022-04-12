@@ -47,6 +47,7 @@ use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
     PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
+    SweepShotCount,
 };
 pub use resolution::Resolution;
 use std::{fmt, pin::Pin, sync::Arc};
@@ -169,8 +170,8 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         _increment: f64,
         _dwell_time: f64,
         _sweep_type: PicoSweepType,
-        _shots: u32,
-        _sweeps: u32,
+        _shots: SweepShotCount,
+        _sweeps: SweepShotCount,
         _trigger_type: PicoSigGenTrigType,
         _trigger_source: PicoSigGenTrigSource,
         _ext_in_threshold: i16
@@ -200,8 +201,8 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         _dwell_time: f64,
         _sweep_type: PicoSweepType,
         _operation: PicoExtraOperations,
-        _shots: u32,
-        _sweeps: u32,
+        _shots: SweepShotCount,
+        _sweeps: SweepShotCount,
         _trigger_type: PicoSigGenTrigType,
         _trigger_source: PicoSigGenTrigSource,
         _ext_in_threshold: i16,
@@ -222,8 +223,8 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         _sweep_type: PicoSweepType,
         _operation: PicoExtraOperations,
         _index_mode: PicoIndexMode,
-        _shots: u32,
-        _sweeps: u32,
+        _shots: SweepShotCount,
+        _sweeps: SweepShotCount,
         _trigger_type: PicoSigGenTrigType,
         _trigger_source: PicoSigGenTrigSource,
         _ext_in_threshold: i16,

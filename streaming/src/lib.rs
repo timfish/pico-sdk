@@ -52,11 +52,7 @@ use crossbeam::channel::{bounded, Sender};
 use events::StreamingEvents;
 pub use events::{NewDataHandler, RawChannelDataBlock, StreamingEvent};
 use parking_lot::RwLock;
-use pico_common::{
-    ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
-    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
-    PicoWaveType,
-};
+use pico_common::{ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig, PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType, SweepShotCount};
 use pico_device::PicoDevice;
 use std::{
     collections::HashMap, fmt, pin::Pin, sync::Arc, thread, thread::JoinHandle, time::Duration,
@@ -521,8 +517,8 @@ impl PicoStreamingDevice {
         increment: f64,
         dwell_time: f64,
         sweep_type: PicoSweepType,
-        shots: u32,
-        sweeps: u32,
+        shots: SweepShotCount,
+        sweeps: SweepShotCount,
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16
@@ -559,7 +555,7 @@ impl PicoStreamingDevice {
     }
 
     #[tracing::instrument(skip(self), level = "trace")]
-    pub fn sig_gen_software_trigger(
+    pub fn sig_gen_software_control(
         &self,
         state: i16,
     ) {
@@ -595,8 +591,8 @@ impl PicoStreamingDevice {
         dwell_time: f64, /* amount to stay at each frequency in seconds */
         sweep_type: PicoSweepType,
         extra_operations: PicoExtraOperations,
-        shots: u32,
-        sweeps: u32,
+        shots: SweepShotCount,
+        sweeps: SweepShotCount,
         trig_type: PicoSigGenTrigType,
         trig_source: PicoSigGenTrigSource,
         ext_in_threshold: i16
@@ -648,8 +644,8 @@ impl PicoStreamingDevice {
         let delta_phase_increment: u32 = 0;
         let dwell_count: u32 = 1;
         let arbitrary_waveform = vec![1, 1, 1, 1, 0, 0, 0, 0];
-        let shots: u32 = 0;
-        let sweeps: u32 = 0;
+        let shots: SweepShotCount = SweepShotCount::Regular(0);
+        let sweeps: SweepShotCount = SweepShotCount::Regular(0);
         let ext_in_threshold: i16 = 0;
 
         let current_state = self.current_state.write();
