@@ -723,13 +723,13 @@ impl PicoStreamingDevice {
             delta_phase_increment,
             dwell_count,
             &arbitrary_waveform,
-            PicoSweepType::SweepUp,
-            PicoExtraOperations::ExtraOperationsOff,
-            PicoIndexMode::IndexModeSingle,
+            PicoSweepType::Up,
+            PicoExtraOperations::Off,
+            PicoIndexMode::Single,
             shots,
             sweeps,
-            PicoSigGenTrigType::SigGenTrigTypeRising,
-            PicoSigGenTrigSource::SigGenTrigSourceNone,
+            PicoSigGenTrigType::Rising,
+            PicoSigGenTrigSource::None,
             ext_in_threshold,
         ).unwrap();
     }
