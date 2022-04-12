@@ -141,7 +141,7 @@
 pub mod prelude {
     pub use pico_common::{
         ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-        PicoStatus,
+        PicoStatus, PicoResult,
     };
     pub use pico_device::PicoDevice;
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
