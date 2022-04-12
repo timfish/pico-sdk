@@ -238,11 +238,15 @@ pub enum PicoSweepType
     DownUp = 3,
 }
 
-// Rust addition: encode the potential values of sweeps and shots
+// Rust addition: encode the potential values of sweeps and shots, to avoid invalid states
+// like >0 & >0
 #[derive(Debug, Clone)]
 pub enum SweepShotCount {
-    Regular(u32),
-    Continuous,
+    None,
+    Sweeps(u32),
+    Shots(u32),
+    ContinuousSweeps,
+    ContinuousShots,
 }
 
 
@@ -251,30 +255,21 @@ pub enum SweepShotCount {
 // should build.rs check for identity?
 const COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN: u32 = 4294967295;
 
-impl num_traits::FromPrimitive for SweepShotCount {
-    fn from_u64(n: u64) -> Option<Self> {
-        if n as u32 == COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN {
-            Some(SweepShotCount::Continuous)
-        } else {
-            Some(SweepShotCount::Regular(n as u32))
+impl SweepShotCount {
+    pub fn to_sweeps(&self) -> u32 {
+        match self {
+            SweepShotCount::Sweeps(sweeps) => *sweeps,
+            SweepShotCount::ContinuousSweeps => COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN,
+            _ => 0,
         }
     }
 
-    fn from_i64(_: i64) -> Option<Self> {
-        None
-    }
-}
-
-impl num_traits::ToPrimitive for SweepShotCount {
-    fn to_u64(&self) -> Option<u64> {
-        Some((match self {
-            SweepShotCount::Continuous => COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN,
-            SweepShotCount::Regular(x) => *x,
-        }) as u64)
-    }
-
-    fn to_i64(&self) -> Option<i64> {
-        None
+    pub fn to_shots(&self) -> u32 {
+        match self {
+            SweepShotCount::Shots(shots) => *shots,
+            SweepShotCount::ContinuousShots => COPY_PS2000A_SHOT_SWEEP_TRIGGER_CONTINUOUS_RUN,
+            _ => 0,
+        }
     }
 }
 

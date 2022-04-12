@@ -4,7 +4,6 @@ use crate::{
     trampoline::split_closure,
     EnumerationResult, PicoDriver,
 };
-use num_traits::cast::ToPrimitive;
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange,
@@ -294,8 +293,7 @@ impl PicoDriver for PS2000ADriver {
         increment: f64,
         dwell_time: f64,
         sweep_type: PicoSweepType,
-        shots: SweepShotCount,
-        sweeps: SweepShotCount,
+        sweeps_shots: SweepShotCount,
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16
@@ -308,8 +306,8 @@ impl PicoDriver for PS2000ADriver {
                 increment,
                 dwell_time,
                 sweep_type as u32,
-                shots.to_u32().unwrap(),
-                sweeps.to_u32().unwrap(),
+                sweeps_shots.to_shots(),
+                sweeps_shots.to_sweeps(),
                 trigger_type as u32,
                 trigger_source as u32,
                 ext_in_threshold
@@ -342,8 +340,7 @@ impl PicoDriver for PS2000ADriver {
         dwell_time: f64,
         sweep_type: PicoSweepType,
         operation: PicoExtraOperations,
-        shots: SweepShotCount,
-        sweeps: SweepShotCount,
+        sweeps_shots: SweepShotCount,
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16,
@@ -360,8 +357,8 @@ impl PicoDriver for PS2000ADriver {
                 dwell_time,
                 sweep_type as PS2000A_SWEEP_TYPE,
                 operation as PS2000A_EXTRA_OPERATIONS,
-                shots.to_u32().unwrap(),
-                sweeps.to_u32().unwrap(),
+                sweeps_shots.to_shots(),
+                sweeps_shots.to_sweeps(),
                 trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
                 trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
                 ext_in_threshold,
@@ -382,8 +379,7 @@ impl PicoDriver for PS2000ADriver {
         sweep_type: PicoSweepType,
         operation: PicoExtraOperations,
         index_mode: PicoIndexMode,
-        shots: SweepShotCount,
-        sweeps: SweepShotCount,
+        sweeps_shots: SweepShotCount,
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16,
@@ -407,8 +403,8 @@ impl PicoDriver for PS2000ADriver {
                 sweep_type as PS2000A_SWEEP_TYPE,
                 operation as PS2000A_EXTRA_OPERATIONS,
                 index_mode as PS2000A_INDEX_MODE,
-                shots.to_u32().unwrap(),
-                sweeps.to_u32().unwrap(),
+                sweeps_shots.to_shots(),
+                sweeps_shots.to_sweeps(),
                 trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
                 trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
                 ext_in_threshold)

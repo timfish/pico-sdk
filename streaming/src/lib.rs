@@ -517,8 +517,7 @@ impl PicoStreamingDevice {
         increment: f64,
         dwell_time: f64,
         sweep_type: PicoSweepType,
-        shots: SweepShotCount,
-        sweeps: SweepShotCount,
+        sweeps_shots: SweepShotCount,
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16
@@ -547,8 +546,7 @@ impl PicoStreamingDevice {
             increment,
             dwell_time,
             sweep_type,
-            shots,
-            sweeps,
+            sweeps_shots,
             trigger_type,
             trigger_source,
             ext_in_threshold).unwrap();
@@ -591,8 +589,7 @@ impl PicoStreamingDevice {
         dwell_time: f64, /* amount to stay at each frequency in seconds */
         sweep_type: PicoSweepType,
         extra_operations: PicoExtraOperations,
-        shots: SweepShotCount,
-        sweeps: SweepShotCount,
+        sweeps_shots: SweepShotCount,
         trig_type: PicoSigGenTrigType,
         trig_source: PicoSigGenTrigSource,
         ext_in_threshold: i16
@@ -626,8 +623,7 @@ impl PicoStreamingDevice {
             dwell_time,
             sweep_type,
             extra_operations,
-            shots,
-            sweeps,
+            sweeps_shots,
             trig_type,
             trig_source,
             ext_in_threshold,
@@ -644,8 +640,7 @@ impl PicoStreamingDevice {
         let delta_phase_increment: u32 = 0;
         let dwell_count: u32 = 1;
         let arbitrary_waveform = vec![1, 1, 1, 1, 0, 0, 0, 0];
-        let shots: SweepShotCount = SweepShotCount::Regular(0);
-        let sweeps: SweepShotCount = SweepShotCount::Regular(0);
+        let sweeps_shots: SweepShotCount = SweepShotCount::None;
         let ext_in_threshold: i16 = 0;
 
         let current_state = self.current_state.write();
@@ -678,8 +673,7 @@ impl PicoStreamingDevice {
             PicoSweepType::Up,
             PicoExtraOperations::Off,
             PicoIndexMode::Single,
-            shots,
-            sweeps,
+            sweeps_shots,
             PicoSigGenTrigType::Rising,
             PicoSigGenTrigSource::None,
             ext_in_threshold,
