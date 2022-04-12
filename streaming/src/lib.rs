@@ -514,50 +514,6 @@ impl PicoStreamingDevice {
     }
 
     #[tracing::instrument(skip(self), level = "trace")]
-    pub fn sig_gen_start(&self) {
-        let current_state = self.current_state.write();
-        let handle = match current_state.clone() {
-            State::Closed => {
-                panic!("attempt to sig gen on closed device, no handle");
-            }
-            State::Open {
-                handle
-            } => {
-                handle
-            },
-            State::Streaming {
-                handle,
-                ..
-            } => {
-                handle
-            },
-        };
-        self.device.driver.sig_gen_software_control(handle, 0).unwrap();
-    }
-
-    #[tracing::instrument(skip(self), level = "trace")]
-    pub fn sig_gen_stop(&self) {
-        let current_state = self.current_state.write();
-        let handle = match current_state.clone() {
-            State::Closed => {
-                panic!("attempt to sig gen on closed device, no handle");
-            }
-            State::Open {
-                handle
-            } => {
-                handle
-            },
-            State::Streaming {
-                handle,
-                ..
-            } => {
-                handle
-            },
-        };
-        self.device.driver.sig_gen_software_control(handle, 1).unwrap();
-    }
-
-    #[tracing::instrument(skip(self), level = "trace")]
     pub fn set_sig_gen_properties_built_in(
         &self,
         start_frequency: f64,
