@@ -61,6 +61,43 @@ use tracing::*;
 
 mod events;
 
+#[derive(Debug, Clone)]
+pub struct SetSigGenArbitraryProperties {
+    pub offset_voltage: i32, /* microvolts */
+    pub pk_to_pk: u32,  /* microvolts */
+    pub start_delta_phase: u32,
+    pub stop_delta_phase: u32,
+    pub delta_phase_increment: u32,
+    pub dwell_count: u32,
+    pub arbitrary_waveform: Vec<i16>,
+    pub sweep_type: PicoSweepType,
+    pub extra_operations: PicoExtraOperations,
+    pub sweeps_shots: SweepShotCount,
+    pub trig_type: PicoSigGenTrigType,
+    pub trig_source: PicoSigGenTrigSource,
+    pub ext_in_threshold: i16,
+}
+
+impl Default for SetSigGenArbitraryProperties {
+    fn default() -> Self {
+        SetSigGenArbitraryProperties {
+            offset_voltage: 0,
+            pk_to_pk: 200_000,
+            start_delta_phase: 0,
+            stop_delta_phase: 0,
+            delta_phase_increment: 0,
+            dwell_count: 1,
+            arbitrary_waveform: vec![1, 1, 1, 1, 0, 0, 0, 0],
+            sweep_type: PicoSweepType::Up,
+            extra_operations: PicoExtraOperations::Off,
+            sweeps_shots: SweepShotCount::None,
+            trig_type: PicoSigGenTrigType::Rising,
+            trig_source: PicoSigGenTrigSource::None,
+            ext_in_threshold: 0,
+        }
+    }
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone, Copy)]
 enum Target {
@@ -556,7 +593,7 @@ impl PicoStreamingDevice {
     pub fn sig_gen_software_control(
         &self,
         state: i16,
-    ) {
+    ) -> PicoResult<()> {
         let current_state = self.current_state.write();
         let handle = match current_state.clone() {
             State::Closed => {
@@ -574,7 +611,7 @@ impl PicoStreamingDevice {
                 handle
             },
         };
-        self.device.driver.sig_gen_software_control(handle, state).unwrap();
+        self.device.driver.sig_gen_software_control(handle, state)
     }
 
     #[tracing::instrument(skip(self), level = "trace")]
@@ -631,18 +668,11 @@ impl PicoStreamingDevice {
     }
 
     #[tracing::instrument(skip(self), level = "trace")]
-    pub fn set_sig_gen_arbitrary(&self) {
-        // Start an AWG function -
-        let offset_voltage: i32 = 0;
-        let pk_to_pk: u32 = 200_000;
-        let start_delta_phase: u32 = 0;
-        let stop_delta_phase: u32 = 0;
-        let delta_phase_increment: u32 = 0;
-        let dwell_count: u32 = 1;
-        let arbitrary_waveform = vec![1, 1, 1, 1, 0, 0, 0, 0];
-        let sweeps_shots: SweepShotCount = SweepShotCount::None;
-        let ext_in_threshold: i16 = 0;
-
+    pub fn set_sig_gen_arbitrary(
+        &self,
+        props: SetSigGenArbitraryProperties,
+    ) -> PicoResult<()> {
+        // Start an AWG function
         let current_state = self.current_state.write();
         let handle = match current_state.clone() {
             State::Closed => {
@@ -663,21 +693,21 @@ impl PicoStreamingDevice {
     
         self.device.driver.set_sig_gen_arbitrary(
             handle,
-            offset_voltage,
-            pk_to_pk,
-            start_delta_phase,
-            stop_delta_phase,
-            delta_phase_increment,
-            dwell_count,
-            &arbitrary_waveform,
-            PicoSweepType::Up,
-            PicoExtraOperations::Off,
+            props.offset_voltage,
+            props.pk_to_pk,
+            props.start_delta_phase,
+            props.stop_delta_phase,
+            props.delta_phase_increment,
+            props.dwell_count,
+            &props.arbitrary_waveform,
+            props.sweep_type,
+            props.extra_operations,
             PicoIndexMode::Single,
-            sweeps_shots,
-            PicoSigGenTrigType::Rising,
-            PicoSigGenTrigSource::None,
-            ext_in_threshold,
-        ).unwrap();
+            props.sweeps_shots,
+            props.trig_type,
+            props.trig_source,
+            props.ext_in_threshold,
+        )
     }
 }
 

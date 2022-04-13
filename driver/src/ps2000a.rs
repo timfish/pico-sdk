@@ -345,6 +345,7 @@ impl PicoDriver for PS2000ADriver {
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16,
      ) ->  PicoResult<()> {
+        tracing::trace!(sweeps = sweeps_shots.to_sweeps(), shots = sweeps_shots.to_shots());
         PicoStatus::from(unsafe {
             self.bindings.ps2000aSetSigGenBuiltInV2(
                 handle,
