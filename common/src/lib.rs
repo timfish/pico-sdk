@@ -13,6 +13,7 @@ mod error;
 mod range;
 mod status;
 mod utils;
+mod sig_gen;
 
 pub use config::*;
 pub use driver::*;
@@ -21,3 +22,4 @@ pub use error::*;
 pub use range::*;
 pub use status::*;
 pub use utils::*;
+pub use sig_gen::*;
