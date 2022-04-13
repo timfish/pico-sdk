@@ -9,7 +9,7 @@ use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange,
     PicoResult, PicoStatus, SampleConfig, ToPicoStr, PicoSweepType,
     PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
-    SweepShotCount,
+    SweepShotCount, SigGenArbitraryMinMaxValues,
 };
 use pico_sys_dynamic::ps2000a::{PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE, PS2000ALoader};
 use std::{pin::Pin, sync::Arc};
@@ -384,7 +384,7 @@ impl PicoDriver for PS2000ADriver {
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16,
-     ) ->  PicoResult<()> {
+    ) ->  PicoResult<()> {
         // TODO: no idea how to do this better
         // to avoid the data being taken away, store a copy here?
         // go read the SDK to see if the memory is caller responsibility or
@@ -410,5 +410,28 @@ impl PicoDriver for PS2000ADriver {
                 trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
                 ext_in_threshold)
         }).to_result((), "set_sig_gen_arbitrary")
-     }
+    }
+
+    fn sig_gen_arbitrary_min_max_values(
+        &self,
+        handle: i16,
+    ) -> PicoResult<SigGenArbitraryMinMaxValues> {
+        let mut min_value: i16 = 0;
+        let mut max_value: i16 = 0;
+        let mut min_size: u32 = 0;
+        let mut max_size: u32 = 0;
+        PicoStatus::from(unsafe {
+            self.bindings.ps2000aSigGenArbitraryMinMaxValues(
+                handle,
+                &mut min_value,
+                &mut max_value,
+                &mut min_size,
+                &mut max_size,
+        )}).to_result(SigGenArbitraryMinMaxValues {
+            min_value,
+            max_value,
+            min_size,
+            max_size,
+        }, "sig_gen_arbitrary_min_max_values")
+    }
 }

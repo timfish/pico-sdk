@@ -47,7 +47,7 @@ use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
     PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
-    SweepShotCount,
+    SweepShotCount, SigGenArbitraryMinMaxValues,
 };
 pub use resolution::Resolution;
 use std::{fmt, pin::Pin, sync::Arc};
@@ -227,6 +227,13 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         _ext_in_threshold: i16,
     ) -> PicoResult<()> {
         unimplemented!()
+    }
+
+    fn sig_gen_arbitrary_min_max_values(
+        &self,
+        _handle: i16,
+    ) -> PicoResult<SigGenArbitraryMinMaxValues> {
+        unimplemented!();
     }
 }
 
