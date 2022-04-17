@@ -434,4 +434,22 @@ impl PicoDriver for PS2000ADriver {
             max_size,
         }, "sig_gen_arbitrary_min_max_values")
     }
+
+    fn sig_gen_frequency_to_phase(
+        &self,
+        handle: i16,
+        frequency: f64,
+        index_mode: PicoIndexMode,
+        buffer_length: u32,
+    ) -> PicoResult<u32> {
+        let mut phase: u32 = 0;
+        PicoStatus::from(unsafe {
+            self.bindings.ps2000aSigGenFrequencyToPhase(
+                handle,
+                frequency,
+                index_mode as u32,
+                buffer_length,
+                &mut phase,
+        )}).to_result(phase, "sig_gen_arbitrary_min_max_values")
+    }
 }
