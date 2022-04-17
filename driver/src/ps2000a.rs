@@ -363,7 +363,7 @@ impl PicoDriver for PS2000ADriver {
                 trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
                 trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
                 ext_in_threshold,
-        )}).to_result((), "set_sig_gen_arbitrary")
+        )}).to_result((), "set_sig_gen_built_in_v2")
      }
 
     #[tracing::instrument(level = "trace", skip(self))]
