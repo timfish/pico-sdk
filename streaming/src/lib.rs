@@ -52,7 +52,11 @@ use crossbeam::channel::{bounded, Sender};
 use events::StreamingEvents;
 pub use events::{NewDataHandler, RawChannelDataBlock, StreamingEvent};
 use parking_lot::RwLock;
-use pico_common::{ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig, PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType, SweepShotCount};
+use pico_common::{
+    ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
+    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
+    SweepShotCount, SigGenArbitraryMinMaxValues,
+};
 use pico_device::PicoDevice;
 use std::{
     collections::HashMap, fmt, pin::Pin, sync::Arc, thread, thread::JoinHandle, time::Duration,
@@ -62,13 +66,24 @@ use tracing::*;
 mod events;
 
 #[derive(Debug, Clone)]
+pub enum SetSigGenArbitraryPhaseProperties {
+    PhasesFull { start: u32, stop: u32, increment: u32, dwell_count: u32},
+    // TODO: FrequencyHzSweep { start: f64, stop: f64, increment: f64, duration_secs: f64}
+    FrequencyConstantHz(f64),
+}
+
+impl Default for SetSigGenArbitraryPhaseProperties {
+    fn default() -> Self {
+        SetSigGenArbitraryPhaseProperties::FrequencyConstantHz(10.0)
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub struct SetSigGenArbitraryProperties {
     pub offset_voltage: i32, /* microvolts */
     pub pk_to_pk: u32,  /* microvolts */
-    pub start_delta_phase: u32,
-    pub stop_delta_phase: u32,
-    pub delta_phase_increment: u32,
-    pub dwell_count: u32,
+    pub phase_props: SetSigGenArbitraryPhaseProperties,
     pub arbitrary_waveform: Vec<i16>,
     pub sweep_type: PicoSweepType,
     pub extra_operations: PicoExtraOperations,
@@ -83,10 +98,7 @@ impl Default for SetSigGenArbitraryProperties {
         SetSigGenArbitraryProperties {
             offset_voltage: 0,
             pk_to_pk: 200_000,
-            start_delta_phase: 0,
-            stop_delta_phase: 0,
-            delta_phase_increment: 0,
-            dwell_count: 1,
+            phase_props: Default::default(),
             arbitrary_waveform: vec![1, 1, 1, 1, 0, 0, 0, 0],
             sweep_type: PicoSweepType::Up,
             extra_operations: PicoExtraOperations::Off,
@@ -668,6 +680,30 @@ impl PicoStreamingDevice {
     }
 
     #[tracing::instrument(skip(self), level = "trace")]
+    pub fn sig_gen_arbitrary_min_max_values(
+        &self
+    ) -> PicoResult<SigGenArbitraryMinMaxValues> {
+        let current_state = self.current_state.write();
+        let handle = match current_state.clone() {
+            State::Closed => {
+                panic!("attempt to sig gen on closed device, no handle");
+            }
+            State::Open {
+                handle
+            } => {
+                handle
+            },
+            State::Streaming {
+                handle,
+                ..
+            } => {
+                handle
+            },
+        };
+        self.device.driver.sig_gen_arbitrary_min_max_values(handle)
+    }
+
+    #[tracing::instrument(skip(self), level = "trace")]
     pub fn set_sig_gen_arbitrary(
         &self,
         props: SetSigGenArbitraryProperties,
@@ -691,18 +727,40 @@ impl PicoStreamingDevice {
             },
         };
     
+        let index_mode = PicoIndexMode::Single;
+
+        // check that we are within limits
+        let min_max = self.device.driver.sig_gen_arbitrary_min_max_values(handle)?;
+        let min_size = min_max.min_size as usize;
+        let max_size = min_max.max_size as usize;
+        let n = props.arbitrary_waveform.len();
+        if min_size > n || max_size < n {
+            tracing::trace!(min_size = min_size, max_size = max_size, size = n);
+            return Err(PicoStatus::AWG_NOT_SUPPORTED.into());
+        }
+
+        let (start_delta_phase, stop_delta_phase, delta_phase_increment, dwell_count) = match props.phase_props {
+            SetSigGenArbitraryPhaseProperties::FrequencyConstantHz(freq_hz) => {
+                let phase = self.device.driver.sig_gen_frequency_to_phase(handle, freq_hz, index_mode, n as u32)?;
+                (phase, phase, 0, 0)
+            },
+            SetSigGenArbitraryPhaseProperties::PhasesFull { start, stop, increment, dwell_count } => {
+                (start, stop, increment, dwell_count)
+            }
+        };
+
         self.device.driver.set_sig_gen_arbitrary(
             handle,
             props.offset_voltage,
             props.pk_to_pk,
-            props.start_delta_phase,
-            props.stop_delta_phase,
-            props.delta_phase_increment,
-            props.dwell_count,
+            start_delta_phase,
+            stop_delta_phase,
+            delta_phase_increment,
+            dwell_count,
             &props.arbitrary_waveform,
             props.sweep_type,
             props.extra_operations,
-            PicoIndexMode::Single,
+            index_mode,
             props.sweeps_shots,
             props.trig_type,
             props.trig_source,
