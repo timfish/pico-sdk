@@ -235,6 +235,16 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
     ) -> PicoResult<SigGenArbitraryMinMaxValues> {
         unimplemented!();
     }
+
+    fn sig_gen_frequency_to_phase(
+        &self,
+        _handle: i16,
+        _frequency: f64,
+        _index_mode: PicoIndexMode,
+        _buffer_length: u32,
+    ) -> PicoResult<u32> {
+        unimplemented!();
+    }
 }
 
 pub type ArcDriver = Arc<dyn PicoDriver>;
