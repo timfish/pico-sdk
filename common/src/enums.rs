@@ -216,8 +216,7 @@ impl From<PicoInfo> for i16 {
 }
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
-pub enum PicoWaveType
-{
+pub enum PicoWaveType {
     Sine = 0,
     Square = 1,
     Triangle = 2,
@@ -229,13 +228,24 @@ pub enum PicoWaveType
     DCVoltage = 8,
 }
 
+impl Default for PicoWaveType {
+    fn default() -> Self {
+        PicoWaveType::Sine
+    }
+}
+
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
-pub enum PicoSweepType
-{
+pub enum PicoSweepType {
     Up = 0,
     Down = 1,
     UpDown = 2,
     DownUp = 3,
+}
+
+impl Default for PicoSweepType {
+    fn default() -> Self {
+        PicoSweepType::Up
+    }
 }
 
 // Rust addition: encode the potential values of sweeps and shots, to avoid invalid states
@@ -249,6 +259,11 @@ pub enum SweepShotCount {
     ContinuousShots,
 }
 
+impl Default for SweepShotCount {
+    fn default() -> Self {
+        SweepShotCount::None
+    }
+}
 
 // TODO: this value is copied from sys/src/ps2000a - should we import it here?
 // should there be a crate for identical symbols?
@@ -273,10 +288,8 @@ impl SweepShotCount {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
-pub enum PicoExtraOperations
-{
+pub enum PicoExtraOperations {
     /// <summary>
     /// Normal signal generator operation specified by wavetype.
     /// </summary>
@@ -292,12 +305,17 @@ pub enum PicoExtraOperations
     PRBS = 2, // Pseudo-Random Bit Stream
 }
 
+impl Default for PicoExtraOperations {
+    fn default() -> Self {
+        PicoExtraOperations::Off
+    }
+}
+
 /// <summary>
 /// AWG index modes
 /// </summary>
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
-pub enum PicoIndexMode
-{
+pub enum PicoIndexMode {
     /// <summary>
     /// The generator outputs the raw contents of the buffer repeatedly .
     /// </summary>
@@ -317,8 +335,7 @@ pub enum PicoIndexMode
 /// The type of trigger that will be applied to the signal generator
 /// </summary>
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
-pub enum PicoSigGenTrigType
-{
+pub enum PicoSigGenTrigType {
     /// <summary>
     /// Trigger on rising edge
     /// </summary>
@@ -337,12 +354,17 @@ pub enum PicoSigGenTrigType
     GateLow = 3,
 }
 
+impl Default for PicoSigGenTrigType {
+    fn default() -> Self {
+        PicoSigGenTrigType::Rising
+    }
+}
+
 /// <summary>
 /// The source that will trigger the signal generator
 /// </summary>
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq)]
-pub enum PicoSigGenTrigSource
-{
+pub enum PicoSigGenTrigSource {
     /// <summary>
     /// Run without waiting for trigger
     /// </summary>
@@ -363,4 +385,10 @@ pub enum PicoSigGenTrigSource
     /// Wait for software trigger
     /// </summary>
     SoftTrig = 4,
+}
+
+impl Default for PicoSigGenTrigSource {
+    fn default() -> Self {
+        PicoSigGenTrigSource::None
+    }
 }
