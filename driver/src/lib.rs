@@ -46,8 +46,8 @@
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
-    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
-    SweepShotCount, SigGenArbitraryMinMaxValues,
+    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
+    SweepShotCount, SigGenArbitraryMinMaxValues, SetSigGenBuiltInV2Properties,
 };
 pub use resolution::Resolution;
 use std::{fmt, pin::Pin, sync::Arc};
@@ -191,19 +191,7 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
     fn set_sig_gen_built_in_v2(
         &self,
         _handle: i16,
-        _offset_voltage: i32,
-        _pk_to_pk: u32,
-        _wave_type: PicoWaveType,
-        _start_frequency: f64,
-        _stop_frequency: f64,
-        _increment: f64,
-        _dwell_time: f64,
-        _sweep_type: PicoSweepType,
-        _operation: PicoExtraOperations,
-        _sweeps_shots: SweepShotCount,
-        _trigger_type: PicoSigGenTrigType,
-        _trigger_source: PicoSigGenTrigSource,
-        _ext_in_threshold: i16,
+        _props: SetSigGenBuiltInV2Properties
     ) -> PicoResult<()> {
         unimplemented!()
     }

@@ -8,8 +8,8 @@ use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange,
     PicoResult, PicoStatus, SampleConfig, ToPicoStr, PicoSweepType,
-    PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
-    SweepShotCount, SigGenArbitraryMinMaxValues,
+    PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
+    SweepShotCount, SigGenArbitraryMinMaxValues, SetSigGenBuiltInV2Properties,
 };
 use pico_sys_dynamic::ps2000a::{PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE, PS2000ALoader};
 use std::{pin::Pin, sync::Arc};
@@ -331,38 +331,26 @@ impl PicoDriver for PS2000ADriver {
     fn set_sig_gen_built_in_v2(
         &self,
         handle: i16,
-        offset_voltage: i32,
-        pk_to_pk: u32,
-        wave_type: PicoWaveType,
-        start_frequency: f64,
-        stop_frequency: f64,
-        increment: f64,
-        dwell_time: f64,
-        sweep_type: PicoSweepType,
-        operation: PicoExtraOperations,
-        sweeps_shots: SweepShotCount,
-        trigger_type: PicoSigGenTrigType,
-        trigger_source: PicoSigGenTrigSource,
-        ext_in_threshold: i16,
+        props: SetSigGenBuiltInV2Properties,
      ) ->  PicoResult<()> {
-        tracing::trace!(sweeps = sweeps_shots.to_sweeps(), shots = sweeps_shots.to_shots());
+        tracing::trace!(sweeps = props.sweeps_shots.to_sweeps(), shots = props.sweeps_shots.to_shots());
         PicoStatus::from(unsafe {
             self.bindings.ps2000aSetSigGenBuiltInV2(
                 handle,
-                offset_voltage,
-                pk_to_pk,
-                wave_type as i16,
-                start_frequency,
-                stop_frequency,
-                increment,
-                dwell_time,
-                sweep_type as PS2000A_SWEEP_TYPE,
-                operation as PS2000A_EXTRA_OPERATIONS,
-                sweeps_shots.to_shots(),
-                sweeps_shots.to_sweeps(),
-                trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
-                trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
-                ext_in_threshold,
+                props.offset_voltage,
+                props.pk_to_pk,
+                props.wave_type as i16,
+                props.start_frequency,
+                props.stop_frequency,
+                props.increment,
+                props.dwell_time,
+                props.sweep_type as PS2000A_SWEEP_TYPE,
+                props.extra_operations as PS2000A_EXTRA_OPERATIONS,
+                props.sweeps_shots.to_shots(),
+                props.sweeps_shots.to_sweeps(),
+                props.trig_type as PS2000A_SIGGEN_TRIG_TYPE,
+                props.trig_source as PS2000A_SIGGEN_TRIG_SOURCE,
+                props.ext_in_threshold,
         )}).to_result((), "set_sig_gen_built_in_v2")
      }
 

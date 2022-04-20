@@ -54,8 +54,8 @@ pub use events::{NewDataHandler, RawChannelDataBlock, StreamingEvent};
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
-    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource, PicoWaveType,
-    SweepShotCount, SigGenArbitraryMinMaxValues,
+    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
+    SweepShotCount, SigGenArbitraryMinMaxValues, SetSigGenBuiltInV2Properties,
 };
 use pico_device::PicoDevice;
 use std::{
@@ -629,19 +629,7 @@ impl PicoStreamingDevice {
     #[tracing::instrument(skip(self), level = "trace")]
     pub fn set_sig_gen_built_in_v2(
         &self,
-        offset_voltage: i32, /* microvolts */
-        pk_to_pk: u32,  /* microvolts */
-        wave_type: PicoWaveType,
-        start_frequency: f64, /* Hertz */
-        stop_frequency: f64, /* Hertz */
-        increment: f64, /* delta frequency jumps in Hertz */
-        dwell_time: f64, /* amount to stay at each frequency in seconds */
-        sweep_type: PicoSweepType,
-        extra_operations: PicoExtraOperations,
-        sweeps_shots: SweepShotCount,
-        trig_type: PicoSigGenTrigType,
-        trig_source: PicoSigGenTrigSource,
-        ext_in_threshold: i16
+        props: SetSigGenBuiltInV2Properties,
     ) -> PicoResult<()> {
         let current_state = self.current_state.write();
         let handle = match current_state.clone() {
@@ -661,22 +649,7 @@ impl PicoStreamingDevice {
             },
         };
 
-        self.device.driver.set_sig_gen_built_in_v2(
-            handle,
-            offset_voltage,
-            pk_to_pk,
-            wave_type,
-            start_frequency,
-            stop_frequency,
-            increment,
-            dwell_time,
-            sweep_type,
-            extra_operations,
-            sweeps_shots,
-            trig_type,
-            trig_source,
-            ext_in_threshold,
-        )
+        self.device.driver.set_sig_gen_built_in_v2(handle, props)
     }
 
     #[tracing::instrument(skip(self), level = "trace")]
@@ -726,7 +699,7 @@ impl PicoStreamingDevice {
                 handle
             },
         };
-    
+
         let index_mode = PicoIndexMode::Single;
 
         // check that we are within limits
