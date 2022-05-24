@@ -45,8 +45,9 @@
 
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    SampleConfig,
+    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, SampleConfig,
+    PicoSweepType, PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
+    SweepShotCount, SigGenArbitraryMinMaxValues, SetSigGenBuiltInV2Properties,
 };
 pub use resolution::Resolution;
 use std::{fmt, pin::Pin, sync::Arc};
@@ -158,6 +159,79 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         } else {
             Ok(())
         }
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_properties_built_in(
+        &self,
+        _handle: i16,
+        _start_frequency: f64,
+        _stop_frequency: f64,
+        _increment: f64,
+        _dwell_time: f64,
+        _sweep_type: PicoSweepType,
+        _sweeps_shots: SweepShotCount,
+        _trigger_type: PicoSigGenTrigType,
+        _trigger_source: PicoSigGenTrigSource,
+        _ext_in_threshold: i16
+    ) -> PicoResult<()> {
+        unimplemented!()
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn sig_gen_software_control(
+        &self,
+        _handle: i16,
+        _state: i16,
+    ) -> PicoResult<()> {
+        unimplemented!()
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_built_in_v2(
+        &self,
+        _handle: i16,
+        _props: SetSigGenBuiltInV2Properties
+    ) -> PicoResult<()> {
+        unimplemented!()
+    }
+
+    fn set_sig_gen_arbitrary(
+        &self,
+        _handle: i16,
+        _offset_voltage: i32,
+        _pk_to_pk: u32,
+        _start_delta_phase: u32,
+        _stop_delta_phase: u32,
+        _delta_phase_increment: u32,
+        _dwell_count: u32,
+        _arbitrary_waveform: &mut Vec<i16>,
+        _sweep_type: PicoSweepType,
+        _operation: PicoExtraOperations,
+        _index_mode: PicoIndexMode,
+        _sweeps_shots: SweepShotCount,
+        _trigger_type: PicoSigGenTrigType,
+        _trigger_source: PicoSigGenTrigSource,
+        _ext_in_threshold: i16,
+    ) -> PicoResult<()> {
+        unimplemented!()
+    }
+
+    fn sig_gen_arbitrary_min_max_values(
+        &self,
+        _handle: i16,
+    ) -> PicoResult<SigGenArbitraryMinMaxValues> {
+        unimplemented!();
+    }
+
+    fn sig_gen_frequency_to_phase(
+        &self,
+        _handle: i16,
+        _frequency: f64,
+        _index_mode: PicoIndexMode,
+        _buffer_length: u32,
+    ) -> PicoResult<u32> {
+        unimplemented!();
     }
 }
 

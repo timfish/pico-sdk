@@ -10,8 +10,14 @@ use parking_lot::{Mutex, RwLock};
 use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
     PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
+    PicoSweepType,
+    PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
+    SweepShotCount, SigGenArbitraryMinMaxValues,
 };
-use pico_sys_dynamic::ps4000a::{PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS};
+use pico_sys_dynamic::ps4000a::{
+    PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS,
+    PS4000A_EXTRA_OPERATIONS, PS4000A_INDEX_MODE, PS4000A_SIGGEN_TRIG_SOURCE, PS4000A_SIGGEN_TRIG_TYPE, PS4000A_SWEEP_TYPE,
+};
 use std::{collections::HashMap, matches, pin::Pin, sync::Arc};
 
 type ChannelRangesMap = HashMap<PicoChannel, Vec<PicoRange>>;
@@ -352,5 +358,132 @@ impl PicoDriver for PS4000ADriver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn stop(&self, handle: i16) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps4000aStop(handle) }).to_result((), "stop")
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_properties_built_in(
+        &self,
+        handle: i16,
+        start_frequency: f64,
+        stop_frequency: f64,
+        increment: f64,
+        dwell_time: f64,
+        sweep_type: PicoSweepType,
+        sweeps_shots: SweepShotCount,
+        trigger_type: PicoSigGenTrigType,
+        trigger_source: PicoSigGenTrigSource,
+        ext_in_threshold: i16
+    ) -> PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings.ps4000aSetSigGenPropertiesBuiltIn(
+                handle,
+                start_frequency,
+                stop_frequency,
+                increment,
+                dwell_time,
+                sweep_type as u32,
+                sweeps_shots.to_shots(),
+                sweeps_shots.to_sweeps(),
+                trigger_type as u32,
+                trigger_source as u32,
+                ext_in_threshold
+            )
+        }).to_result((), "set_sig_gen_properties_build_in")
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn sig_gen_software_control(
+        &self,
+        handle: i16,
+        state: i16,
+    ) -> PicoResult<()> {
+
+        PicoStatus::from(unsafe {
+            self.bindings.ps4000aSigGenSoftwareControl(handle, state)
+        }).to_result((), "sig_gen_software_control")
+    }
+
+    // PS4000A has no SetSigGenBuiltInV2
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_sig_gen_arbitrary(
+        &self,
+        handle: i16,
+        offset_voltage: i32,
+        pk_to_pk: u32,
+        start_delta_phase: u32,
+        stop_delta_phase: u32,
+        delta_phase_increment: u32,
+        dwell_count: u32,
+        arbitrary_waveform: &mut Vec<i16>,
+        sweep_type: PicoSweepType,
+        operation: PicoExtraOperations,
+        index_mode: PicoIndexMode,
+        sweeps_shots: SweepShotCount,
+        trigger_type: PicoSigGenTrigType,
+        trigger_source: PicoSigGenTrigSource,
+        ext_in_threshold: i16,
+    ) ->  PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings.ps4000aSetSigGenArbitrary(
+                handle,
+                offset_voltage,
+                pk_to_pk,
+                start_delta_phase,
+                stop_delta_phase,
+                delta_phase_increment,
+                dwell_count,
+                arbitrary_waveform.as_mut_ptr(),
+                arbitrary_waveform.len() as i32,
+                sweep_type as PS4000A_SWEEP_TYPE,
+                operation as PS4000A_EXTRA_OPERATIONS,
+                index_mode as PS4000A_INDEX_MODE,
+                sweeps_shots.to_shots(),
+                sweeps_shots.to_sweeps(),
+                trigger_type as PS4000A_SIGGEN_TRIG_TYPE,
+                trigger_source as PS4000A_SIGGEN_TRIG_SOURCE,
+                ext_in_threshold)
+        }).to_result((), "set_sig_gen_arbitrary")
+    }
+
+    fn sig_gen_arbitrary_min_max_values(
+        &self,
+        handle: i16,
+    ) -> PicoResult<SigGenArbitraryMinMaxValues> {
+        let mut min_value: i16 = 0;
+        let mut max_value: i16 = 0;
+        let mut min_size: u32 = 0;
+        let mut max_size: u32 = 0;
+        PicoStatus::from(unsafe {
+            self.bindings.ps4000aSigGenArbitraryMinMaxValues(
+                handle,
+                &mut min_value,
+                &mut max_value,
+                &mut min_size,
+                &mut max_size,
+        )}).to_result(SigGenArbitraryMinMaxValues {
+            min_value,
+            max_value,
+            min_size,
+            max_size,
+        }, "sig_gen_arbitrary_min_max_values")
+    }
+
+    fn sig_gen_frequency_to_phase(
+        &self,
+        handle: i16,
+        frequency: f64,
+        index_mode: PicoIndexMode,
+        buffer_length: u32,
+    ) -> PicoResult<u32> {
+        let mut phase: u32 = 0;
+        PicoStatus::from(unsafe {
+            self.bindings.ps4000aSigGenFrequencyToPhase(
+                handle,
+                frequency,
+                index_mode as u32,
+                buffer_length,
+                &mut phase,
+        )}).to_result(phase, "sig_gen_arbitrary_min_max_values")
     }
 }
