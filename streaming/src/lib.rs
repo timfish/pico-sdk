@@ -593,7 +593,7 @@ impl PicoStreamingDevice {
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16
     ) {
-        let current_state = self.current_state.write();
+        let current_state = self.current_state.read();
         let handle = match current_state.clone() {
             State::Closed => {
                 panic!("attempt to sig gen on closed device, no handle");
@@ -628,7 +628,7 @@ impl PicoStreamingDevice {
         &self,
         state: i16,
     ) -> PicoResult<()> {
-        let current_state = self.current_state.write();
+        let current_state = self.current_state.read();
         let handle = match current_state.clone() {
             State::Closed => {
                 panic!("attempt to sig gen on closed device, no handle");
@@ -653,7 +653,7 @@ impl PicoStreamingDevice {
         &self,
         props: SetSigGenBuiltInV2Properties,
     ) -> PicoResult<()> {
-        let current_state = self.current_state.write();
+        let current_state = self.current_state.read();
         let handle = match current_state.clone() {
             State::Closed => {
                 panic!("attempt to sig gen on closed device, no handle");
@@ -678,7 +678,7 @@ impl PicoStreamingDevice {
     pub fn sig_gen_arbitrary_min_max_values(
         &self
     ) -> PicoResult<SigGenArbitraryMinMaxValues> {
-        let current_state = self.current_state.write();
+        let current_state = self.current_state.read();
         let handle = match current_state.clone() {
             State::Closed => {
                 panic!("attempt to sig gen on closed device, no handle");
@@ -704,7 +704,7 @@ impl PicoStreamingDevice {
         mut props: SetSigGenArbitraryProperties,
     ) -> PicoResult<()> {
         // Start an AWG function
-        let current_state = self.current_state.write();
+        let current_state = self.current_state.read();
         let handle = match current_state.clone() {
             State::Closed => {
                 panic!("attempt to sig gen on closed device, no handle");
