@@ -696,7 +696,7 @@ impl PicoStreamingDevice {
                 handle,
                 ..
             } => {
-                handle
+                panic!("cannot set_sig_gen_arbitrary while streaming ; current handle {}", handle);
             },
         };
 
