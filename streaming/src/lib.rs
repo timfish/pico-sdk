@@ -267,6 +267,17 @@ impl PicoStreamingDevice {
         device
     }
 
+    pub fn wait_for_state_settle(&self) {
+        // TODO: timeout
+        let target_state = self.target_state.get();
+        loop {
+            if *self.current_state.read() == target_state {
+                return;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+
     pub fn get_serial(&self) -> String {
         self.device.serial.to_string()
     }
