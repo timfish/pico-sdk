@@ -170,6 +170,17 @@ impl PartialEq for State {
     }
 }
 
+impl PartialEq<Target> for State {
+    fn eq(&self, other: &Target) -> bool {
+        matches!(
+            (self, other),
+            (State::Closed, Target::Closed)
+                | (State::Open { .. }, Target::Open { .. })
+                | (State::Streaming { .. }, Target::Streaming { .. })
+        )
+    }
+}
+
 impl fmt::Debug for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
