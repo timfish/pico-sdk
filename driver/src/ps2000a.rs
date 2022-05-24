@@ -7,11 +7,15 @@ use crate::{
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange,
-    PicoResult, PicoStatus, SampleConfig, ToPicoStr, PicoSweepType,
+    PicoResult, PicoStatus, SampleConfig, ToPicoStr,
+    PicoSweepType,
     PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
     SweepShotCount, SigGenArbitraryMinMaxValues, SetSigGenBuiltInV2Properties,
 };
-use pico_sys_dynamic::ps2000a::{PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE, PS2000ALoader};
+use pico_sys_dynamic::ps2000a::{
+    PS2000ALoader,
+    PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE,
+};
 use std::{pin::Pin, sync::Arc};
 
 pub struct PS2000ADriver {
@@ -282,7 +286,6 @@ impl PicoDriver for PS2000ADriver {
     fn stop(&self, handle: i16) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps2000aStop(handle) }).to_result((), "stop")
     }
-
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn set_sig_gen_properties_built_in(
