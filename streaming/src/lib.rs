@@ -270,11 +270,17 @@ impl PicoStreamingDevice {
     pub fn wait_for_state_settle(&self) {
         // TODO: timeout
         let target_state = self.target_state.get();
+        let mut count = 0;
         loop {
             if *self.current_state.read() == target_state {
                 return;
             }
             thread::sleep(Duration::from_millis(50));
+            count += 1;
+            if count > 10 {
+                println!("waiting for settle: current {:?}, target {:?}",
+                         *self.current_state.read(), target_state);
+            }
         }
     }
 
