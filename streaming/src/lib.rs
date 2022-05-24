@@ -679,7 +679,7 @@ impl PicoStreamingDevice {
     #[tracing::instrument(skip(self), level = "trace")]
     pub fn set_sig_gen_arbitrary(
         &self,
-        props: SetSigGenArbitraryProperties,
+        mut props: SetSigGenArbitraryProperties,
     ) -> PicoResult<()> {
         // Start an AWG function
         let current_state = self.current_state.write();
@@ -730,7 +730,7 @@ impl PicoStreamingDevice {
             stop_delta_phase,
             delta_phase_increment,
             dwell_count,
-            &props.arbitrary_waveform,
+            &mut props.arbitrary_waveform,
             props.sweep_type,
             props.extra_operations,
             index_mode,

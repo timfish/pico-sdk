@@ -205,7 +205,7 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         _stop_delta_phase: u32,
         _delta_phase_increment: u32,
         _dwell_count: u32,
-        _arbitrary_waveform: &Vec<i16>,
+        _arbitrary_waveform: &mut Vec<i16>,
         _sweep_type: PicoSweepType,
         _operation: PicoExtraOperations,
         _index_mode: PicoIndexMode,

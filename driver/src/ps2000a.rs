@@ -364,7 +364,7 @@ impl PicoDriver for PS2000ADriver {
         stop_delta_phase: u32,
         delta_phase_increment: u32,
         dwell_count: u32,
-        arbitrary_waveform: &Vec<i16>,
+        arbitrary_waveform: &mut Vec<i16>,
         sweep_type: PicoSweepType,
         operation: PicoExtraOperations,
         index_mode: PicoIndexMode,
@@ -373,11 +373,6 @@ impl PicoDriver for PS2000ADriver {
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16,
     ) ->  PicoResult<()> {
-        // TODO: no idea how to do this better
-        // to avoid the data being taken away, store a copy here?
-        // go read the SDK to see if the memory is caller responsibility or
-        // copied by the library.
-        let mut arbitrary_waveform = arbitrary_waveform.clone();
         PicoStatus::from(unsafe {
             self.bindings.ps2000aSetSigGenArbitrary(
                 handle,
