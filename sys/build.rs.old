@@ -16,6 +16,7 @@ fn build(header: &str, name: &str) {
 }
 
 fn main() {
+    build("usbtc08", "TC08Loader");
     build("ps2000", "PS2000Loader");
     build("ps2000aApi", "PS2000ALoader");
     build("ps3000", "PS3000Loader");

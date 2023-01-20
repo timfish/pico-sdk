@@ -823,7 +823,7 @@ pub use self::enPS2000ASigGenTrigType as PS2000A_SIGGEN_TRIG_TYPE;
 pub const enPS2000ASigGenTrigSource_PS2000A_SIGGEN_NONE: enPS2000ASigGenTrigSource = 0;
 #[doc = " <summary>"]
 #[doc = " Use scope trigger"]
-#[doc = " </summary"]
+#[doc = " </summary>"]
 pub const enPS2000ASigGenTrigSource_PS2000A_SIGGEN_SCOPE_TRIG: enPS2000ASigGenTrigSource = 1;
 #[doc = " <summary>"]
 #[doc = " Use AUXIO input"]
@@ -886,7 +886,7 @@ pub use self::enPS2000A_ThresholdMode as PS2000A_THRESHOLD_MODE;
 pub const enPS2000AThresholdDirection_PS2000A_ABOVE: enPS2000AThresholdDirection = 0;
 #[doc = " <summary>"]
 #[doc = " For gated triggers: below the upper threshold."]
-#[doc = " </summary"]
+#[doc = " </summary>"]
 pub const enPS2000AThresholdDirection_PS2000A_BELOW: enPS2000AThresholdDirection = 1;
 #[doc = " <summary>"]
 #[doc = " For threshold triggers: rising edge, using upper threshold."]

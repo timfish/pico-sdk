@@ -15,3 +15,6 @@ path = "src/lib.rs"
 
 [dependencies]
 libloading = "0.7"
+
+# [build-dependencies]
+# bindgen = "0.63.0"
