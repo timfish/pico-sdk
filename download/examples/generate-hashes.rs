@@ -74,5 +74,9 @@ fn main() {
         })
     });
 
+    // Pico do not yet distribute drivers for macOS aarch64 so throw an error at compile time
+    println!("    #[cfg(all(target_os = \"macos\", target_arch = \"aarch64\"))]");
+    println!("    compile_error!(\"Pico do not yet distribute drivers for macOS aarch64. You'll need to target x86_64 for now!\");");
+
     println!("}}");
 }

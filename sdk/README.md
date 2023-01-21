@@ -58,10 +58,9 @@ Loads the specified driver and attempts open the optionally specified device ser
 ## Usage Examples
 Opening and configuring a specific ps2000 device as a `PicoDevice`:
 ```rust
-use std::sync::Arc;
 use pico_sdk::prelude::*;
 
-let driver = Driver::PS2000.try_load()?;
+let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
 let device = PicoDevice::try_open(&driver, Some("ABC/123"))?;
 ```
 

@@ -13,19 +13,18 @@ either a few function arguments or a vastly differing API.
 `PS4000ADriver`, `PS5000ADriver`, `PS6000Driver` and `PS6000ADriver` wrap
 their corresponding loaders and expose a safe, common API by implementing
 the `PicoDriver` trait. These can be constructed with a `Resolution` which tells the wrapper where
-to resolve the dynamic library from. The `LoadDriverExt` trait supplies a shortcut to load a driver
-directly from the `Driver` enum via `try_load` and `try_load_with_resolution`.
+to resolve the dynamic library from.
 
 ## Examples
 Using the raw safe bindings to open and configure the first available device:
 ```rust
 use pico_common::{ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange};
-use pico_driver::{LoadDriverExt, Resolution};
+use pico_driver::LibraryResolution;
 
 // Load the ps2000 driver library with the default resolution
-let driver = Driver::PS2000.try_load()?;
+let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
 // Load the ps4000a driver library from the applications root directory
-let driver = Driver::PS4000A.try_load_with_resolution(&Resolution::AppRoot)?;
+let driver = LibraryResolution::AppRoot.try_load(Driver::PS4000A)?;
 
 // Open the first device
 let handle = driver.open_unit(None)?;

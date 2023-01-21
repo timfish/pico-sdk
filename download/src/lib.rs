@@ -30,7 +30,7 @@ use hashes::get_expected_driver_hash;
 use http_req::request;
 use paths::get_cache_dir;
 use pico_common::Driver;
-use pico_driver::Resolution;
+use pico_driver::LibraryResolution;
 use ring::digest::{Context, Digest, SHA256};
 use std::{fs, io::Read, path::Path};
 use thiserror::Error;
@@ -54,8 +54,8 @@ pub enum DriverDownloadError {
 }
 
 /// Gets a `Resolution` that points to the download cache location
-pub fn cache_resolution() -> Resolution {
-    Resolution::Custom(get_cache_dir())
+pub fn cache_resolution() -> LibraryResolution {
+    LibraryResolution::Custom(get_cache_dir())
 }
 
 /// Downloads the requested drivers and any dependencies to the supplied path.
@@ -70,7 +70,7 @@ pub fn download_drivers<P: AsRef<Path>>(
     fs::create_dir_all(&driver_dir)?;
 
     for driver in required_files {
-        let file_path = driver_dir.join(&driver.get_binary_name());
+        let file_path = driver_dir.join(driver.get_binary_name());
 
         if file_path.exists() {
             match driver {

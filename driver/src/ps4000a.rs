@@ -12,7 +12,7 @@ use pico_common::{
     PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::ps4000a::{PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS};
-use std::{collections::HashMap, matches, pin::Pin, sync::Arc};
+use std::{collections::HashMap, matches, sync::Arc};
 
 type ChannelRangesMap = HashMap<PicoChannel, Vec<PicoRange>>;
 
@@ -73,7 +73,7 @@ impl PS4000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(&path.as_ref());
+        let dependencies = load_dependencies(path.as_ref());
         let bindings = unsafe { PS4000ALoader::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps4000aApplyFix(0x1ced9168, 0x11e6) };
@@ -279,7 +279,7 @@ impl PicoDriver for PS4000ADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
+        buffer: Arc<RwLock<Vec<i16>>>,
         buffer_len: usize,
     ) -> PicoResult<()> {
         let mut buffer = buffer.write();
@@ -302,6 +302,7 @@ impl PicoDriver for PS4000ADriver {
         &self,
         handle: i16,
         sample_config: &SampleConfig,
+        _enabled_channels: u8,
     ) -> PicoResult<SampleConfig> {
         let mut sample_interval = sample_config.interval;
 

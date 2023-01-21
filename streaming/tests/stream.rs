@@ -9,7 +9,7 @@ mod streaming_tests {
     use pico_device::PicoDevice;
     use pico_driver::{ArcDriver, DriverLoadError, EnumerationResult, PicoDriver};
     use pico_streaming::ToStreamDevice;
-    use std::{pin::Pin, sync::Arc, thread, time::Duration};
+    use std::{sync::Arc, thread, time::Duration};
 
     mock! {
         MockDriver {}
@@ -39,13 +39,14 @@ mod streaming_tests {
                 &self,
                 handle: i16,
                 channel: PicoChannel,
-                buffer: Arc<RwLock<Pin<Vec<i16>>>>,
+                buffer: Arc<RwLock<Vec<i16>>>,
                 buffer_len: usize,
             ) -> PicoResult<()>;
             fn start_streaming(
                 &self,
                 handle: i16,
                 sample_config: &SampleConfig,
+                enabled_channels: u8
             ) -> PicoResult<SampleConfig>;
             fn get_latest_streaming_values<'a>(
                 &self,

@@ -2,7 +2,7 @@ use num_derive::*;
 use std::{convert::From, fmt, str::FromStr};
 
 /// Error when attempting to parse enums from strings
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ParseError;
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, Ord, PartialOrd, Hash, PartialEq, Eq)]
@@ -23,7 +23,7 @@ impl FromStr for PicoChannel {
     type Err = ParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(" ", "").to_uppercase();
+        let input = input.replace(' ', "").to_uppercase();
 
         match &input[..] {
             "A" => Ok(PicoChannel::A),
@@ -99,7 +99,7 @@ impl FromStr for PicoCoupling {
     type Err = ParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(" ", "").to_uppercase();
+        let input = input.replace(' ', "").to_uppercase();
 
         match &input[..] {
             "AC" => Ok(PicoCoupling::AC),

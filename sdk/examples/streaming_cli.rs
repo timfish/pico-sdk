@@ -209,8 +209,7 @@ fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, Stri
         if ch_selection >= channels.len() {
             return channels
                 .iter()
-                .map(|(ch, _, config)| config.map(|c| (*ch, c.range.get_units().short)))
-                .flatten()
+                .filter_map(|(ch, _, config)| config.map(|c| (*ch, c.range.get_units().short)))
                 .collect();
         }
 
@@ -280,10 +279,7 @@ impl NewDataHandler for CaptureStats {
                     *ch,
                     v.samples.len(),
                     v.scale_sample(0),
-                    self.ch_units
-                        .get(&ch)
-                        .unwrap_or(&"".to_string())
-                        .to_string(),
+                    self.ch_units.get(ch).unwrap_or(&"".to_string()).to_string(),
                 )
             })
             .collect();

@@ -28,7 +28,7 @@ impl FromStr for Driver {
     type Err = ParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.to_uppercase().replace("PS", "").replace(" ", "");
+        let input = input.to_uppercase().replace("PS", "").replace(' ', "");
 
         match &input[..] {
             "2000" => Ok(Driver::PS2000),
