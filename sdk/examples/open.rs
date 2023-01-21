@@ -1,4 +1,5 @@
-use pico_sdk::{common::Driver, driver::LoadDriverExt};
+use pico_driver::LibraryResolution;
+use pico_sdk::common::Driver;
 use std::{env, str::FromStr};
 
 fn main() {
@@ -11,8 +12,8 @@ fn main() {
     )
     .expect("Could not parse first argument as driver type (ie. should be similar to '4000a'");
 
-    let driver = driver_type
-        .try_load()
+    let driver = LibraryResolution::default()
+        .try_load(driver_type)
         .unwrap_or_else(|e| panic!("Failed to load {} driver: {}", driver_type, e));
 
     let serial = args.next();

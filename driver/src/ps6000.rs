@@ -10,7 +10,7 @@ use pico_common::{
     PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::ps6000::PS6000Loader;
-use std::{pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 pub struct PS6000Driver {
     _dependencies: LoadedDependencies,
@@ -28,7 +28,7 @@ impl PS6000Driver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(&path.as_ref());
+        let dependencies = load_dependencies(path.as_ref());
         let bindings = unsafe { PS6000Loader::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps6000ApplyFix(0x1ced9168, 0x11e6) };
@@ -181,7 +181,7 @@ impl PicoDriver for PS6000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
+        buffer: Arc<RwLock<Vec<i16>>>,
         buffer_len: usize,
     ) -> PicoResult<()> {
         let mut buffer = buffer.write();
@@ -203,6 +203,7 @@ impl PicoDriver for PS6000Driver {
         &self,
         handle: i16,
         sample_config: &SampleConfig,
+        _enabled_channels: u8,
     ) -> PicoResult<SampleConfig> {
         let mut sample_interval = vec![sample_config.interval];
 

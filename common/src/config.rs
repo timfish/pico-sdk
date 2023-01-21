@@ -3,7 +3,7 @@ use num_derive::*;
 use std::convert::From;
 
 /// Pico time units
-#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum TimeUnits {
     FS = 0,
     PS = 1,

@@ -1,4 +1,4 @@
-use super::Resolution;
+use super::LibraryResolution;
 use lazy_static::lazy_static;
 use libloading::{Error, Library};
 use parking_lot::Mutex;
@@ -14,6 +14,8 @@ type LoadedDependency = (LoadedFn, Library);
 pub type LoadedDependencies = Vec<Arc<LoadedDependency>>;
 
 lazy_static! {
+    // We only hold a weak reference so that they're dropped when there are no
+    // more drivers loaded.
     static ref DEPENDENCY_CACHE: Mutex<HashMap<PathBuf, Weak<LoadedDependency>>> =
         Default::default();
 }
@@ -28,7 +30,7 @@ lazy_static! {
 pub fn load_dependencies<P: AsRef<Path>>(path: P) -> LoadedDependencies {
     let parent = path.as_ref().parent().expect("Driver path has no parent");
     let to_load = Driver::get_dependencies_for_platform();
-    let resolution = Resolution::Custom(parent.to_path_buf());
+    let resolution = LibraryResolution::Custom(parent.to_path_buf());
 
     let mut output = Vec::with_capacity(to_load.len());
 

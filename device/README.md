@@ -11,11 +11,11 @@ automatically detected and then it is closed.
 ## Example
 ```rust
 use pico_common::Driver;
-use pico_driver::LoadDriverExt;
+use pico_driver::LibraryResolution;
 use pico_device::PicoDevice;
 
 // Load the required driver
-let driver = Driver::PS2000.try_load()?;
+let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
 
 // Try and open the first available ps2000 device
 let device1 = PicoDevice::try_open(&driver, None)?;

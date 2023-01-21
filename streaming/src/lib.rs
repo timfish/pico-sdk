@@ -15,11 +15,11 @@
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! # use std::sync::Arc;
 //! # use pico_common::{Driver, PicoChannel, PicoCoupling, PicoRange};
-//! # use pico_driver::LoadDriverExt;
+//! # use pico_driver::LibraryResolution;
 //! # use pico_device::PicoDevice;
 //! # use pico_streaming::{NewDataHandler, StreamingEvent, ToStreamDevice};
 //! # // Load the required driver
-//! # let driver = Driver::PS2000.try_load()?;
+//! # let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
 //! # // Try and load the first available ps2000 device
 //! # let device = PicoDevice::try_open(&driver, None)?;
 //! // Get a streaming device from a PicoDevice
@@ -56,9 +56,7 @@ use pico_common::{
     ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
 };
 use pico_device::PicoDevice;
-use std::{
-    collections::HashMap, fmt, pin::Pin, sync::Arc, thread, thread::JoinHandle, time::Duration,
-};
+use std::{collections::HashMap, fmt, sync::Arc, thread, thread::JoinHandle, time::Duration};
 use tracing::*;
 
 mod events;
@@ -95,7 +93,7 @@ impl fmt::Debug for LockedTarget {
     }
 }
 
-type BufferMap = HashMap<PicoChannel, Arc<RwLock<Pin<Vec<i16>>>>>;
+type BufferMap = HashMap<PicoChannel, Arc<RwLock<Vec<i16>>>>;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone)]
@@ -385,6 +383,8 @@ impl PicoStreamingDevice {
 
         let enabled_channels = self.enabled_channels.read();
 
+        let mut enabled_channel_count = 0;
+
         for (channel, ranges) in &self.device.channel_ranges {
             // If there are no valid ranges, skip configuring this channel
             if ranges.is_empty() {
@@ -397,11 +397,11 @@ impl PicoStreamingDevice {
 
                 self.device
                     .driver
-                    .enable_channel(handle, *channel, &config)?;
+                    .enable_channel(handle, *channel, config)?;
 
                 let ch_buf = buffers
                     .entry(*channel)
-                    .or_insert_with(|| Arc::new(RwLock::new(Pin::new(vec![0i16; buffer_size]))));
+                    .or_insert_with(|| Arc::new(RwLock::new(vec![0i16; buffer_size])));
 
                 self.device.driver.set_data_buffer(
                     handle,
@@ -409,6 +409,8 @@ impl PicoStreamingDevice {
                     ch_buf.clone(),
                     buffer_size,
                 )?;
+
+                enabled_channel_count += 1;
             } else {
                 self.device.driver.disable_channel(handle, *channel)?;
             }
@@ -418,7 +420,7 @@ impl PicoStreamingDevice {
         let actual_sample_rate = self
             .device
             .driver
-            .start_streaming(handle, &target_config)
+            .start_streaming(handle, &target_config, enabled_channel_count)
             .map(|sc| sc.samples_per_second())?;
 
         Ok((
@@ -445,7 +447,7 @@ impl PicoStreamingDevice {
                 .iter()
                 .map(|(ch, config)| {
                     let ch_buf = buffers
-                        .get(&ch)
+                        .get(ch)
                         .expect("Channel is enabled but has no buffer")
                         .read();
 

@@ -1,5 +1,4 @@
 #![allow(unreachable_patterns)]
-
 use pico_common::Driver;
 /// This file is auto-generated from the generate-hashes example
 pub fn get_expected_driver_hash(driver: Driver) -> &'static str {
@@ -65,7 +64,10 @@ pub fn get_expected_driver_hash(driver: Driver) -> &'static str {
         Driver::PS4000A => "SHA256:cc94889fe114ce1d67fb4262e9aab9aee14d3013b748152949b279f23f6d7cc9",
         Driver::PS5000A => "SHA256:af58a1c0bfedea56d5ce9b2c53d69ec1e41f6098d1d03ce9b14579277893327f",
         Driver::PS6000 => "SHA256:32ca7e7eebac2c1772423d3b5b74eaac5559bac8b33454f1757d3cfd4b788a14",
+        Driver::PS6000A => "SHA256:2ebc87f9b3c638bce175f5cb69dabc9da50a3eca0ec4e44143e3ab9adfe8f119",
         Driver::PicoIPP => "SHA256:cde63e4aaafd567acc6c991c403a600fd0b8e4274c85ccad4eed04952b51daad",
         _ => ""
     }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    compile_error!("Pico do not yet distribute drivers for macOS aarch64. You'll need to target x86_64 for now!");
 }

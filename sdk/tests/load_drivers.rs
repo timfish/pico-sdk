@@ -1,6 +1,5 @@
 use pico_common::Driver;
 use pico_download::{cache_resolution, download_drivers_to_cache};
-use pico_driver::LoadDriverExt;
 
 #[test]
 fn load_all_drivers() {
@@ -16,12 +15,12 @@ fn load_all_drivers() {
 
     let cache_resolution = cache_resolution();
 
-    drivers.iter().for_each(|d| {
-        let mut loaded = d.try_load_with_resolution(&cache_resolution);
+    drivers.into_iter().for_each(|d| {
+        let mut loaded = cache_resolution.try_load(d);
 
         if loaded.is_err() {
-            download_drivers_to_cache(&[*d]).unwrap();
-            loaded = d.try_load_with_resolution(&cache_resolution);
+            download_drivers_to_cache(&[d]).unwrap();
+            loaded = cache_resolution.try_load(d);
         }
 
         assert!(loaded.is_ok());

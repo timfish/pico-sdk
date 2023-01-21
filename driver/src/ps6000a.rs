@@ -9,10 +9,11 @@ use pico_common::{
 };
 use pico_sys_dynamic::ps6000a::{
     enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
-    enPicoDeviceResolution_PICO_DR_12BIT, enPicoDeviceResolution_PICO_DR_8BIT, PS6000ALoader,
-    PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
+    enPicoDeviceResolution_PICO_DR_10BIT, enPicoDeviceResolution_PICO_DR_12BIT,
+    enPicoDeviceResolution_PICO_DR_8BIT, PS6000ALoader, PICO_STREAMING_DATA_INFO,
+    PICO_STREAMING_DATA_TRIGGER_INFO,
 };
-use std::{mem::MaybeUninit, pin::Pin, sync::Arc};
+use std::{mem::MaybeUninit, sync::Arc};
 
 pub struct PS6000ADriver {
     _dependencies: LoadedDependencies,
@@ -30,7 +31,7 @@ impl PS6000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(&path.as_ref());
+        let dependencies = load_dependencies(path.as_ref());
         let bindings = unsafe { PS6000ALoader::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps6000aApplyFix(0x1ced9168, 0x11e6) };
@@ -194,7 +195,7 @@ impl PicoDriver for PS6000ADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
+        buffer: Arc<RwLock<Vec<i16>>>,
         buffer_len: usize,
     ) -> PicoResult<()> {
         let mut buffer = buffer.write();
@@ -219,7 +220,21 @@ impl PicoDriver for PS6000ADriver {
         &self,
         handle: i16,
         sample_config: &SampleConfig,
+        enabled_channels: u8,
     ) -> PicoResult<SampleConfig> {
+        let resolution = match enabled_channels {
+            1 | 2 => enPicoDeviceResolution_PICO_DR_12BIT,
+            _ => enPicoDeviceResolution_PICO_DR_10BIT,
+        };
+
+        let status = PicoStatus::from(unsafe {
+            self.bindings.ps6000aSetDeviceResolution(handle, resolution)
+        });
+
+        if status != PicoStatus::OK {
+            return status.to_result(SampleConfig::default(), "ps5000aSetDeviceResolution");
+        }
+
         let mut sample_interval = sample_config.interval as f64;
 
         PicoStatus::from(unsafe {

@@ -14,7 +14,7 @@ use parking_lot::RwLock;
 use pico_common::PicoError;
 use pico_common::{Driver, PicoResult};
 use pico_device::PicoDevice;
-use pico_driver::{kernel_driver, ArcDriver, DriverLoadError, LoadDriverExt, Resolution};
+use pico_driver::{kernel_driver, ArcDriver, DriverLoadError, LibraryResolution};
 use rayon::prelude::*;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -106,7 +106,7 @@ impl EnumerationError {
 /// ```
 #[derive(Clone, Default)]
 pub struct DeviceEnumerator {
-    resolution: Resolution,
+    resolution: LibraryResolution,
     loaded_drivers: Arc<RwLock<HashMap<Driver, ArcDriver>>>,
 }
 
@@ -117,7 +117,7 @@ impl DeviceEnumerator {
 
     /// Creates a new `DeviceEnumerator` with the supplied resolution
     #[tracing::instrument(level = "info")]
-    pub fn with_resolution(resolution: Resolution) -> Self {
+    pub fn with_resolution(resolution: LibraryResolution) -> Self {
         DeviceEnumerator {
             resolution,
             loaded_drivers: Default::default(),
@@ -130,8 +130,7 @@ impl DeviceEnumerator {
     pub fn enumerate_raw() -> HashMap<Driver, usize> {
         usb_enumeration::enumerate(Some(PICO_VENDOR_ID), None)
             .iter()
-            .map(|d| Driver::from_pid(d.product_id))
-            .flatten()
+            .filter_map(|d| Driver::from_pid(d.product_id))
             .fold(HashMap::new(), |mut map, x| {
                 map.entry(x).and_modify(|count| *count += 1).or_insert(1);
                 map
@@ -158,7 +157,7 @@ impl DeviceEnumerator {
     ) -> Vec<Result<EnumeratedDevice, EnumerationError>> {
         let device_count = device_count.unwrap_or(1);
 
-        let driver = match self.get_or_load_driver(driver_type) {
+        let driver = match self.cached_driver_load(driver_type) {
             Ok(driver) => driver,
             Err(error) => {
                 return vec![Err(EnumerationError::from(driver_type, error)); device_count]
@@ -195,7 +194,7 @@ impl DeviceEnumerator {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    fn get_or_load_driver(&self, driver_type: Driver) -> Result<ArcDriver, DriverLoadError> {
+    fn cached_driver_load(&self, driver_type: Driver) -> Result<ArcDriver, DriverLoadError> {
         let driver = {
             let loaded_drivers = self.loaded_drivers.read();
             loaded_drivers.get(&driver_type).cloned()
@@ -203,7 +202,7 @@ impl DeviceEnumerator {
 
         match driver {
             Some(driver) => Ok(driver),
-            None => match driver_type.try_load_with_resolution(&self.resolution) {
+            None => match self.resolution.try_load(driver_type) {
                 Ok(driver) => {
                     self.loaded_drivers
                         .write()

@@ -11,20 +11,19 @@
 //! `PS4000ADriver`, `PS5000ADriver`, `PS6000Driver` and `PS6000ADriver` wrap
 //! their corresponding loaders and expose a safe, common API by implementing
 //! the `PicoDriver` trait. These can be constructed with a `Resolution` which tells the wrapper where
-//! to resolve the dynamic library from. The `LoadDriverExt` trait supplies a shortcut to load a driver
-//! directly from the `Driver` enum via `try_load` and `try_load_with_resolution`.
+//! to resolve the dynamic library from.
 //!
 //! # Examples
 //! Using the raw safe bindings to open and configure the first available device:
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! use pico_common::{ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange};
-//! use pico_driver::{LoadDriverExt, Resolution};
+//! use pico_driver::LibraryResolution;
 //!
 //! // Load the ps2000 driver library with the default resolution
-//! let driver = Driver::PS2000.try_load()?;
+//! let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
 //! // Load the ps4000a driver library from the applications root directory
-//! let driver = Driver::PS4000A.try_load_with_resolution(&Resolution::AppRoot)?;
+//! let driver = LibraryResolution::AppRoot.try_load(Driver::PS4000A)?;
 //!
 //! // Open the first device
 //! let handle = driver.open_unit(None)?;
@@ -48,8 +47,8 @@ use pico_common::{
     ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
     SampleConfig,
 };
-pub use resolution::Resolution;
-use std::{fmt, pin::Pin, sync::Arc};
+pub use resolution::LibraryResolution;
+use std::{fmt, sync::Arc};
 use thiserror::Error;
 use version_compare::Version;
 
@@ -123,7 +122,7 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
+        buffer: Arc<RwLock<Vec<i16>>>,
         buffer_len: usize,
     ) -> PicoResult<()>;
     /// Starts the device streaming
@@ -131,6 +130,7 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         &self,
         handle: i16,
         sample_config: &SampleConfig,
+        enabled_channels: u8,
     ) -> PicoResult<SampleConfig>;
     /// Gets the latest streaming values
     fn get_latest_streaming_values<'a>(
@@ -146,7 +146,6 @@ pub trait PicoDriver: fmt::Debug + Send + Sync {
         let loaded_str = &self.get_version()?;
         let loaded_version = Version::from(loaded_str);
 
-        #[allow(clippy::expect_fun_call)]
         let required_str = get_min_required_version(self.get_driver());
         let required_version = Version::from(required_str);
 
@@ -203,40 +202,5 @@ fn get_min_required_version(driver: Driver) -> &'static str {
             "We don't know the minimum required version for the {:?} driver!",
             driver,
         ),
-    }
-}
-
-/// Shortcuts for loading drivers directly from the `Driver` enum.
-pub trait LoadDriverExt {
-    fn try_load(&self) -> Result<ArcDriver, DriverLoadError>;
-    fn try_load_with_resolution(
-        &self,
-        resolution: &Resolution,
-    ) -> Result<ArcDriver, DriverLoadError>;
-}
-
-impl LoadDriverExt for Driver {
-    fn try_load(&self) -> Result<ArcDriver, DriverLoadError> {
-        self.try_load_with_resolution(&Default::default())
-    }
-
-    fn try_load_with_resolution(
-        &self,
-        resolution: &Resolution,
-    ) -> Result<ArcDriver, DriverLoadError> {
-        let path = resolution.get_path(*self);
-        Ok(match self {
-            Driver::PS2000 => Arc::new(ps2000::PS2000Driver::new(path)?),
-            Driver::PS2000A => Arc::new(ps2000a::PS2000ADriver::new(path)?),
-            Driver::PS3000A => Arc::new(ps3000a::PS3000ADriver::new(path)?),
-            Driver::PS4000 => Arc::new(ps4000::PS4000Driver::new(path)?),
-            Driver::PS4000A => Arc::new(ps4000a::PS4000ADriver::new(path)?),
-            Driver::PS5000A => Arc::new(ps5000a::PS5000ADriver::new(path)?),
-            Driver::PS6000 => Arc::new(ps6000::PS6000Driver::new(path)?),
-            Driver::PS6000A => Arc::new(ps6000a::PS6000ADriver::new(path)?),
-            Driver::PicoIPP | Driver::IOMP5 => {
-                panic!("These are libraries used by Pico drivers and cannot be loaded directly")
-            }
-        })
     }
 }

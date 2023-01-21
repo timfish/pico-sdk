@@ -5,7 +5,7 @@ use std::fmt;
 /// Pico channel ranges
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, IntoEnumIterator)]
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, IntoEnumIterator)]
 pub enum PicoRange {
     X1_PROBE_10MV = 0,
     X1_PROBE_20MV = 1,
@@ -138,14 +138,14 @@ pub enum PicoRange {
 
 impl PicoRange {
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
-        let input = input.replace(" ", "").replace("±", "").to_uppercase();
+        let input = input.replace([' ', '±'], "").to_uppercase();
         let all_ranges = PicoRange::into_enum_iter().collect::<Vec<Self>>();
         let valid_ranges = valid_ranges.unwrap_or(&all_ranges);
 
         for range in valid_ranges {
             let to_cmp = format!("{}", range)
-                .replace(" ", "")
-                .replace("±", "")
+                .replace(' ', "")
+                .replace('±', "")
                 .to_uppercase();
 
             if input == to_cmp {
