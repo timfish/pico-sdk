@@ -9,8 +9,11 @@ use pico_common::{
     ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
     PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
 };
-use pico_sys_dynamic::ps5000a::{enPicoDeviceResolution_PICO_DR_14BIT, PS5000ALoader};
-use std::{pin::Pin, sync::Arc};
+use pico_sys_dynamic::ps5000a::{
+    enPicoDeviceResolution_PICO_DR_14BIT, enPicoDeviceResolution_PICO_DR_15BIT,
+    enPicoDeviceResolution_PICO_DR_16BIT, PS5000ALoader,
+};
+use std::sync::Arc;
 
 pub struct PS5000ADriver {
     _dependencies: LoadedDependencies,
@@ -28,7 +31,7 @@ impl PS5000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(&path.as_ref());
+        let dependencies = load_dependencies(path.as_ref());
         let bindings = unsafe { PS5000ALoader::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps5000aApplyFix(0x1ced9168, 0x11e6) };
@@ -218,7 +221,7 @@ impl PicoDriver for PS5000ADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
+        buffer: Arc<RwLock<Vec<i16>>>,
         buffer_len: usize,
     ) -> PicoResult<()> {
         let mut buffer = buffer.write();
@@ -241,7 +244,22 @@ impl PicoDriver for PS5000ADriver {
         &self,
         handle: i16,
         sample_config: &SampleConfig,
+        enabled_channels: u8,
     ) -> PicoResult<SampleConfig> {
+        let resolution = match enabled_channels {
+            1 => enPicoDeviceResolution_PICO_DR_16BIT,
+            2 => enPicoDeviceResolution_PICO_DR_15BIT,
+            _ => enPicoDeviceResolution_PICO_DR_14BIT,
+        };
+
+        let status = PicoStatus::from(unsafe {
+            self.bindings.ps5000aSetDeviceResolution(handle, resolution)
+        });
+
+        if status != PicoStatus::OK {
+            return status.to_result(SampleConfig::default(), "ps5000aSetDeviceResolution");
+        }
+
         let mut sample_interval = sample_config.interval;
 
         PicoStatus::from(unsafe {

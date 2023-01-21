@@ -59,10 +59,9 @@
 //! Opening and configuring a specific ps2000 device as a `PicoDevice`:
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
-//! use std::sync::Arc;
 //! use pico_sdk::prelude::*;
 //!
-//! let driver = Driver::PS2000.try_load()?;
+//! let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
 //! let device = PicoDevice::try_open(&driver, Some("ABC/123"))?;
 //! # Ok(())
 //! # }
@@ -146,7 +145,7 @@ pub mod prelude {
     pub use pico_device::PicoDevice;
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
-        kernel_driver, DriverLoadError, EnumerationResult, LoadDriverExt, PicoDriver, Resolution,
+        kernel_driver, DriverLoadError, EnumerationResult, LibraryResolution, PicoDriver,
     };
     pub use pico_enumeration::{
         DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,

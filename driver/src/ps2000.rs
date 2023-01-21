@@ -9,9 +9,9 @@ use pico_common::{
     PicoResult, PicoStatus, SampleConfig,
 };
 use pico_sys_dynamic::ps2000::PS2000Loader;
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
-type BufferMap = HashMap<PicoChannel, Arc<RwLock<Pin<Vec<i16>>>>>;
+type BufferMap = HashMap<PicoChannel, Arc<RwLock<Vec<i16>>>>;
 
 lazy_static! {
     /// We store buffers so the ps2000 emulates the same API as the other drivers
@@ -69,8 +69,7 @@ impl LockedCallbackRef {
                     .expect("Could not find buffers for this channel")
                     .write();
 
-                ch_buf[callback_ref.index..callback_ref.index + n_values]
-                    .copy_from_slice(&raw_data);
+                ch_buf[callback_ref.index..callback_ref.index + n_values].copy_from_slice(raw_data);
             };
 
             // ps2000 devices always have two channels so we just handle them manually
@@ -82,7 +81,7 @@ impl LockedCallbackRef {
                 copy_data(2, PicoChannel::B)
             }
 
-            callback_ref.index += n_values as usize;
+            callback_ref.index += n_values;
             *inner = Some(callback_ref);
         } else {
             panic!("Streaming callback was called without a device reference");
@@ -133,7 +132,7 @@ impl PS2000Driver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(&path.as_ref());
+        let dependencies = load_dependencies(path.as_ref());
         let bindings = unsafe { PS2000Loader::new(path)? };
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {
@@ -288,7 +287,7 @@ impl PicoDriver for PS2000Driver {
         // each variant. However we can attempt to set all the ranges and only
         // return those that succeed!
         Ok((1..=10)
-            .map(|r| -> PicoResult<PicoRange> {
+            .flat_map(|r| -> PicoResult<PicoRange> {
                 let range = PicoRange::from(r);
                 let config = ChannelConfig {
                     coupling: PicoCoupling::DC,
@@ -299,7 +298,6 @@ impl PicoDriver for PS2000Driver {
                 self.enable_channel(handle, channel, &config)?;
                 Ok(range)
             })
-            .flatten()
             .collect())
     }
 
@@ -338,7 +336,7 @@ impl PicoDriver for PS2000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Pin<Vec<i16>>>>,
+        buffer: Arc<RwLock<Vec<i16>>>,
         _buffer_len: usize,
     ) -> PicoResult<()> {
         let mut buffers = BUFFERS.lock();
@@ -362,6 +360,7 @@ impl PicoDriver for PS2000Driver {
         &self,
         handle: i16,
         sample_config: &SampleConfig,
+        _enabled_channels: u8,
     ) -> PicoResult<SampleConfig> {
         let status = PicoStatus::from(unsafe {
             self.bindings.ps2000_run_streaming_ns(

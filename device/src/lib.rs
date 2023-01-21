@@ -12,11 +12,11 @@
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! use pico_common::Driver;
-//! use pico_driver::LoadDriverExt;
+//! use pico_driver::LibraryResolution;
 //! use pico_device::PicoDevice;
 //!
 //! // Load the required driver
-//! let driver = Driver::PS2000.try_load()?;
+//! let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
 //!
 //! // Try and open the first available ps2000 device
 //! let device1 = PicoDevice::try_open(&driver, None)?;
@@ -77,11 +77,11 @@ impl PicoDevice {
     /// opened.
     /// ```no_run
     /// use pico_common::Driver;
-    /// use pico_driver::LoadDriverExt;
+    /// use pico_driver::LibraryResolution;
     /// use pico_device::PicoDevice;
     ///
     /// // Load the required driver with a specific resolution
-    /// let driver = Driver::PS2000.try_load().unwrap();
+    /// let driver = LibraryResolution::Default.try_load(Driver::PS2000).unwrap();
     /// let device1 = PicoDevice::try_open(&driver, Some("ABC/123")).unwrap();
     /// let device2 = PicoDevice::try_open(&driver, Some("ABC/987")).unwrap();
     ///
@@ -105,12 +105,10 @@ impl PicoDevice {
             .expect("Could not parse device variant for number of channels");
 
         let channel_ranges = (0..ch_count)
-            .map(|ch| -> PicoResult<(PicoChannel, Vec<_>)> {
+            .flat_map(|ch| -> PicoResult<(PicoChannel, Vec<_>)> {
                 let ch: PicoChannel = ch.into();
                 Ok((ch, driver.get_channel_ranges(handle, ch)?))
             })
-            // Some channels will error if they are disabled due to power limitations
-            .flatten()
             .collect();
 
         let max_adc_value = driver.maximum_value(handle)?;
