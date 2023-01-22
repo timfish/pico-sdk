@@ -63,6 +63,7 @@ pub mod ps5000a;
 pub mod ps6000;
 pub mod ps6000a;
 mod resolution;
+pub mod tc08;
 mod trampoline;
 
 /// Covers the various errors encountered when attempting to load drivers

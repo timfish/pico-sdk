@@ -837,3 +837,65 @@ impl PicoStatus {
         }
     }
 }
+
+/// Pico TC08 Error codes
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive)]
+pub enum TC08Error {
+    OK = 0,
+    OS_NOT_SUPPORTED = 1,
+    NO_CHANNELS_SET = 2,
+    INVALID_PARAMETER = 3,
+    VARIANT_NOT_SUPPORTED = 4,
+    INCORRECT_MODE = 5,
+    ENUMERATION_INCOMPLETE = 6,
+    NOT_RESPONDING = 7,
+    FW_FAIL = 8,
+    CONFIG_FAIL = 9,
+    NOT_FOUND = 10,
+    THREAD_FAIL = 11,
+    PIPE_INFO_FAIL = 12,
+    NOT_CALIBRATED = 13,
+    PICOPP_TOO_OLD = 14,
+    PICO_DRIVER_FUNCTION = 15,
+    COMMUNICATION = 16,
+}
+
+impl From<i16> for TC08Error {
+    fn from(value: i16) -> Self {
+        num_traits::FromPrimitive::from_i16(value)
+            .unwrap_or_else(|| panic!("Non-valid error code {}", value))
+    }
+}
+
+impl TC08Error {
+    pub fn to_status(&self) -> PicoStatus {
+        match self {
+            TC08Error::OK => PicoStatus::OK,
+            TC08Error::OS_NOT_SUPPORTED => PicoStatus::OS_NOT_SUPPORTED,
+            TC08Error::NO_CHANNELS_SET => PicoStatus::NO_CHANNELS_OR_PORTS_ENABLED,
+            TC08Error::INVALID_PARAMETER => PicoStatus::INVALID_PARAMETER,
+            TC08Error::VARIANT_NOT_SUPPORTED => PicoStatus::HARDWARE_VERSION_NOT_SUPPORTED,
+            TC08Error::INCORRECT_MODE => PicoStatus::NOT_USED_IN_THIS_CAPTURE_MODE,
+            TC08Error::ENUMERATION_INCOMPLETE => PicoStatus::OPEN_OPERATION_IN_PROGRESS,
+            TC08Error::NOT_RESPONDING => PicoStatus::NOT_RESPONDING,
+            TC08Error::FW_FAIL => PicoStatus::FW_FAIL,
+            TC08Error::CONFIG_FAIL => PicoStatus::CONFIG_FAIL,
+            TC08Error::NOT_FOUND => PicoStatus::NOT_FOUND,
+            TC08Error::THREAD_FAIL => PicoStatus::INTERNAL_ERROR,
+            TC08Error::PIPE_INFO_FAIL => PicoStatus::INTERNAL_ERROR,
+            TC08Error::NOT_CALIBRATED => PicoStatus::SHADOW_CAL_NOT_AVAILABLE,
+            TC08Error::PICOPP_TOO_OLD => PicoStatus::KERNEL_DRIVER_TOO_OLD,
+            TC08Error::PICO_DRIVER_FUNCTION => PicoStatus::DRIVER_FUNCTION,
+            TC08Error::COMMUNICATION => PicoStatus::DEVICE_NOT_FUNCTIONING,
+        }
+    }
+
+    /// Converts a `TC08Error` to a `PicoResult<T>` with context
+    pub fn to_result<T>(self, ok_val: T, context: &str) -> PicoResult<T> {
+        match self.to_status() {
+            PicoStatus::OK => Ok(ok_val),
+            x => Err(PicoError::from_status(x, context)),
+        }
+    }
+}

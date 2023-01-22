@@ -18,6 +18,7 @@ pub enum Driver {
     PS5000A,
     PS6000,
     PS6000A,
+    TC08,
     /// Only used to get the full dependency name on each platform
     PicoIPP,
     /// Only used to get the full dependency name on each platform
@@ -28,7 +29,12 @@ impl FromStr for Driver {
     type Err = ParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.to_uppercase().replace("PS", "").replace(' ', "");
+        let input = input
+            .to_uppercase()
+            .replace("PS", "")
+            .replace("USB", "")
+            .replace(' ', "")
+            .replace('-', "");
 
         match &input[..] {
             "2000" => Ok(Driver::PS2000),
@@ -39,6 +45,7 @@ impl FromStr for Driver {
             "5000A" => Ok(Driver::PS5000A),
             "6000" => Ok(Driver::PS6000),
             "6000A" => Ok(Driver::PS6000A),
+            "TC08" => Ok(Driver::TC08),
             _ => Err(ParseError),
         }
     }
@@ -46,7 +53,12 @@ impl FromStr for Driver {
 
 impl fmt::Display for Driver {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", format!("{:?}", self).to_lowercase())
+        let name = format!("{:?}", self).to_lowercase();
+
+        match self {
+            Driver::TC08 => write!(f, "usb{}", name),
+            _ => write!(f, "{}", name),
+        }
     }
 }
 
@@ -62,6 +74,7 @@ impl Driver {
             0x1019 | 0x1203 | 0x1217 | 0x1218 => Some(Driver::PS5000A),
             0x100E | 0x1204 => Some(Driver::PS6000),
             0x1215 | 0x1216 | 0x12A0 | 0x12A1 => Some(Driver::PS6000A),
+            0x1000 => Some(Driver::TC08),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None
