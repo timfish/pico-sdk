@@ -1,20 +1,16 @@
 use parking_lot::Mutex;
-use pico_common::PicoChannel;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Weak},
-};
+use std::sync::{Arc, Weak};
 
-pub trait NewDataHandler: Send + Sync {
-    fn handle_event(&self, value: &StreamingEvent);
+pub trait EventHandler<T>: Send + Sync {
+    fn handle_event(&self, value: &T);
 }
 
 #[derive(Clone)]
-pub struct EventsInner {
-    pub listeners: Vec<Weak<dyn NewDataHandler>>,
+pub struct EventsInner<T> {
+    pub listeners: Vec<Weak<dyn EventHandler<T>>>,
 }
 
-impl EventsInner {
+impl<T> EventsInner<T> {
     pub fn new() -> Self {
         EventsInner {
             listeners: Default::default(),
@@ -23,24 +19,24 @@ impl EventsInner {
 }
 
 #[derive(Clone)]
-pub struct StreamingEvents {
-    inner: Arc<Mutex<EventsInner>>,
+pub struct Events<T> {
+    inner: Arc<Mutex<EventsInner<T>>>,
 }
 
-impl StreamingEvents {
+impl<T> Events<T> {
     pub fn new() -> Self {
-        StreamingEvents {
+        Events {
             inner: Arc::new(Mutex::new(EventsInner::new())),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self, observer))]
-    pub fn subscribe(&self, observer: Arc<dyn NewDataHandler>) {
+    pub fn subscribe(&self, observer: Arc<dyn EventHandler<T>>) {
         self.inner.lock().listeners.push(Arc::downgrade(&observer));
     }
 
     #[tracing::instrument(level = "trace", skip(self, value))]
-    pub fn emit(&self, value: StreamingEvent) {
+    pub fn emit(&self, value: T) {
         for listener in self.inner.lock().listeners.iter() {
             if let Some(listener) = listener.upgrade() {
                 listener.handle_event(&value);
@@ -49,37 +45,8 @@ impl StreamingEvents {
     }
 }
 
-impl Default for StreamingEvents {
+impl<T> Default for Events<T> {
     fn default() -> Self {
-        StreamingEvents::new()
-    }
-}
-
-#[derive(Clone)]
-/// Events returned by the `PicoStreamingDevice`
-pub struct StreamingEvent {
-    pub length: usize,
-    pub samples_per_second: u32,
-    pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
-}
-
-#[derive(Clone)]
-/// A struct containing raw channel data and scaling factors to get scaled samples
-pub struct RawChannelDataBlock {
-    pub multiplier: f64,
-    pub samples: Vec<i16>,
-}
-
-impl RawChannelDataBlock {
-    pub fn scale_samples(&self) -> Vec<f64> {
-        self.samples
-            .iter()
-            .map(|v| *v as f64 * self.multiplier)
-            .collect()
-    }
-
-    #[inline(always)]
-    pub fn scale_sample(&self, index: usize) -> f64 {
-        self.samples[index] as f64 * self.multiplier
+        Events::new()
     }
 }

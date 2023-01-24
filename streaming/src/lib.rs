@@ -49,8 +49,8 @@
 //! ```
 
 use crossbeam::channel::{bounded, Sender};
-use events::StreamingEvents;
-pub use events::{NewDataHandler, RawChannelDataBlock, StreamingEvent};
+pub use events::EventHandler;
+use events::Events;
 use parking_lot::RwLock;
 use pico_common::{
     ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
@@ -153,7 +153,7 @@ pub struct PicoStreamingDevice {
     #[cfg_attr(feature = "serde", serde(skip))]
     background_handle: Option<Arc<BackgroundThreadHandle>>,
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub new_data: StreamingEvents,
+    pub new_data: Events<StreamingEvent>,
 }
 
 impl fmt::Debug for PicoStreamingDevice {
@@ -545,5 +545,34 @@ impl Drop for BackgroundThreadHandle {
         self.tx_terminate.send(()).unwrap();
 
         self.handle.take().unwrap().join().unwrap();
+    }
+}
+
+#[derive(Clone)]
+/// Events returned by the `PicoStreamingDevice`
+pub struct StreamingEvent {
+    pub length: usize,
+    pub samples_per_second: u32,
+    pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
+}
+
+#[derive(Clone)]
+/// A struct containing raw channel data and scaling factors to get scaled samples
+pub struct RawChannelDataBlock {
+    pub multiplier: f64,
+    pub samples: Vec<i16>,
+}
+
+impl RawChannelDataBlock {
+    pub fn scale_samples(&self) -> Vec<f64> {
+        self.samples
+            .iter()
+            .map(|v| *v as f64 * self.multiplier)
+            .collect()
+    }
+
+    #[inline(always)]
+    pub fn scale_sample(&self, index: usize) -> f64 {
+        self.samples[index] as f64 * self.multiplier
     }
 }

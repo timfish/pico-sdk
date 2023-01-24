@@ -150,7 +150,7 @@ pub mod prelude {
     pub use pico_enumeration::{
         DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,
     };
-    pub use pico_streaming::{NewDataHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
+    pub use pico_streaming::{EventHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
 }
 
 /// Common enums, structs and traits

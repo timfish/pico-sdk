@@ -1,40 +1,33 @@
 use pico_driver::tc08::{TC08Channel, TC08Driver, TCType};
 use pico_sdk::prelude::*;
 
-fn main() {
-    download_drivers_to_cache(&[Driver::TC08]).unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    download_drivers_to_cache(&[Driver::TC08])?;
+
     let path = cache_resolution().get_path(Driver::TC08);
-
-    let driver = TC08Driver::new(path).unwrap();
-
-    let version = driver.get_driver_version().unwrap();
+    let driver = TC08Driver::new(path)?;
+    let version = driver.get_driver_version()?;
 
     println!("Driver version: {}", version);
 
-    let handle = driver.open_unit().unwrap();
+    if let Some(handle) = driver.open_unit()? {
+        println!("{:?}", driver.get_unit_info(handle)?);
 
-    if let Some(handle) = handle {
-        let info = driver.get_unit_info(handle).unwrap();
+        driver.configure_channel(handle, TC08Channel::CHANNEL_CJC, Some(TCType::K))?;
 
-        println!("{:?}", info);
-
-        driver
-            .configure_channel(handle, TC08Channel::CHANNEL_CJC, Some(TCType::K))
-            .unwrap();
-
-        driver.start(handle, 100).unwrap();
+        driver.start(handle, 100)?;
 
         loop {
             std::thread::sleep(std::time::Duration::from_millis(10));
 
-            let (values, _) = driver
-                .get_values(handle, TC08Channel::CHANNEL_CJC, 100)
-                .unwrap();
+            let (values, _) = driver.get_values(handle, TC08Channel::CHANNEL_CJC, 100)?;
 
-            if values.len() > 0 {
+            if !values.is_empty() {
                 println!("{}", values[0]);
-                return;
+                break;
             }
         }
     }
+
+    Ok(())
 }

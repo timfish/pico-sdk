@@ -74,7 +74,7 @@ fn main() -> Result<()> {
     let streaming_device = device.into_streaming_device();
     let ch_units = configure_channels(&streaming_device);
     let samples_per_second = get_capture_rate();
-    let capture_stats: Arc<dyn NewDataHandler> = CaptureStats::new(ch_units);
+    let capture_stats: Arc<dyn EventHandler<StreamingEvent>> = CaptureStats::new(ch_units);
     streaming_device.new_data.subscribe(capture_stats.clone());
 
     println!("Press Enter to stop streaming");
@@ -268,7 +268,7 @@ impl CaptureStats {
     }
 }
 
-impl NewDataHandler for CaptureStats {
+impl EventHandler<StreamingEvent> for CaptureStats {
     #[tracing::instrument(level = "trace", skip(self, event))]
     fn handle_event(&self, event: &StreamingEvent) {
         let mut data: Vec<(PicoChannel, usize, f64, String)> = event
@@ -290,19 +290,16 @@ impl NewDataHandler for CaptureStats {
 
         println!(
             "{} @ {}",
-            format!("{}", style("Streaming").bold()),
-            format!(
-                "{}",
-                style(format!(
-                    "{}S/s",
-                    match metric::Signifix::try_from(self.rate_calc.get_value(event.length)) {
-                        Ok(v) => format!("{}", v),
-                        Err(metric::Error::OutOfLowerBound(_)) => "0".to_string(),
-                        _ => panic!("unknown error"),
-                    }
-                ))
-                .bold()
-            )
+            style("Streaming").bold(),
+            style(format!(
+                "{}S/s",
+                match metric::Signifix::try_from(self.rate_calc.get_value(event.length)) {
+                    Ok(v) => format!("{}", v),
+                    Err(metric::Error::OutOfLowerBound(_)) => "0".to_string(),
+                    _ => panic!("unknown error"),
+                }
+            ))
+            .bold()
         );
 
         for (ch, _, first, unit) in data {
@@ -316,8 +313,8 @@ impl NewDataHandler for CaptureStats {
 
             println!(
                 "  {} - {}",
-                format!("{}", ch_col.apply_to(ch).bold()),
-                format!("{}", style(format!("{} {}", value, unit)).bold())
+                ch_col.apply_to(ch).bold(),
+                style(format!("{} {}", value, unit)).bold()
             );
         }
     }

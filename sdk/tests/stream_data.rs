@@ -3,7 +3,7 @@ use pico_sdk::{
     common::{PicoChannel, PicoCoupling, PicoRange},
     download::{cache_resolution, download_drivers_to_cache},
     enumeration::{DeviceEnumerator, EnumResultHelpers},
-    streaming::{NewDataHandler, StreamingEvent, ToStreamDevice},
+    streaming::{EventHandler, StreamingEvent, ToStreamDevice},
 };
 use rayon::prelude::*;
 use std::{sync::Arc, time::Duration};
@@ -38,7 +38,7 @@ fn stream_data() {
             done_tx: Sender<()>,
         }
 
-        impl NewDataHandler for SenderEvent {
+        impl EventHandler<StreamingEvent> for SenderEvent {
             fn handle_event(&self, event: &StreamingEvent) {
                 assert!(event.channels.keys().len() == 2);
                 assert!(event.samples_per_second == 1000);
@@ -49,7 +49,7 @@ fn stream_data() {
             }
         }
 
-        let handler: Arc<dyn NewDataHandler> = Arc::new(SenderEvent { done_tx });
+        let handler: Arc<dyn EventHandler<StreamingEvent>> = Arc::new(SenderEvent { done_tx });
 
         stream_device.new_data.subscribe(handler.clone());
         stream_device.start(1000).unwrap();

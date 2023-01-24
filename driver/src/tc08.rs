@@ -3,7 +3,10 @@ use pico_common::{FromPicoStr, PicoError, PicoResult, PicoStatus, TC08Error};
 use pico_sys_dynamic::tc08::{
     TC08Loader, USBTC08Info, USBTC08_MAX_SERIAL_CHARS, USBTC08_MAX_VERSION_CHARS,
 };
-use std::mem::{size_of, MaybeUninit};
+use std::{
+    cmp::Ordering,
+    mem::{size_of, MaybeUninit},
+};
 
 /// Pico TC08 Error codes
 #[allow(non_camel_case_types)]
@@ -26,7 +29,7 @@ impl From<TC08Channel> for i16 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TCType {
     B,
     E,
@@ -126,15 +129,13 @@ impl TC08Driver {
     pub fn open_unit(&self) -> PicoResult<Option<i16>> {
         let result = unsafe { self.bindings.usb_tc08_open_unit() };
 
-        if result > 0 {
-            Ok(Some(result))
-        } else if result == 0 {
-            Ok(None)
-        } else {
-            Err(PicoError::from_status(
+        match result.cmp(&0) {
+            Ordering::Greater => Ok(Some(result)),
+            Ordering::Equal => Ok(None),
+            Ordering::Less => Err(PicoError::from_status(
                 self.get_last_error(result).to_status(),
                 "open_unit",
-            ))
+            )),
         }
     }
 
@@ -170,8 +171,8 @@ impl TC08Driver {
         tc_type: Option<TCType>,
     ) -> PicoResult<()> {
         let tc_type = tc_type
-            .map(|t| i8::from(t))
-            .unwrap_or(32 /* = ' ' = space character = disabled */);
+            .map(i8::from)
+            .unwrap_or(32 /* = ' ', space character. ie. channel disabled */);
         self.wrap_with_get_last_error(handle, || unsafe {
             self.bindings
                 .usb_tc08_set_channel(handle, channel.into(), tc_type)
