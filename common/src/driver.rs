@@ -33,8 +33,7 @@ impl FromStr for Driver {
             .to_uppercase()
             .replace("PS", "")
             .replace("USB", "")
-            .replace(' ', "")
-            .replace('-', "");
+            .replace([' ', '-'], "");
 
         match &input[..] {
             "2000" => Ok(Driver::PS2000),

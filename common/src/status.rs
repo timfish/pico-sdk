@@ -842,6 +842,7 @@ impl PicoStatus {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum TC08Error {
+    INVALID_HANDLE = -1,
     OK = 0,
     OS_NOT_SUPPORTED = 1,
     NO_CHANNELS_SET = 2,
@@ -871,6 +872,7 @@ impl From<i16> for TC08Error {
 impl TC08Error {
     pub fn to_status(&self) -> PicoStatus {
         match self {
+            TC08Error::INVALID_HANDLE => PicoStatus::INVALID_HANDLE,
             TC08Error::OK => PicoStatus::OK,
             TC08Error::OS_NOT_SUPPORTED => PicoStatus::OS_NOT_SUPPORTED,
             TC08Error::NO_CHANNELS_SET => PicoStatus::NO_CHANNELS_OR_PORTS_ENABLED,

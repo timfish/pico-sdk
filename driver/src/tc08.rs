@@ -6,11 +6,12 @@ use pico_sys_dynamic::tc08::{
 use std::{
     cmp::Ordering,
     mem::{size_of, MaybeUninit},
+    sync::Arc,
 };
 
 /// Pico TC08 Error codes
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, FromPrimitive, ToPrimitive)]
 pub enum TC08Channel {
     CHANNEL_CJC = 0,
     CHANNEL_1 = 1,
@@ -103,15 +104,16 @@ pub struct TC08Driver {
 }
 
 impl TC08Driver {
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    pub fn new<P>(path: P) -> Result<Arc<Self>, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        Ok(TC08Driver {
+        Ok(Arc::new(TC08Driver {
             bindings: unsafe { TC08Loader::new(path)? },
-        })
+        }))
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     fn get_last_error(&self, handle: i16) -> TC08Error {
         TC08Error::from(unsafe { self.bindings.usb_tc08_get_last_error(handle) })
     }
@@ -126,19 +128,51 @@ impl TC08Driver {
         }
     }
 
-    pub fn open_unit(&self) -> PicoResult<Option<i16>> {
+    fn open_unit_internal(&self) -> Result<i16, PicoStatus> {
         let result = unsafe { self.bindings.usb_tc08_open_unit() };
 
         match result.cmp(&0) {
-            Ordering::Greater => Ok(Some(result)),
-            Ordering::Equal => Ok(None),
-            Ordering::Less => Err(PicoError::from_status(
-                self.get_last_error(result).to_status(),
-                "open_unit",
-            )),
+            Ordering::Greater => Ok(result),
+            Ordering::Equal => Err(PicoStatus::NOT_FOUND),
+            Ordering::Less => Err(self.get_last_error(result).to_status()),
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub fn open_unit(&self, serial: Option<String>) -> PicoResult<i16> {
+        // We keep track of handles to close when we're finished
+        let mut handles_to_close = Vec::new();
+
+        loop {
+            match self.open_unit_internal() {
+                Ok(handle) => {
+                    if let Some(serial) = &serial {
+                        let info = self.get_unit_info(handle)?;
+                        if serial == &info.serial {
+                            for each in handles_to_close {
+                                let _ = self.close_unit(each);
+                            }
+
+                            return Ok(handle);
+                        } else {
+                            handles_to_close.push(handle);
+                        }
+                    } else {
+                        return Ok(handle);
+                    }
+                }
+                Err(e) => {
+                    for each in handles_to_close {
+                        let _ = self.close_unit(each);
+                    }
+
+                    return Err(PicoError::from_status(e, "open_unit"));
+                }
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<TC08UnitInfo> {
         let mut info: USBTC08Info = unsafe { MaybeUninit::zeroed().assume_init() };
         info.size = size_of::<USBTC08Info>() as i16;
@@ -148,10 +182,12 @@ impl TC08Driver {
         .to_result(info.into(), "get_unit_info")
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_driver_version(&self) -> PicoResult<String> {
         self.get_unit_info(0).map(|info| info.driver_version)
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_mains_rejection(&self, handle: i16, freq: MainsRejectionFreq) -> PicoResult<()> {
         let sixty_hertz = match freq {
             MainsRejectionFreq::_50Hz => 0,
@@ -164,6 +200,7 @@ impl TC08Driver {
         .to_result((), "set_mains_rejection")
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn configure_channel(
         &self,
         handle: i16,
@@ -180,6 +217,7 @@ impl TC08Driver {
         .to_result((), "configure_channel")
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn start(&self, handle: i16, interval_ms: i32) -> PicoResult<i32> {
         let result = unsafe { self.bindings.usb_tc08_run(handle, interval_ms) };
 
@@ -193,6 +231,7 @@ impl TC08Driver {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,
         handle: i16,
@@ -227,11 +266,13 @@ impl TC08Driver {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn stop(&self, handle: i16) -> PicoResult<()> {
         self.wrap_with_get_last_error(handle, || unsafe { self.bindings.usb_tc08_stop(handle) })
             .to_result((), "stop")
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
         self.wrap_with_get_last_error(handle, || unsafe {
             self.bindings.usb_tc08_close_unit(handle)
