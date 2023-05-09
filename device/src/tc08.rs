@@ -21,21 +21,27 @@ pub struct TC08Config {
 #[derive(Clone)]
 pub struct TC08Device {
     pub driver: Arc<TC08Driver>,
-    pub handle: i16,
     pub serial: String,
-    pub info: TC08Info,
+    pub info: Option<TC08Info>,
 }
 
 impl TC08Device {
+    pub fn new(driver: Arc<TC08Driver>, serial: String) -> PicoResult<Self> {
+        Ok(Self {
+            driver,
+            serial,
+            info: None,
+        })
+    }
+
     pub fn try_open(driver: Arc<TC08Driver>, serial: Option<String>) -> PicoResult<Self> {
         let handle = driver.open_unit(serial)?;
         let info = driver.get_unit_info(handle)?;
 
         Ok(Self {
             driver,
-            handle,
             serial: info.serial.clone(),
-            info,
+            info: Some(info),
         })
     }
 }

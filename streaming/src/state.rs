@@ -1,12 +1,40 @@
-use crate::{events::Events, BackgroundThreadHandle};
-use crossbeam::channel::{bounded, Receiver};
+use crate::events::Events;
+use crossbeam::channel::{bounded, Receiver, Sender};
 use parking_lot::RwLock;
 use pico_common::{PicoResult, PicoStatus};
-use std::{fmt, sync::Arc, thread, time::Duration};
+use std::{
+    fmt,
+    sync::Arc,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 use tracing::info;
 
 fn sleep(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
+}
+
+pub struct BackgroundThreadHandle {
+    tx_terminate: Sender<()>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl BackgroundThreadHandle {
+    pub fn new(tx_terminate: Sender<()>, handle: JoinHandle<()>) -> Arc<Self> {
+        Arc::new(BackgroundThreadHandle {
+            tx_terminate,
+            handle: Some(handle),
+        })
+    }
+}
+
+impl Drop for BackgroundThreadHandle {
+    #[tracing::instrument(skip(self), level = "debug")]
+    fn drop(&mut self) {
+        self.tx_terminate.send(()).unwrap();
+
+        self.handle.take().unwrap().join().unwrap();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -16,59 +44,66 @@ pub enum Target<C> {
     Streaming { config: C },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OpenInfo<I> {
-    pub handle: i16,
-    pub info: I,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum State<I> {
+#[derive(Debug, Clone, Eq)]
+pub enum State<O, S> {
     Closed,
-    Open(OpenInfo<I>),
-    Streaming(OpenInfo<I>),
+    Open(O),
+    Streaming(O, S),
 }
 
-impl<I> State<I>
+impl<O, S> PartialEq for State<O, S> {
+    fn eq(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Open(_), Self::Open(_))
+                | (Self::Streaming(_, _), Self::Streaming(_, _))
+                | (Self::Closed, Self::Closed)
+        )
+    }
+}
+
+impl<O, S> State<O, S>
 where
-    I: Clone,
+    O: Clone,
 {
-    pub fn get_info(&self) -> Option<I> {
+    pub fn get_info(&self) -> Option<O> {
         match self {
             State::Closed => None,
-            State::Open(open) => Some(open.info.clone()),
-            State::Streaming(open) => Some(open.info.clone()),
+            State::Open(open) => Some(open.clone()),
+            State::Streaming(open, _) => Some(open.clone()),
         }
     }
 }
 
-pub trait StreamDevice<E, C, I> {
+pub trait StreamDevice<E, C, O, S> {
     fn serial(&self) -> &str;
-    fn open(&self, serial: &str) -> State<I>;
-    fn ping(&self, info: &OpenInfo<I>) -> State<I>;
-    fn start(&self, info: &OpenInfo<I>, config: &mut C) -> PicoResult<State<I>>;
-    fn stream(&self, info: &OpenInfo<I>, config: &C, new_data: &Events<E>) -> State<I>;
-    fn stop(&self, info: &OpenInfo<I>) -> State<I>;
-    fn close(&self, info: &OpenInfo<I>) -> State<I>;
+    fn info(&self) -> Option<O>;
+    fn open(&self, serial: &str) -> State<O, S>;
+    fn ping(&self, info: &O) -> State<O, S>;
+    fn start(&self, info: &O, config: &C) -> PicoResult<State<O, S>>;
+    fn stream(&self, info: &O, config: &C, stream: &S, new_data: &Events<E>) -> State<O, S>;
+    fn stop(&self, info: &O) -> State<O, S>;
+    fn close(&self, info: &O) -> State<O, S>;
 }
 
-pub struct StreamingState<C, I> {
+pub struct StreamingState<C, O, S> {
     target: Target<C>,
-    current: State<I>,
+    current: State<O, S>,
 }
 
-impl<C, I> StreamingState<C, I>
+impl<C, O, S> StreamingState<C, O, S>
 where
     C: Clone,
-    I: PartialEq + fmt::Debug,
+    O: fmt::Debug,
+    S: fmt::Debug,
 {
-    pub fn new(current: State<I>, target: Target<C>) -> Arc<RwLock<Self>> {
+    pub fn new(current: State<O, S>, target: Target<C>) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self { current, target }))
     }
 
-    pub fn next_state<E>(
+    fn next_state<E>(
         &mut self,
-        device: &dyn StreamDevice<E, C, I>,
+        device: &dyn StreamDevice<E, C, O, S>,
         new_data: &Events<E>,
     ) -> PicoResult<()> {
         let next_state = match &self.current {
@@ -87,9 +122,9 @@ where
                 }
                 Target::Streaming { config } => device.start(info, config)?,
             },
-            State::Streaming(info) => match &self.target {
+            State::Streaming(info, stream) => match &self.target {
                 Target::Closed | Target::Open => device.stop(info),
-                Target::Streaming { config } => device.stream(info, config, new_data),
+                Target::Streaming { config } => device.stream(info, config, stream, new_data),
             },
         };
 
@@ -104,41 +139,37 @@ where
 }
 
 #[derive(Clone)]
-pub struct StreamingRunner<D, E, C, I>
+pub struct StreamingRunner<D, E, C, O, S>
 where
-    D: StreamDevice<E, C, I> + Send + Sync,
-    E: Clone + Send + Sync,
+    D: Clone + StreamDevice<E, C, O, S> + Send + Sync + 'static,
+    E: Clone + Send + Sync + 'static,
+    C: Clone + Send + Sync + 'static,
+    O: Clone + fmt::Debug + Send + Sync + 'static,
+    S: Clone + fmt::Debug + Send + Sync + 'static,
 {
     device: D,
-    state: Arc<RwLock<StreamingState<C, I>>>,
+    state: Arc<RwLock<StreamingState<C, O, S>>>,
     pub events: Events<E>,
     background_handle: Option<Arc<BackgroundThreadHandle>>,
 }
 
-impl<D, E, C, I> StreamingRunner<D, E, C, I>
+impl<D, E, C, O, S> StreamingRunner<D, E, C, O, S>
 where
-    D: Clone + StreamDevice<E, C, I> + Send + Sync + 'static,
+    D: Clone + StreamDevice<E, C, O, S> + Send + Sync + 'static,
     E: Clone + Send + Sync + 'static,
     C: Clone + Send + Sync + 'static,
-    I: Clone + fmt::Debug + Send + Sync + PartialEq + 'static,
+    O: Clone + fmt::Debug + Send + Sync + 'static,
+    S: Clone + fmt::Debug + Send + Sync + 'static,
 {
     pub fn new(device: D) -> Self {
-        let mut runner = StreamingRunner {
-            state: StreamingState::new(State::Closed, Target::Closed),
-            device,
-            events: Events::new(),
-            background_handle: None,
+        let state = match device.info() {
+            Some(info) => StreamingState::new(State::Open(info), Target::Open),
+            None => StreamingState::new(State::Closed, Target::Open),
         };
 
-        runner.start_background_thread();
-
-        runner
-    }
-
-    pub fn new_open(handle: i16, info: I, device: D) -> Self {
         let mut runner = StreamingRunner {
-            state: StreamingState::new(State::Open(OpenInfo { handle, info }), Target::Open),
             device,
+            state,
             events: Events::new(),
             background_handle: None,
         };
@@ -157,7 +188,7 @@ where
         loop {
             state.next_state(&self.device, &self.events)?;
 
-            if let State::Streaming(_) = state.current {
+            if let State::Streaming(_, _) = state.current {
                 return Ok(());
             }
 
@@ -169,11 +200,11 @@ where
         }
     }
 
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         self.state.write().target = Target::Open;
     }
 
-    pub fn close(&mut self) {
+    pub fn close(&self) {
         self.state.write().target = Target::Closed;
     }
 
@@ -184,7 +215,7 @@ where
         }
     }
 
-    pub fn get_info(&self) -> Option<I> {
+    pub fn get_info(&self) -> Option<O> {
         self.state.read().current.get_info()
     }
 
@@ -203,7 +234,7 @@ where
         self.background_handle = Some(BackgroundThreadHandle::new(tx_terminate, handle));
     }
 
-    fn background_thread(this: StreamingRunner<D, E, C, I>, rx_terminate: Receiver<()>) {
+    fn background_thread(this: StreamingRunner<D, E, C, O, S>, rx_terminate: Receiver<()>) {
         let mut wait_for_closed = false;
 
         loop {
@@ -223,10 +254,13 @@ where
     }
 }
 
-pub trait IntoStreamingDevice<D, E, C, I>
+pub trait IntoStreamingDevice<D, E, C, O, S>
 where
-    D: StreamDevice<E, C, I> + Send + Sync,
-    E: Clone + Send + Sync,
+    D: Clone + StreamDevice<E, C, O, S> + Send + Sync + 'static,
+    E: Clone + Send + Sync + 'static,
+    C: Clone + Send + Sync + 'static,
+    O: Clone + fmt::Debug + Send + Sync + 'static,
+    S: Clone + fmt::Debug + Send + Sync + 'static,
 {
-    fn into_streaming_device(self) -> StreamingRunner<D, E, C, I>;
+    fn into_streaming_device(self) -> StreamingRunner<D, E, C, O, S>;
 }

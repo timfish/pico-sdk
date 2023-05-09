@@ -24,7 +24,7 @@
 //!  - ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
 //!     Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
 //!  - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
-//!     Implements continuous gap-less streaming on top of `PicoDevice`.
+//!     Implements continuous gap-less streaming on top of `ScopeDevice`.
 //!
 //! # Prerequisites
 //! On linux `pico-enumeration` [requires
@@ -56,13 +56,13 @@
 //!
 //!
 //! # Usage Examples
-//! Opening and configuring a specific ps2000 device as a `PicoDevice`:
+//! Opening and configuring a specific ps2000 device as a `ScopeDevice`:
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! use pico_sdk::prelude::*;
 //!
 //! let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
-//! let device = PicoDevice::try_open(&driver, Some("ABC/123"))?;
+//! let device = ScopeDevice::try_open(&driver, Some("ABC/123"))?;
 //! # Ok(())
 //! # }
 //! ```
@@ -142,7 +142,7 @@ pub mod prelude {
         ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
         PicoStatus,
     };
-    pub use pico_device::PicoDevice;
+    pub use pico_device::{scope::*, tc08::*};
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
         kernel_driver, DriverLoadError, EnumerationResult, LibraryResolution, PicoDriver,
@@ -150,7 +150,7 @@ pub mod prelude {
     pub use pico_enumeration::{
         DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,
     };
-    pub use pico_streaming::{EventHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
+    pub use pico_streaming::{IntoStreamingDevice, ScopeStreamingEvent};
 }
 
 /// Common enums, structs and traits
@@ -183,7 +183,7 @@ pub mod enumeration {
     pub use pico_enumeration::*;
 }
 
-/// Implements gap-less streaming on top of `PicoDevice`
+/// Implements gap-less streaming on top of `ScopeDevice`
 pub mod streaming {
     pub use pico_streaming::*;
 }

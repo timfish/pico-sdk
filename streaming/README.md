@@ -12,7 +12,7 @@ each enabled channel that can easily be scaled to the channel units (ie. Volts, 
 
 ## Example
 ```rust
-// Get a streaming device from a PicoDevice
+// Get a streaming device from a ScopeDevice
 let stream_device = device.into_streaming_device();
 
 // Enable and configure 2 channels

@@ -3,7 +3,7 @@ use std::{ffi::CString, str};
 /// Pico drivers require strings as *mut i8. This converts from Rust
 /// to Pico string format
 pub trait ToPicoStr {
-    /// Converts Rust strings to Pico null terminated Vec<i8> format
+    /// Converts Rust strings to Pico null terminated `Vec<i8>` format
     fn into_pico_i8_string(self) -> Vec<i8>;
 }
 

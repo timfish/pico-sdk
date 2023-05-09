@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use console::{style, Style, Term};
 use dialoguer::{theme::ColorfulTheme, Select};
 use pico_sdk::prelude::*;
+use pico_streaming::EventHandler;
 use signifix::metric;
 use std::{
     collections::{HashMap, VecDeque},
@@ -71,14 +72,20 @@ fn main() -> Result<()> {
 
     let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
     let device = select_device(&enumerator)?;
+
+    let info = device.info.clone().expect("Device should be open");
+
     let streaming_device = device.into_streaming_device();
-    let ch_units = configure_channels(&streaming_device);
-    let samples_per_second = get_capture_rate();
-    let capture_stats: Arc<dyn EventHandler<StreamingEvent>> = CaptureStats::new(ch_units);
-    streaming_device.new_data.subscribe(&capture_stats);
+    let mut config = ScopeConfig::default();
+
+    let ch_units = configure_channels(&info, &mut config);
+    config.samples_per_second = get_capture_rate();
+
+    let capture_stats: Arc<dyn EventHandler<ScopeStreamingEvent>> = CaptureStats::new(ch_units);
+    streaming_device.events.subscribe(&capture_stats);
 
     println!("Press Enter to stop streaming");
-    streaming_device.start(samples_per_second).unwrap();
+    streaming_device.start(config).unwrap();
 
     Term::stdout().read_line().unwrap();
 
@@ -87,7 +94,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn select_device(enumerator: &DeviceEnumerator) -> Result<PicoDevice> {
+fn select_device(enumerator: &DeviceEnumerator) -> Result<ScopeDevice> {
     loop {
         println!("Searching for devices...",);
 
@@ -147,18 +154,12 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<PicoDevice> {
     }
 }
 
-fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, String> {
+fn configure_channels(info: &ScopeInfo, config: &mut ScopeConfig) -> HashMap<PicoChannel, String> {
     loop {
-        let mut channels = device
+        let mut channels = info
             .get_channels()
             .iter()
-            .map(|c| {
-                (
-                    *c,
-                    device.get_valid_ranges(*c),
-                    device.get_channel_config(*c),
-                )
-            })
+            .map(|c| (*c, info.valid_channel_ranges.get(c), config.channels.get(c)))
             .collect::<Vec<_>>();
 
         channels.sort_by(|(a, _, _), (b, _, _)| a.cmp(b));
@@ -213,7 +214,7 @@ fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, Stri
                 .collect();
         }
 
-        let (edit_channel, ranges, _) = channels[ch_selection].clone();
+        let (edit_channel, ranges, _) = channels[ch_selection];
 
         if let Some(ranges) = ranges {
             if ranges.is_empty() {
@@ -225,10 +226,10 @@ fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, Stri
                 continue;
             }
 
-            if let Some(range) = select_range(&ranges) {
-                device.enable_channel(edit_channel, range, PicoCoupling::DC);
+            if let Some(range) = select_range(ranges) {
+                config.enable_channel(edit_channel, range, PicoCoupling::DC);
             } else {
-                device.disable_channel(edit_channel);
+                config.disable_channel(edit_channel);
             }
         } else {
             println!(
@@ -268,9 +269,9 @@ impl CaptureStats {
     }
 }
 
-impl EventHandler<StreamingEvent> for CaptureStats {
+impl EventHandler<ScopeStreamingEvent> for CaptureStats {
     #[tracing::instrument(level = "trace", skip(self, event))]
-    fn new_data(&self, event: &StreamingEvent) {
+    fn new_data(&self, event: &ScopeStreamingEvent) {
         let mut data: Vec<(PicoChannel, usize, f64, String)> = event
             .channels
             .iter()

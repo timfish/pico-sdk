@@ -1,9 +1,10 @@
 use crossbeam::channel::{unbounded, RecvTimeoutError, Sender};
+use pico_device::scope::ScopeConfig;
 use pico_sdk::{
     common::{PicoChannel, PicoCoupling, PicoRange},
     download::{cache_resolution, download_drivers_to_cache},
     enumeration::{DeviceEnumerator, EnumResultHelpers},
-    streaming::{EventHandler, StreamingEvent, ToStreamDevice},
+    streaming::{EventHandler, IntoStreamingDevice, ScopeStreamingEvent},
 };
 use rayon::prelude::*;
 use std::{sync::Arc, time::Duration};
@@ -29,8 +30,6 @@ fn stream_data() {
         let device = device.unwrap().open().unwrap();
 
         let stream_device = device.into_streaming_device();
-        stream_device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-        stream_device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
 
         let (done_tx, done_rx) = unbounded();
 
@@ -38,8 +37,8 @@ fn stream_data() {
             done_tx: Sender<()>,
         }
 
-        impl EventHandler<StreamingEvent> for SenderEvent {
-            fn new_data(&self, event: &StreamingEvent) {
+        impl EventHandler<ScopeStreamingEvent> for SenderEvent {
+            fn new_data(&self, event: &ScopeStreamingEvent) {
                 assert!(event.channels.keys().len() == 2);
                 assert!(event.samples_per_second == 1000);
 
@@ -49,10 +48,16 @@ fn stream_data() {
             }
         }
 
-        let handler: Arc<dyn EventHandler<StreamingEvent>> = Arc::new(SenderEvent { done_tx });
+        let handler: Arc<dyn EventHandler<ScopeStreamingEvent>> = Arc::new(SenderEvent { done_tx });
 
-        stream_device.new_data.subscribe(&handler);
-        stream_device.start(1000).unwrap();
+        stream_device.events.subscribe(&handler);
+
+        let mut config = ScopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
+        config.set_sample_rate(1_000);
+
+        stream_device.start(config).unwrap();
 
         if let Err(RecvTimeoutError::Timeout) = done_rx.recv_timeout(Duration::from_secs(10)) {
             panic!("Test took too long");

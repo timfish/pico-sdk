@@ -13,7 +13,7 @@ pub use helpers::EnumResultHelpers;
 use parking_lot::RwLock;
 use pico_common::PicoError;
 use pico_common::{Driver, PicoResult};
-use pico_device::PicoDevice;
+use pico_device::scope::ScopeDevice;
 use pico_driver::{kernel_driver, ArcDriver, DriverLoadError, LibraryResolution};
 use rayon::prelude::*;
 use std::{collections::HashMap, sync::Arc};
@@ -43,8 +43,8 @@ impl EnumeratedDevice {
     }
 
     /// Opens the device
-    pub fn open(&self) -> PicoResult<PicoDevice> {
-        PicoDevice::try_open(&self.driver, Some(&self.serial))
+    pub fn open(&self) -> PicoResult<ScopeDevice> {
+        ScopeDevice::try_open(&self.driver, Some(&self.serial))
     }
 }
 
@@ -93,7 +93,7 @@ impl EnumerationError {
     }
 }
 
-/// Enumerates `PicoDevice`'s
+/// Enumerates `ScopeDevice`'s
 ///
 /// Discovers Pico devices by USB Vendor ID, handles loading the required Pico
 /// drivers and enumerates them in parallel.

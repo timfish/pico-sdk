@@ -6,9 +6,9 @@ mod streaming_tests {
         ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResult,
         SampleConfig,
     };
-    use pico_device::PicoDevice;
+    use pico_device::scope::{ScopeConfig, ScopeDevice};
     use pico_driver::{ArcDriver, DriverLoadError, EnumerationResult, PicoDriver};
-    use pico_streaming::ToStreamDevice;
+    use pico_streaming::IntoStreamingDevice;
     use std::{sync::Arc, thread, time::Duration};
 
     mock! {
@@ -93,12 +93,14 @@ mod streaming_tests {
             .return_const(Ok(SampleConfig::default()));
 
         let driver: ArcDriver = Arc::new(mock);
-        let device = PicoDevice::try_open(&driver, None).unwrap();
+        let device = ScopeDevice::try_open(&driver, None).unwrap();
         let streaming = device.into_streaming_device();
 
-        streaming.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        let mut config = ScopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000);
 
-        streaming.start(100_000).unwrap();
+        streaming.start(config).unwrap();
 
         // Ensure that clone + drop doesn't cause any unexpected behaviour
         {

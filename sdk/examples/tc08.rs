@@ -2,7 +2,7 @@ use console::Term;
 use pico_device::tc08::{TC08Config, TC08Device};
 use pico_driver::tc08::{TC08Driver, TCType};
 use pico_sdk::prelude::*;
-use pico_streaming::{state::IntoStreamingDevice, tc08::TC08StreamingEvent};
+use pico_streaming::{EventHandler, IntoStreamingDevice, TC08StreamingEvent};
 use std::sync::Arc;
 
 struct PrintData;

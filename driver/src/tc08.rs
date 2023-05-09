@@ -61,14 +61,15 @@ pub enum MainsRejectionFreq {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TC08Info {
+    pub handle: i16,
     pub serial: String,
     pub driver_version: String,
     pub hardware_version: i16,
     pub variant: i16,
 }
 
-impl From<USBTC08Info> for TC08Info {
-    fn from(value: USBTC08Info) -> Self {
+impl TC08Info {
+    fn from(handle: i16, value: USBTC08Info) -> Self {
         let serial = value
             .szSerial
             .from_pico_i8_string(USBTC08_MAX_SERIAL_CHARS as usize);
@@ -81,6 +82,7 @@ impl From<USBTC08Info> for TC08Info {
         let variant = value.Variant;
 
         TC08Info {
+            handle,
             serial,
             hardware_version,
             variant,
@@ -169,7 +171,7 @@ impl TC08Driver {
         self.wrap_with_get_last_error(handle, || unsafe {
             self.bindings.usb_tc08_get_unit_info(handle, &mut info)
         })
-        .to_result(info.into(), "get_unit_info")
+        .to_result(TC08Info::from(handle, info), "get_unit_info")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

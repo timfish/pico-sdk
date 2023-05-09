@@ -24,7 +24,7 @@ numerous Pico drivers.
  - ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
     Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
  - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
-    Implements continuous gap-less streaming on top of `PicoDevice`.
+    Implements continuous gap-less streaming on top of `ScopeDevice`.
 
 ## Prerequisites
 On linux `pico-enumeration` [requires
@@ -56,12 +56,12 @@ Loads the specified driver and attempts open the optionally specified device ser
 
 
 ## Usage Examples
-Opening and configuring a specific ps2000 device as a `PicoDevice`:
+Opening and configuring a specific ps2000 device as a `ScopeDevice`:
 ```rust
 use pico_sdk::prelude::*;
 
 let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
-let device = PicoDevice::try_open(&driver, Some("ABC/123"))?;
+let device = ScopeDevice::try_open(&driver, Some("ABC/123"))?;
 ```
 
 Enumerate all required Pico oscilloscope drivers, configure the first device that's returned and stream
