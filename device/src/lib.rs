@@ -28,6 +28,8 @@
 //! # }
 //! ```
 
+pub mod tc08;
+
 use parking_lot::Mutex;
 use pico_common::{PicoChannel, PicoInfo, PicoRange, PicoResult};
 use pico_driver::{ArcDriver, PicoDriver};

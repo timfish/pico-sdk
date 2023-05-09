@@ -199,7 +199,7 @@ impl PicoStreamingDevice {
             device,
             target_state: LockedTarget::new(target_state),
             current_state: Arc::new(RwLock::new(current_state)),
-            new_data: Default::default(),
+            new_data: Events::new(),
             enabled_channels: Default::default(),
             background_handle: Default::default(),
         };
@@ -464,7 +464,7 @@ impl PicoStreamingDevice {
                 })
                 .collect::<HashMap<_, _>>();
 
-            self.new_data.emit(StreamingEvent {
+            self.new_data.new_data(StreamingEvent {
                 samples_per_second: actual_sample_rate,
                 length: sample_count,
                 channels,

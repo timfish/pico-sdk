@@ -2,10 +2,10 @@ use parking_lot::Mutex;
 use std::sync::{Arc, Weak};
 
 pub trait EventHandler<T>: Send + Sync {
-    fn handle_event(&self, value: &T);
+    fn new_data(&self, value: &T);
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct EventsInner<T> {
     pub listeners: Vec<Weak<dyn EventHandler<T>>>,
 }
@@ -18,7 +18,7 @@ impl<T> EventsInner<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Events<T> {
     inner: Arc<Mutex<EventsInner<T>>>,
 }
@@ -31,22 +31,19 @@ impl<T> Events<T> {
     }
 
     #[tracing::instrument(level = "trace", skip(self, observer))]
-    pub fn subscribe(&self, observer: Arc<dyn EventHandler<T>>) {
-        self.inner.lock().listeners.push(Arc::downgrade(&observer));
+    pub fn subscribe(&self, observer: &Arc<dyn EventHandler<T>>) {
+        self.inner
+            .lock()
+            .listeners
+            .push(Arc::downgrade(&observer.clone()));
     }
 
     #[tracing::instrument(level = "trace", skip(self, value))]
-    pub fn emit(&self, value: T) {
+    pub fn new_data(&self, value: T) {
         for listener in self.inner.lock().listeners.iter() {
             if let Some(listener) = listener.upgrade() {
-                listener.handle_event(&value);
+                listener.new_data(&value);
             }
         }
-    }
-}
-
-impl<T> Default for Events<T> {
-    fn default() -> Self {
-        Events::new()
     }
 }

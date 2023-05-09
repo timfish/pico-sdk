@@ -39,7 +39,7 @@ fn stream_data() {
         }
 
         impl EventHandler<StreamingEvent> for SenderEvent {
-            fn handle_event(&self, event: &StreamingEvent) {
+            fn new_data(&self, event: &StreamingEvent) {
                 assert!(event.channels.keys().len() == 2);
                 assert!(event.samples_per_second == 1000);
 
@@ -51,7 +51,7 @@ fn stream_data() {
 
         let handler: Arc<dyn EventHandler<StreamingEvent>> = Arc::new(SenderEvent { done_tx });
 
-        stream_device.new_data.subscribe(handler.clone());
+        stream_device.new_data.subscribe(&handler);
         stream_device.start(1000).unwrap();
 
         if let Err(RecvTimeoutError::Timeout) = done_rx.recv_timeout(Duration::from_secs(10)) {

@@ -75,7 +75,7 @@ fn main() -> Result<()> {
     let ch_units = configure_channels(&streaming_device);
     let samples_per_second = get_capture_rate();
     let capture_stats: Arc<dyn EventHandler<StreamingEvent>> = CaptureStats::new(ch_units);
-    streaming_device.new_data.subscribe(capture_stats.clone());
+    streaming_device.new_data.subscribe(&capture_stats);
 
     println!("Press Enter to stop streaming");
     streaming_device.start(samples_per_second).unwrap();
@@ -270,7 +270,7 @@ impl CaptureStats {
 
 impl EventHandler<StreamingEvent> for CaptureStats {
     #[tracing::instrument(level = "trace", skip(self, event))]
-    fn handle_event(&self, event: &StreamingEvent) {
+    fn new_data(&self, event: &StreamingEvent) {
         let mut data: Vec<(PicoChannel, usize, f64, String)> = event
             .channels
             .iter()

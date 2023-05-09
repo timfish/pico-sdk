@@ -89,9 +89,10 @@ mod channel_tests {
 
 /// Pico coupling options
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, Default)]
 pub enum PicoCoupling {
     AC = 0,
+    #[default]
     DC = 1,
 }
 
@@ -112,12 +113,6 @@ impl FromStr for PicoCoupling {
 impl fmt::Display for PicoCoupling {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-impl Default for PicoCoupling {
-    fn default() -> Self {
-        PicoCoupling::DC
     }
 }
 

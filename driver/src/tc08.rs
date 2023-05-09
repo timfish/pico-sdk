@@ -30,22 +30,17 @@ impl From<TC08Channel> for i16 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum TCType {
     B,
     E,
     J,
+    #[default]
     K,
     N,
     R,
     S,
     T,
-}
-
-impl Default for TCType {
-    fn default() -> Self {
-        TCType::K
-    }
 }
 
 impl From<TCType> for i8 {
@@ -57,27 +52,22 @@ impl From<TCType> for i8 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum MainsRejectionFreq {
+    #[default]
     _50Hz,
     _60Hz,
 }
 
-impl Default for MainsRejectionFreq {
-    fn default() -> Self {
-        MainsRejectionFreq::_50Hz
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TC08UnitInfo {
+#[derive(Debug, Clone, PartialEq)]
+pub struct TC08Info {
     pub serial: String,
     pub driver_version: String,
     pub hardware_version: i16,
     pub variant: i16,
 }
 
-impl From<USBTC08Info> for TC08UnitInfo {
+impl From<USBTC08Info> for TC08Info {
     fn from(value: USBTC08Info) -> Self {
         let serial = value
             .szSerial
@@ -90,7 +80,7 @@ impl From<USBTC08Info> for TC08UnitInfo {
         let hardware_version = value.HardwareVersion;
         let variant = value.Variant;
 
-        TC08UnitInfo {
+        TC08Info {
             serial,
             hardware_version,
             variant,
@@ -173,7 +163,7 @@ impl TC08Driver {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    pub fn get_unit_info(&self, handle: i16) -> PicoResult<TC08UnitInfo> {
+    pub fn get_unit_info(&self, handle: i16) -> PicoResult<TC08Info> {
         let mut info: USBTC08Info = unsafe { MaybeUninit::zeroed().assume_init() };
         info.size = size_of::<USBTC08Info>() as i16;
         self.wrap_with_get_last_error(handle, || unsafe {

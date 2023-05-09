@@ -5,9 +5,10 @@ use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf, sync::Arc};
 
 /// Instructs the loader where to load drivers from
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub enum LibraryResolution {
     /// Searches for drivers using the OS default path resolution
+    #[default]
     Default,
     /// Searches for drivers in the application root directory
     AppRoot,
@@ -47,11 +48,5 @@ impl LibraryResolution {
                 panic!("{driver} is a library used by Pico drivers and cannot be loaded directly",)
             }
         })
-    }
-}
-
-impl Default for LibraryResolution {
-    fn default() -> Self {
-        LibraryResolution::Default
     }
 }
