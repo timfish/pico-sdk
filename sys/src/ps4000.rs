@@ -397,7 +397,7 @@ pub struct __va_list_tag {
 }
 
 extern crate libloading;
-pub struct PS4000Loader {
+pub struct PS4000Bindings {
     __library: ::libloading::Library,
     pub ps4000ApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps4000OpenUnit:
@@ -925,7 +925,7 @@ pub struct PS4000Loader {
         ::libloading::Error,
     >,
 }
-impl PS4000Loader {
+impl PS4000Bindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -1045,7 +1045,7 @@ impl PS4000Loader {
             .get(b"ps4000TriggerWithinPreTriggerSamples\0")
             .map(|sym| *sym);
         let ps4000GetNoOfCaptures = __library.get(b"ps4000GetNoOfCaptures\0").map(|sym| *sym);
-        Ok(PS4000Loader {
+        Ok(PS4000Bindings {
             __library,
             ps4000ApplyFix,
             ps4000OpenUnit,

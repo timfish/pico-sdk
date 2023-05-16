@@ -12,28 +12,28 @@ either a few function arguments or a vastly differing API.
 `PS2000Driver`, `PS2000ADriver`, `PS3000ADriver`, `PS4000Driver`,
 `PS4000ADriver`, `PS5000ADriver`, `PS6000Driver` and `PS6000ADriver` wrap
 their corresponding loaders and expose a safe, common API by implementing
-the `PicoDriver` trait. These can be constructed with a `Resolution` which tells the wrapper where
+the `OscilloscopeDriver` trait. These can be constructed with a `Resolution` which tells the wrapper where
 to resolve the dynamic library from.
 
 ## Examples
 Using the raw safe bindings to open and configure the first available device:
 ```rust
-use pico_common::{ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange};
-use pico_driver::LibraryResolution;
+use pico_common::{OscilloscopeChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange};
+use pico_driver::{LibraryResolution, oscilloscope::{self, OscilloscopeDriver}};
 
 // Load the ps2000 driver library with the default resolution
-let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
+let driver = oscilloscope::PS2000Driver::load(&LibraryResolution::Default)?;
 // Load the ps4000a driver library from the applications root directory
-let driver = LibraryResolution::AppRoot.try_load(Driver::PS4000A)?;
+let driver = oscilloscope::PS4000ADriver::load(&LibraryResolution::AppRoot)?;
 
 // Open the first device
 let handle = driver.open_unit(None)?;
 let variant = driver.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
 
-let ch_config = ChannelConfig {
+let ch_config = OscilloscopeChannelConfig {
     coupling: PicoCoupling::DC,
     range: PicoRange::X1_PROBE_2V,
-    offset: 0.0
+    offset: None,
 };
 
 driver.enable_channel(handle, PicoChannel::A, &ch_config)?;

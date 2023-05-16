@@ -1,5 +1,4 @@
-use pico_driver::LibraryResolution;
-use pico_sdk::common::Driver;
+use pico_sdk::prelude::*;
 use std::{env, str::FromStr};
 
 fn main() {
@@ -12,10 +11,18 @@ fn main() {
     )
     .expect("Could not parse first argument as driver type (ie. should be similar to '4000a'");
 
-    let driver = LibraryResolution::default()
-        .try_load(driver_type)
+    let serial = args.next();
+
+    let driver = driver_type
+        .load(&LibraryResolution::default())
         .unwrap_or_else(|e| panic!("Failed to load {} driver: {}", driver_type, e));
 
-    let serial = args.next();
-    let _handle = driver.open_unit(serial.as_deref()).unwrap();
+    match driver {
+        PicoDriver::Oscilloscope(driver) => {
+            let _handle = driver.open_unit(serial.as_deref()).unwrap();
+        }
+        PicoDriver::TC08(driver) => {
+            let _handle = driver.open_unit(serial.as_deref()).unwrap();
+        }
+    }
 }

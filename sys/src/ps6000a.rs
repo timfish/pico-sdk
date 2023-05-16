@@ -791,7 +791,7 @@ pub type ps6000aProbeInteractions = ::std::option::Option<
 >;
 
 extern crate libloading;
-pub struct PS6000ALoader {
+pub struct PS6000ABindings {
     __library: ::libloading::Library,
     pub ps6000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps6000aOpenUnit: Result<
@@ -1390,7 +1390,7 @@ pub struct PS6000ALoader {
         ::libloading::Error,
     >,
 }
-impl PS6000ALoader {
+impl PS6000ABindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -1545,7 +1545,7 @@ impl PS6000ALoader {
         let ps6000aReportAllChannelsOvervoltageTripStatus = __library
             .get(b"ps6000aReportAllChannelsOvervoltageTripStatus\0")
             .map(|sym| *sym);
-        Ok(PS6000ALoader {
+        Ok(PS6000ABindings {
             __library,
             ps6000aApplyFix,
             ps6000aOpenUnit,

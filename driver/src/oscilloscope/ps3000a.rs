@@ -1,45 +1,44 @@
-use crate::{
+use super::{
+    super::LibraryResolution,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, PicoDriver,
+    EnumerationResult, OscilloscopeDriver,
 };
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, SampleConfig, ToPicoStr,
+    DownsampleMode, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
 };
-use pico_sys_dynamic::ps4000::PS4000Loader;
+use pico_sys_dynamic::ps3000a::PS3000ABindings;
 use std::sync::Arc;
 
-pub struct PS4000Driver {
+pub struct PS3000ADriver {
     _dependencies: LoadedDependencies,
-    bindings: PS4000Loader,
+    bindings: PS3000ABindings,
 }
 
-impl std::fmt::Debug for PS4000Driver {
+impl std::fmt::Debug for PS3000ADriver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PS4000Driver").finish()
+        f.debug_struct("PS3000ADriver").finish()
     }
 }
 
-impl PS4000Driver {
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
-    where
-        P: AsRef<::std::ffi::OsStr>,
-    {
-        let dependencies = load_dependencies(path.as_ref());
-        let bindings = unsafe { PS4000Loader::new(path)? };
+impl PS3000ADriver {
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+        let path = resolution.get_path(Driver::PS3000A);
+        let dependencies = load_dependencies(&path);
+        let bindings = unsafe { PS3000ABindings::new(path)? };
         // Disables the splash screen on Windows
-        unsafe { bindings.ps4000ApplyFix(0x1ced9168, 0x11e6) };
-        Ok(PS4000Driver {
+        unsafe { bindings.ps3000aApplyFix(0x1ced9168, 0x11e6) };
+        Ok(PS3000ADriver {
             bindings,
             _dependencies: dependencies,
         })
     }
 }
 
-impl PicoDriver for PS4000Driver {
+impl OscilloscopeDriver for PS3000ADriver {
     fn get_driver(&self) -> Driver {
         Driver::PS3000A
     }
@@ -66,7 +65,7 @@ impl PicoDriver for PS4000Driver {
         let mut serial_buf_len = serial_buf.len() as i16;
 
         let status = PicoStatus::from(unsafe {
-            self.bindings.ps4000EnumerateUnits(
+            self.bindings.ps3000aEnumerateUnits(
                 &mut device_count,
                 serial_buf.as_mut_ptr(),
                 &mut serial_buf_len,
@@ -80,21 +79,32 @@ impl PicoDriver for PS4000Driver {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self), ret)]
     fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         let serial = serial.map(|s| s.into_pico_i8_string());
 
         let mut handle = -1i16;
-        let status = PicoStatus::from(unsafe {
+        let mut status = PicoStatus::from(unsafe {
             match serial {
                 Some(mut serial) => self
                     .bindings
-                    .ps4000OpenUnitEx(&mut handle, serial.as_mut_ptr()),
+                    .ps3000aOpenUnit(&mut handle, serial.as_mut_ptr()),
                 None => self
                     .bindings
-                    .ps4000OpenUnitEx(&mut handle, std::ptr::null_mut()),
+                    .ps3000aOpenUnit(&mut handle, std::ptr::null_mut()),
             }
         });
+
+        // Handle changing power source...
+        if matches!(
+            status,
+            PicoStatus::POWER_SUPPLY_NOT_CONNECTED | PicoStatus::USB3_0_DEVICE_NON_USB3_0_PORT
+        ) {
+            status = PicoStatus::from(unsafe {
+                self.bindings
+                    .ps3000aChangePowerSource(handle, status.into())
+            })
+        }
 
         match status {
             PicoStatus::OK => Ok(handle),
@@ -104,27 +114,34 @@ impl PicoDriver for PS4000Driver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn ping_unit(&self, handle: i16) -> PicoResult<()> {
-        PicoStatus::from(unsafe { self.bindings.ps4000PingUnit(handle) }).to_result((), "ping_unit")
+        PicoStatus::from(unsafe { self.bindings.ps3000aPingUnit(handle) })
+            .to_result((), "ping_unit")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn maximum_value(&self, handle: i16) -> PicoResult<i16> {
-        Ok(32_764)
+        let mut value = vec![-1i16];
+
+        PicoStatus::from(unsafe {
+            self.bindings
+                .ps3000aMaximumValue(handle, value.as_mut_ptr())
+        })
+        .to_result(value[0], "maximum_value")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn close(&self, handle: i16) -> PicoResult<()> {
-        PicoStatus::from(unsafe { self.bindings.ps4000CloseUnit(handle) })
+        PicoStatus::from(unsafe { self.bindings.ps3000aCloseUnit(handle) })
             .to_result((), "close_unit")
     }
 
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self), ret)]
     fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String> {
         let mut string_buf: Vec<i8> = vec![0i8; 256];
         let mut string_buf_out_len = vec![0i16];
 
         let status = PicoStatus::from(unsafe {
-            self.bindings.ps4000GetUnitInfo(
+            self.bindings.ps3000aGetUnitInfo(
                 handle,
                 string_buf.as_mut_ptr(),
                 string_buf.len() as i16,
@@ -134,7 +151,7 @@ impl PicoDriver for PS4000Driver {
         });
 
         match status {
-            PicoStatus::OK => Ok(string_buf.from_pico_i8_string(string_buf_out_len[0] as usize)),
+            PicoStatus::OK => Ok(string_buf.into_string(string_buf_out_len[0] as usize)),
             x => Err(PicoError::from_status(x, "get_unit_info")),
         }
     }
@@ -145,7 +162,7 @@ impl PicoDriver for PS4000Driver {
         let mut len = vec![30i32];
 
         let status = PicoStatus::from(unsafe {
-            self.bindings.ps4000GetChannelInformation(
+            self.bindings.ps3000aGetChannelInformation(
                 handle,
                 0,
                 0,
@@ -170,15 +187,16 @@ impl PicoDriver for PS4000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
-            self.bindings.ps4000SetChannel(
+            self.bindings.ps3000aSetChannel(
                 handle,
                 channel.into(),
                 1,
                 config.coupling.into(),
                 config.range.into(),
+                config.offset.unwrap_or_default() as f32,
             )
         })
         .to_result((), "set_channel")
@@ -188,7 +206,7 @@ impl PicoDriver for PS4000Driver {
     fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings
-                .ps4000SetChannel(handle, channel.into(), 0, 0, 0)
+                .ps3000aSetChannel(handle, channel.into(), 0, 0, 0, 0.0)
         })
         .to_result((), "set_channel")
     }
@@ -204,11 +222,13 @@ impl PicoDriver for PS4000Driver {
         let mut buffer = buffer.write();
 
         PicoStatus::from(unsafe {
-            self.bindings.ps4000SetDataBuffer(
+            self.bindings.ps3000aSetDataBuffer(
                 handle,
                 channel.into(),
                 buffer.as_mut_ptr(),
                 buffer_len as i32,
+                0,
+                DownsampleMode::NONE.into(),
             )
         })
         .to_result((), "set_data_buffer")
@@ -218,13 +238,13 @@ impl PicoDriver for PS4000Driver {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoResult<OscilloscopeSampleConfig> {
         let mut sample_interval = vec![sample_config.interval];
 
         PicoStatus::from(unsafe {
-            self.bindings.ps4000RunStreaming(
+            self.bindings.ps3000aRunStreaming(
                 handle,
                 sample_interval.as_mut_ptr(),
                 sample_config.units.into(),
@@ -232,6 +252,7 @@ impl PicoDriver for PS4000Driver {
                 0,
                 (false).into(),
                 1,
+                DownsampleMode::NONE.into(),
                 sample_config.samples_per_second(),
             )
         })
@@ -257,7 +278,7 @@ impl PicoDriver for PS4000Driver {
             let (state, callback) = split_closure(&mut simplify_args);
 
             self.bindings
-                .ps4000GetStreamingLatestValues(handle, Some(callback), state)
+                .ps3000aGetStreamingLatestValues(handle, Some(callback), state)
         });
 
         match status {
@@ -268,6 +289,6 @@ impl PicoDriver for PS4000Driver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn stop(&self, handle: i16) -> PicoResult<()> {
-        PicoStatus::from(unsafe { self.bindings.ps4000Stop(handle) }).to_result((), "stop")
+        PicoStatus::from(unsafe { self.bindings.ps3000aStop(handle) }).to_result((), "stop")
     }
 }

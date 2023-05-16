@@ -6,7 +6,6 @@ use std::{convert::From, fmt, str::FromStr};
 pub struct ParseError;
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, Ord, PartialOrd, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Pico channel options
 pub enum PicoChannel {
     A = 0,
@@ -88,7 +87,6 @@ mod channel_tests {
 }
 
 /// Pico coupling options
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, Default)]
 pub enum PicoCoupling {
     AC = 0,

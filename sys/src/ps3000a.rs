@@ -474,7 +474,7 @@ pub type ps3000aDataReady = ::std::option::Option<
 >;
 
 extern crate libloading;
-pub struct PS3000ALoader {
+pub struct PS3000ABindings {
     __library: ::libloading::Library,
     pub ps3000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps3000aOpenUnit: Result<
@@ -1087,7 +1087,7 @@ pub struct PS3000ALoader {
         ::libloading::Error,
     >,
 }
-impl PS3000ALoader {
+impl PS3000ABindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -1231,7 +1231,7 @@ impl PS3000ALoader {
             .get(b"ps3000aSetOutputEdgeDetect\0")
             .map(|sym| *sym);
         let ps3000aGetScalingValues = __library.get(b"ps3000aGetScalingValues\0").map(|sym| *sym);
-        Ok(PS3000ALoader {
+        Ok(PS3000ABindings {
             __library,
             ps3000aApplyFix,
             ps3000aOpenUnit,

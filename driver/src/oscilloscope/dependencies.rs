@@ -1,4 +1,4 @@
-use super::LibraryResolution;
+use super::super::LibraryResolution;
 use lazy_static::lazy_static;
 use libloading::{Error, Library};
 use parking_lot::Mutex;

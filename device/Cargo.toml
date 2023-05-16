@@ -17,5 +17,4 @@ path = "src/lib.rs"
 parking_lot = "0.11"
 pico-common = {path = "../common", version = "0.4.0"}
 pico-driver = {path = "../driver", version = "0.4.0"}
-serde = {version = "1.0", features = ["derive", "rc"], optional = true}
 tracing = {version = "0.1", features = ["attributes"]}

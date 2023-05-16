@@ -19,13 +19,13 @@ impl<T> EventsInner<T> {
 }
 
 #[derive(Clone, Default)]
-pub struct Events<T> {
+pub struct EventEmitter<T> {
     inner: Arc<Mutex<EventsInner<T>>>,
 }
 
-impl<T> Events<T> {
+impl<T> EventEmitter<T> {
     pub fn new() -> Self {
-        Events {
+        EventEmitter {
             inner: Arc::new(Mutex::new(EventsInner::new())),
         }
     }

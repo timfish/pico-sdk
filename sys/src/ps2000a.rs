@@ -1212,7 +1212,7 @@ pub struct __va_list_tag {
 }
 
 extern crate libloading;
-pub struct PS2000ALoader {
+pub struct PS2000ABindings {
     __library: ::libloading::Library,
     pub ps2000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps2000aOpenUnit: Result<
@@ -1778,7 +1778,7 @@ pub struct PS2000ALoader {
         ::libloading::Error,
     >,
 }
-impl PS2000ALoader {
+impl PS2000ABindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -1908,7 +1908,7 @@ impl PS2000ALoader {
             .get(b"ps2000aSetOutputEdgeDetect\0")
             .map(|sym| *sym);
         let ps2000aGetScalingValues = __library.get(b"ps2000aGetScalingValues\0").map(|sym| *sym);
-        Ok(PS2000ALoader {
+        Ok(PS2000ABindings {
             __library,
             ps2000aApplyFix,
             ps2000aOpenUnit,

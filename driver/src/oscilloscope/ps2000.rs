@@ -1,14 +1,15 @@
-use crate::{
+use super::{
+    super::LibraryResolution,
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, EnumerationResult, PicoDriver,
+    get_version_string, EnumerationResult, OscilloscopeDriver,
 };
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-    PicoResult, PicoStatus, SampleConfig,
+    Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
+    PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus,
 };
-use pico_sys_dynamic::ps2000::PS2000Loader;
+use pico_sys_dynamic::ps2000::PS2000Bindings;
 use std::{collections::HashMap, sync::Arc};
 
 type BufferMap = HashMap<PicoChannel, Arc<RwLock<Vec<i16>>>>;
@@ -118,7 +119,7 @@ extern "C" fn streaming_callback(
 
 pub struct PS2000Driver {
     _dependencies: LoadedDependencies,
-    bindings: PS2000Loader,
+    bindings: PS2000Bindings,
 }
 
 impl std::fmt::Debug for PS2000Driver {
@@ -128,12 +129,10 @@ impl std::fmt::Debug for PS2000Driver {
 }
 
 impl PS2000Driver {
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
-    where
-        P: AsRef<::std::ffi::OsStr>,
-    {
-        let dependencies = load_dependencies(path.as_ref());
-        let bindings = unsafe { PS2000Loader::new(path)? };
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+        let path = resolution.get_path(Driver::PS2000);
+        let dependencies = load_dependencies(&path);
+        let bindings = unsafe { PS2000Bindings::new(path)? };
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {
             bindings,
@@ -141,6 +140,7 @@ impl PS2000Driver {
         })
     }
 
+    #[tracing::instrument(level = "trace", skip(self), ret)]
     fn open_unit_base(&self) -> Result<i16, PicoStatus> {
         match unsafe { self.bindings.ps2000_open_unit() } {
             -1 => Err(PicoStatus::OPERATION_FAILED),
@@ -150,7 +150,7 @@ impl PS2000Driver {
     }
 }
 
-impl PicoDriver for PS2000Driver {
+impl OscilloscopeDriver for PS2000Driver {
     fn get_driver(&self) -> Driver {
         Driver::PS2000
     }
@@ -208,7 +208,7 @@ impl PicoDriver for PS2000Driver {
     // The ps2000 driver cannot open devices by serial number like the other
     // drivers. We emulate the other driver behaviour by opening devices until
     // we find the correct one.
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self), ret)]
     fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         // We keep track of handles to close when we're finished
         let mut handles_to_close = Vec::new();
@@ -262,7 +262,7 @@ impl PicoDriver for PS2000Driver {
             .to_result((), "close_unit")
     }
 
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self), ret)]
     fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String> {
         let mut string_buf: Vec<i8> = vec![0i8; 256];
 
@@ -276,7 +276,7 @@ impl PicoDriver for PS2000Driver {
         });
 
         match status {
-            PicoStatus::OK => Ok(string_buf.from_pico_i8_string(255)),
+            PicoStatus::OK => Ok(string_buf.into_string(255)),
             x => Err(PicoError::from_status(x, "get_unit_info")),
         }
     }
@@ -289,10 +289,10 @@ impl PicoDriver for PS2000Driver {
         Ok((1..=10)
             .flat_map(|r| -> PicoResult<PicoRange> {
                 let range = PicoRange::from(r);
-                let config = ChannelConfig {
+                let config = OscilloscopeChannelConfig {
                     coupling: PicoCoupling::DC,
                     range,
-                    offset: 0.0,
+                    offset: None,
                 };
 
                 self.enable_channel(handle, channel, &config)?;
@@ -306,7 +306,7 @@ impl PicoDriver for PS2000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps2000_set_channel(
@@ -359,9 +359,9 @@ impl PicoDriver for PS2000Driver {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoResult<OscilloscopeSampleConfig> {
         let status = PicoStatus::from(unsafe {
             self.bindings.ps2000_run_streaming_ns(
                 handle,

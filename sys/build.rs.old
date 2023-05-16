@@ -16,15 +16,15 @@ fn build(header: &str, name: &str) {
 }
 
 fn main() {
-    build("usbtc08", "TC08Loader");
-    build("ps2000", "PS2000Loader");
-    build("ps2000aApi", "PS2000ALoader");
-    build("ps3000", "PS3000Loader");
-    build("ps3000aApi", "PS3000ALoader");
-    build("ps4000Api", "PS4000Loader");
-    build("ps4000aApi", "PS4000ALoader");
-    build("ps5000Api", "PS5000Loader");
-    build("ps5000aApi", "PS5000ALoader");
-    build("ps6000Api", "PS6000Loader");
-    build("ps6000aApi", "PS6000ALoader");
+    build("usbtc08", "TC08Bindings");
+    build("ps2000", "PS2000Bindings");
+    build("ps2000aApi", "PS2000ABindings");
+    build("ps3000", "PS3000Bindings");
+    build("ps3000aApi", "PS3000ABindings");
+    build("ps4000Api", "PS4000Bindings");
+    build("ps4000aApi", "PS4000ABindings");
+    build("ps5000Api", "PS5000Bindings");
+    build("ps5000aApi", "PS5000ABindings");
+    build("ps6000Api", "PS6000Bindings");
+    build("ps6000aApi", "PS6000ABindings");
 }

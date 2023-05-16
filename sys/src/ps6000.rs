@@ -371,7 +371,7 @@ pub type ps6000DataReady = ::std::option::Option<
 >;
 
 extern crate libloading;
-pub struct PS6000Loader {
+pub struct PS6000Bindings {
     __library: ::libloading::Library,
     pub ps6000ApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps6000OpenUnit: Result<
@@ -929,7 +929,7 @@ pub struct PS6000Loader {
     pub ps6000SetOutputEdgeDetect:
         Result<unsafe extern "C" fn(handle: i16, state: i16) -> PICO_STATUS, ::libloading::Error>,
 }
-impl PS6000Loader {
+impl PS6000Bindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -1041,7 +1041,7 @@ impl PS6000Loader {
         let ps6000SetOutputEdgeDetect = __library
             .get(b"ps6000SetOutputEdgeDetect\0")
             .map(|sym| *sym);
-        Ok(PS6000Loader {
+        Ok(PS6000Bindings {
             __library,
             ps6000ApplyFix,
             ps6000OpenUnit,

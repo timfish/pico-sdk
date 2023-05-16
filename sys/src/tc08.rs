@@ -75,7 +75,7 @@ pub struct USBTC08Info {
 pub type USBTC08_INFO = USBTC08Info;
 pub type LPUSBTC08_INFO = *mut USBTC08Info;
 
-pub struct TC08Loader {
+pub struct TC08Bindings {
     __library: ::libloading::Library,
     pub usb_tc08_set_channel: Result<
         unsafe extern "C" fn(handle: i16, channel: i16, tc_type: i8) -> i16,
@@ -170,7 +170,7 @@ pub struct TC08Loader {
         Result<unsafe extern "C" fn(cycle: *mut i32, handle: i16) -> i16, ::libloading::Error>,
 }
 
-impl TC08Loader {
+impl TC08Bindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -222,7 +222,7 @@ impl TC08Loader {
         let usb_tc08_legacy_get_cycle = __library
             .get(b"usb_tc08_legacy_get_cycle\0")
             .map(|sym| *sym);
-        Ok(TC08Loader {
+        Ok(TC08Bindings {
             __library,
             usb_tc08_set_channel,
             usb_tc08_run,

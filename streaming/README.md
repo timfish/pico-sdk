@@ -12,28 +12,33 @@ each enabled channel that can easily be scaled to the channel units (ie. Volts, 
 
 ## Example
 ```rust
-// Get a streaming device from a ScopeDevice
+// Load the required driver
+let driver = Driver::PS2000.load(&LibraryResolution::Default)?;
+// Try and load the first available ps2000 device
+let device = OscilloscopeDevice::open(&driver, None)?;
+// Get a streaming device from a OscilloscopeDevice
 let stream_device = device.into_streaming_device();
-
-// Enable and configure 2 channels
-stream_device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-stream_device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
 
 struct StdoutHandler;
 
-impl NewDataHandler for StdoutHandler {
-    fn handle_event(&self, event: &StreamingEvent) {
+impl EventHandler<OscilloscopeStreamEvent> for StdoutHandler {
+    fn new_data(&self, event: &OscilloscopeStreamEvent) {
         println!("Sample count: {}", event.length);
     }
 }
 
-let handler = Arc::new(StdoutHandler);
+let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = Arc::new(StdoutHandler);
 
 // Subscribe to streaming events
-stream_device.new_data.subscribe(handler);
+stream_device.events.subscribe(&handler);
 
-// Start streaming with a sample rate of 1k
-stream_device.start(1_000)?;
+// Enable and configure 2 channels
+let mut config = OscilloscopeConfig::default();
+config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+config.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
+config.samples_per_second = 1_000;
+
+stream_device.start(config)?;
 ```
 
 License: MIT

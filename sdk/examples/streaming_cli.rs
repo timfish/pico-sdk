@@ -4,7 +4,6 @@ use anyhow::{anyhow, Result};
 use console::{style, Style, Term};
 use dialoguer::{theme::ColorfulTheme, Select};
 use pico_sdk::prelude::*;
-use pico_streaming::EventHandler;
 use signifix::metric;
 use std::{
     collections::{HashMap, VecDeque},
@@ -63,9 +62,19 @@ impl RateCalc {
 }
 
 fn main() -> Result<()> {
-    if std::env::args().any(|a| a.contains("--trace")) {
+    let level = if std::env::args().any(|a| a.contains("--trace")) {
+        Some(tracing::Level::TRACE)
+    } else if std::env::args().any(|a| a.contains("--debug")) {
+        Some(tracing::Level::DEBUG)
+    } else if std::env::args().any(|a| a.contains("--info")) {
+        Some(tracing::Level::INFO)
+    } else {
+        None
+    };
+
+    if let Some(level) = level {
         tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
+            .with_max_level(level)
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
             .init();
     }
@@ -73,15 +82,14 @@ fn main() -> Result<()> {
     let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
     let device = select_device(&enumerator)?;
 
-    let info = device.info.clone().expect("Device should be open");
-
     let streaming_device = device.into_streaming_device();
-    let mut config = ScopeConfig::default();
+    let info = streaming_device.get_info().expect("Device should be open");
 
+    let mut config = OscilloscopeConfig::default();
     let ch_units = configure_channels(&info, &mut config);
     config.samples_per_second = get_capture_rate();
 
-    let capture_stats: Arc<dyn EventHandler<ScopeStreamingEvent>> = CaptureStats::new(ch_units);
+    let capture_stats: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = CaptureStats::new(ch_units);
     streaming_device.events.subscribe(&capture_stats);
 
     println!("Press Enter to stop streaming");
@@ -89,16 +97,14 @@ fn main() -> Result<()> {
 
     Term::stdout().read_line().unwrap();
 
-    streaming_device.stop();
-
     Ok(())
 }
 
-fn select_device(enumerator: &DeviceEnumerator) -> Result<ScopeDevice> {
+fn select_device(enumerator: &DeviceEnumerator) -> Result<OscilloscopeDevice> {
     loop {
         println!("Searching for devices...",);
 
-        let devices = enumerator.enumerate();
+        let devices = enumerator.enumerate_oscilloscopes();
 
         if devices.is_empty() {
             return Err(anyhow!("{}", style("No Pico devices found").red()));
@@ -136,7 +142,7 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<ScopeDevice> {
         println!();
 
         match &devices[device_selection] {
-            Ok(d) => return Ok(d.open().unwrap()),
+            Ok(device) => return Ok(device.clone().ensure_open().unwrap()),
             Err(error) => match error {
                 EnumerationError::DriverLoadError { driver, .. }
                 | EnumerationError::VersionError {
@@ -154,7 +160,10 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<ScopeDevice> {
     }
 }
 
-fn configure_channels(info: &ScopeInfo, config: &mut ScopeConfig) -> HashMap<PicoChannel, String> {
+fn configure_channels(
+    info: &OscilloscopeInfo,
+    config: &mut OscilloscopeConfig,
+) -> HashMap<PicoChannel, String> {
     loop {
         let mut channels = info
             .get_channels()
@@ -269,9 +278,9 @@ impl CaptureStats {
     }
 }
 
-impl EventHandler<ScopeStreamingEvent> for CaptureStats {
+impl EventHandler<OscilloscopeStreamEvent> for CaptureStats {
     #[tracing::instrument(level = "trace", skip(self, event))]
-    fn new_data(&self, event: &ScopeStreamingEvent) {
+    fn new_data(&self, event: &OscilloscopeStreamEvent) {
         let mut data: Vec<(PicoChannel, usize, f64, String)> = event
             .channels
             .iter()

@@ -16,15 +16,15 @@
 //!  - ### `pico-sys-dynamic` [![Crates.io](https://img.shields.io/crates/v/pico-sys-dynamic)](https://crates.io/crates/pico-sys-dynamic)
 //!     Dynamically loaded unsafe bindings for every Pico oscilloscope driver. **This crate contains unsafe code.**
 //!  - ### `pico-driver` [![Crates.io](https://img.shields.io/crates/v/pico-driver)](https://crates.io/crates/pico-driver)
-//!     Common, safe wrappers implementing the `PicoDriver` trait. **This crate contains unsafe code.**
+//!     Common, safe wrappers implementing the `OscilloscopeDriver` trait. **This crate contains unsafe code.**
 //!  - ### `pico-download` [![Crates.io](https://img.shields.io/crates/v/pico-download)](https://crates.io/crates/pico-download)
 //!     Download missing drivers on any platform.
 //!  - ### `pico-device` [![Crates.io](https://img.shields.io/crates/v/pico-device)](https://crates.io/crates/pico-device)
-//!     Device abstraction over `PicoDriver` trait. Detects available channels and valid ranges.
+//!     Device abstraction over `OscilloscopeDriver` trait. Detects available channels and valid ranges.
 //!  - ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
 //!     Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
 //!  - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
-//!     Implements continuous gap-less streaming on top of `ScopeDevice`.
+//!     Implements continuous gap-less streaming on top of `OscilloscopeDevice`.
 //!
 //! # Prerequisites
 //! On linux `pico-enumeration` [requires
@@ -56,13 +56,13 @@
 //!
 //!
 //! # Usage Examples
-//! Opening and configuring a specific ps2000 device as a `ScopeDevice`:
+//! Opening and configuring a specific ps2000 device as a `OscilloscopeDevice`:
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! use pico_sdk::prelude::*;
 //!
-//! let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
-//! let device = ScopeDevice::try_open(&driver, Some("ABC/123"))?;
+//! let driver = Driver::PS2000.load(&LibraryResolution::Default)?;
+//! let device = OscilloscopeDevice::open(&driver, Some("ABC/123"))?;
 //! # Ok(())
 //! # }
 //! ```
@@ -76,38 +76,38 @@
 //!
 //! let enumerator = DeviceEnumerator::new();
 //! // Enumerate, ignore all failures and get the first device
-//! let enum_device = enumerator
-//!                 .enumerate()
+//! let device = enumerator
+//!                 .enumerate_oscilloscopes()
 //!                 .into_iter()
 //!                 .flatten()
 //!                 .next()
 //!                 .expect("No device found");
 //!
-//! let device = enum_device.open()?;
-//!
 //! // Get a streaming device
 //! let stream_device = device.into_streaming_device();
 //!
+//! let mut config = OscilloscopeConfig::default();
 //! // Enable and configure 2 channels
-//! stream_device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-//! stream_device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
+//! config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+//! config.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
+//! config.samples_per_second = 1_000;
 //!
 //! struct StdoutHandler;
 //!
-//! impl NewDataHandler for StdoutHandler {
-//!     fn handle_event(&self, event: &StreamingEvent) {
+//! impl EventHandler<OscilloscopeStreamEvent> for StdoutHandler {
+//!     fn new_data(&self, event: &OscilloscopeStreamEvent) {
 //!         println!("Sample count: {}", event.length);
 //!     }
 //! }
 //!
 //! // When handler goes out of scope, the subscription is dropped
-//! let handler = Arc::new(StdoutHandler);
+//! let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = Arc::new(StdoutHandler);
 //!
 //! // Subscribe to streaming events
-//! stream_device.new_data.subscribe(handler.clone());
+//! stream_device.events.subscribe(&handler);
 //!
 //! // Start streaming with 1k sample rate
-//! stream_device.start(1_000)?;
+//! stream_device.start(config)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -139,18 +139,21 @@
 
 pub mod prelude {
     pub use pico_common::{
-        ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-        PicoStatus,
+        Driver, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo,
+        PicoRange, PicoStatus,
     };
-    pub use pico_device::{scope::*, tc08::*};
+    pub use pico_device::{oscilloscope::*, tc08::*, PicoDevice};
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
-        kernel_driver, DriverLoadError, EnumerationResult, LibraryResolution, PicoDriver,
+        kernel_driver,
+        oscilloscope::{DriverLoadError, EnumerationResult, OscilloscopeDriver},
+        tc08::{MainsRejectionFreq, TC08Driver, TCType},
+        DriverLoader, LibraryResolution, PicoDriver,
     };
-    pub use pico_enumeration::{
-        DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,
+    pub use pico_enumeration::{DeviceEnumerator, EnumResultHelpers, EnumerationError};
+    pub use pico_streaming::{
+        EventHandler, IntoStreamingDevice, OscilloscopeStreamEvent, TC08StreamingEvent,
     };
-    pub use pico_streaming::{IntoStreamingDevice, ScopeStreamingEvent};
 }
 
 /// Common enums, structs and traits
@@ -183,7 +186,7 @@ pub mod enumeration {
     pub use pico_enumeration::*;
 }
 
-/// Implements gap-less streaming on top of `ScopeDevice`
+/// Implements gap-less streaming on top of `OscilloscopeDevice`
 pub mod streaming {
     pub use pico_streaming::*;
 }

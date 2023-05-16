@@ -197,7 +197,7 @@ pub struct __va_list_tag {
 }
 
 extern crate libloading;
-pub struct PS3000Loader {
+pub struct PS3000Bindings {
     __library: ::libloading::Library,
     pub ps3000_apply_fix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps3000_open_unit: Result<unsafe extern "C" fn() -> i16, ::libloading::Error>,
@@ -433,7 +433,7 @@ pub struct PS3000Loader {
     >,
     pub ps3000PingUnit: Result<unsafe extern "C" fn(handle: i16) -> i16, ::libloading::Error>,
 }
-impl PS3000Loader {
+impl PS3000Bindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -498,7 +498,7 @@ impl PS3000Loader {
             .map(|sym| *sym);
         let ps3000SetAdvTriggerDelay = __library.get(b"ps3000SetAdvTriggerDelay\0").map(|sym| *sym);
         let ps3000PingUnit = __library.get(b"ps3000PingUnit\0").map(|sym| *sym);
-        Ok(PS3000Loader {
+        Ok(PS3000Bindings {
             __library,
             ps3000_apply_fix,
             ps3000_open_unit,

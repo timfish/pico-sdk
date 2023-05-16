@@ -1,12 +1,17 @@
-use crate::{EnumeratedDevice, EnumerationError};
+use std::fmt;
+
+use super::EnumerationError;
 use pico_common::Driver;
 
-pub trait EnumResultHelpers {
+pub trait EnumResultHelpers<D> {
     fn missing_drivers(&self) -> Vec<Driver>;
-    fn devices_and_errors(self) -> (Vec<EnumeratedDevice>, Vec<EnumerationError>);
+    fn devices_and_errors(self) -> (Vec<D>, Vec<EnumerationError>);
 }
 
-impl EnumResultHelpers for Vec<Result<EnumeratedDevice, EnumerationError>> {
+impl<D> EnumResultHelpers<D> for Vec<Result<D, EnumerationError>>
+where
+    D: fmt::Debug,
+{
     fn missing_drivers(&self) -> Vec<Driver> {
         let mut failed_results = self
             .iter()
@@ -22,7 +27,7 @@ impl EnumResultHelpers for Vec<Result<EnumeratedDevice, EnumerationError>> {
         failed_results
     }
 
-    fn devices_and_errors(self) -> (Vec<EnumeratedDevice>, Vec<EnumerationError>) {
+    fn devices_and_errors(self) -> (Vec<D>, Vec<EnumerationError>) {
         let (devices, errors): (Vec<_>, Vec<_>) = self.into_iter().partition(|e| e.is_ok());
 
         (

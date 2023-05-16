@@ -320,7 +320,7 @@ pub type ps5000DataReady = ::std::option::Option<
 >;
 
 extern crate libloading;
-pub struct PS5000Loader {
+pub struct PS5000Bindings {
     __library: ::libloading::Library,
     pub ps5000ApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps5000OpenUnit:
@@ -727,7 +727,7 @@ pub struct PS5000Loader {
         ::libloading::Error,
     >,
 }
-impl PS5000Loader {
+impl PS5000Bindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -810,7 +810,7 @@ impl PS5000Loader {
         let ps5000Stop = __library.get(b"ps5000Stop\0").map(|sym| *sym);
         let ps5000PingUnit = __library.get(b"ps5000PingUnit\0").map(|sym| *sym);
         let ps5000SetNoOfCaptures = __library.get(b"ps5000SetNoOfCaptures\0").map(|sym| *sym);
-        Ok(PS5000Loader {
+        Ok(PS5000Bindings {
             __library,
             ps5000ApplyFix,
             ps5000OpenUnit,

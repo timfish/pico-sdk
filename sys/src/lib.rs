@@ -7,9 +7,9 @@
 //! were generated from official header files with `bindgen` before manual clean up.
 //!
 //! ```no_run
-//! use pico_sys_dynamic::ps2000::PS2000Loader;
+//! use pico_sys_dynamic::ps2000::PS2000Bindings;
 //!
-//! let ps2000 = unsafe { PS2000Loader::new("./path/ps2000.dll").unwrap() };
+//! let ps2000 = unsafe { PS2000Bindings::new("./path/ps2000.dll").unwrap() };
 //! let handle = unsafe { ps2000.ps2000_open_unit() };
 //! ```
 

@@ -3,11 +3,6 @@ use enum_iterator::IntoEnumIterator;
 use std::{fmt, str::FromStr};
 
 /// Supported Pico drivers
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(rename_all = "lowercase")
-)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, IntoEnumIterator)]
 pub enum Driver {
     PS2000,
@@ -79,6 +74,20 @@ impl Driver {
                 None
             }
         }
+    }
+
+    pub fn is_scope(&self) -> bool {
+        matches!(
+            self,
+            Driver::PS2000
+                | Driver::PS2000A
+                | Driver::PS3000A
+                | Driver::PS4000
+                | Driver::PS4000A
+                | Driver::PS5000A
+                | Driver::PS6000
+                | Driver::PS6000A
+        )
     }
 
     /// Returns the platform dependent name of the driver binary with file

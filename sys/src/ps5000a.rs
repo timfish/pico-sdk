@@ -1136,7 +1136,7 @@ pub type ps5000aDataReady = ::std::option::Option<
 >;
 
 extern crate libloading;
-pub struct PS5000ALoader {
+pub struct PS5000ABindings {
     __library: ::libloading::Library,
     pub ps5000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps5000aOpenUnit: Result<
@@ -1843,7 +1843,7 @@ pub struct PS5000ALoader {
         ::libloading::Error,
     >,
 }
-impl PS5000ALoader {
+impl PS5000ABindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -2023,7 +2023,7 @@ impl PS5000ALoader {
         let ps5000aStartFirmwareUpdate = __library
             .get(b"ps5000aStartFirmwareUpdate\0")
             .map(|sym| *sym);
-        Ok(PS5000ALoader {
+        Ok(PS5000ABindings {
             __library,
             ps5000aApplyFix,
             ps5000aOpenUnit,

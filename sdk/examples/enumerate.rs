@@ -1,9 +1,11 @@
-use pico_sdk::{
-    download::{cache_resolution, download_drivers_to_cache},
-    enumeration::{DeviceEnumerator, EnumResultHelpers},
-};
+use pico_sdk::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+        .init();
+
     let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
 
     loop {

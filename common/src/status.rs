@@ -7,7 +7,6 @@ use thiserror::Error;
 ///
 /// Error strings are taken from picostatus.h
 #[allow(non_camel_case_types)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive, Error)]
 pub enum PicoStatus {
     #[error("The PicoScope is functioning correctly")]

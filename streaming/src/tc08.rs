@@ -1,6 +1,5 @@
-use crate::{
-    events::Events,
-    state::{IntoStreamingDevice, State, StreamDevice, StreamingRunner},
+use super::state::{
+    sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
 };
 use pico_common::{PicoError, PicoResult};
 use pico_device::tc08::{TC08Config, TC08Device};
@@ -12,10 +11,6 @@ use tracing::warn;
 pub struct TC08StreamingEvent {
     pub interval_ms: u32,
     pub channels: HashMap<TC08Channel, Vec<f32>>,
-}
-
-fn sleep(ms: u64) {
-    std::thread::sleep(std::time::Duration::from_millis(ms));
 }
 
 fn get_channels(config: &TC08Config) -> [(TC08Channel, Option<TCType>); 9] {
@@ -38,71 +33,64 @@ fn get_channels(config: &TC08Config) -> [(TC08Channel, Option<TCType>); 9] {
     ]
 }
 
-impl IntoStreamingDevice<TC08Device, TC08StreamingEvent, TC08Config, TC08Info, u32> for TC08Device {
+impl IntoStreamingDevice<TC08Device, TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device {
     fn into_streaming_device(
         self,
-    ) -> StreamingRunner<Self, TC08StreamingEvent, TC08Config, TC08Info, u32> {
+    ) -> StreamingRunner<Self, TC08Config, TC08Info, u32, TC08StreamingEvent> {
         StreamingRunner::new(self)
     }
 }
 
-impl StreamDevice<TC08StreamingEvent, TC08Config, TC08Info, u32> for TC08Device {
+impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device {
     fn serial(&self) -> &str {
         &self.serial
     }
 
-    fn info(&self) -> Option<TC08Info> {
-        self.info.clone()
+    fn info(&mut self) -> Option<TC08Info> {
+        self.info.take()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
-    fn open(&self, serial: &str) -> State<TC08Info, u32> {
-        self.driver
-            .open_unit(Some(serial.to_string()))
-            .and_then(|handle| {
-                let info = self.driver.get_unit_info(handle)?;
-                Ok(State::Open(info))
-            })
-            .unwrap_or_else(|_| {
-                sleep(500);
-                State::Closed
-            })
+    // #[tracing::instrument(level = "debug", skip(self))]
+    fn open(&self, serial: &str) -> PicoResult<Current<TC08Info, u32>> {
+        self.driver.open_unit(Some(serial)).and_then(|handle| {
+            let info = self.driver.get_unit_info(handle)?;
+            Ok(Current::Open(info))
+        })
+    }
+
+    fn ping(&self, info: &TC08Info) -> Current<TC08Info, u32> {
+        if self.driver.get_unit_info(*info.handle).is_err() {
+            let _ = self.driver.stop(*info.handle);
+            let _ = self.driver.close_unit(*info.handle);
+
+            Current::Closed
+        } else {
+            Current::Open(info.clone())
+        }
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn ping(&self, info: &TC08Info) -> State<TC08Info, u32> {
-        if self.driver.get_unit_info(info.handle).is_err() {
-            let _ = self.driver.stop(info.handle);
-            let _ = self.driver.close_unit(info.handle);
-
-            State::Closed
-        } else {
-            State::Open(info.clone())
-        }
-    }
-
-    // #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &TC08Info, config: &TC08Config) -> PicoResult<State<TC08Info, u32>> {
+    fn start(&self, info: &TC08Info, config: &TC08Config) -> PicoResult<Current<TC08Info, u32>> {
         self.driver
-            .set_mains_rejection(info.handle, config.mains_rejection)?;
+            .set_mains_rejection(*info.handle, config.mains_rejection)?;
 
         for (ch, ty) in get_channels(config) {
-            self.driver.configure_channel(info.handle, ch, ty)?;
+            self.driver.configure_channel(*info.handle, ch, ty)?;
         }
 
-        let interval_ms = self.driver.start(info.handle, config.interval_ms as i32)? as u32;
+        let interval_ms = self.driver.start(*info.handle, config.interval_ms as i32)? as u32;
 
-        Ok(State::Streaming(info.clone(), interval_ms))
+        Ok(Current::Streaming(info.clone(), interval_ms))
     }
 
-    // #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(level = "debug", skip_all)]
     fn stream(
         &self,
         info: &TC08Info,
         config: &TC08Config,
         interval_ms: &u32,
-        new_data: &Events<TC08StreamingEvent>,
-    ) -> State<TC08Info, u32> {
+        events: &EventEmitter<TC08StreamingEvent>,
+    ) -> Current<TC08Info, u32> {
         let mut event = TC08StreamingEvent {
             interval_ms: config.interval_ms,
             channels: HashMap::new(),
@@ -112,7 +100,7 @@ impl StreamDevice<TC08StreamingEvent, TC08Config, TC08Info, u32> for TC08Device 
             .iter()
             .try_for_each(|(channel, tc_type)| {
                 if tc_type.is_some() {
-                    let (values, _) = self.driver.get_values(info.handle, *channel, 1_000)?;
+                    let (values, _) = self.driver.get_values(*info.handle, *channel, 1_000)?;
                     event.channels.insert(*channel, values);
                 }
                 Ok::<(), PicoError>(())
@@ -120,30 +108,30 @@ impl StreamDevice<TC08StreamingEvent, TC08Config, TC08Info, u32> for TC08Device 
 
         match result {
             Ok(()) => {
-                new_data.new_data(event);
-                sleep(1_000);
+                events.new_data(event);
+                sleep_ms(1_000);
 
-                State::Streaming(info.clone(), *interval_ms)
+                Current::Streaming(info.clone(), *interval_ms)
             }
             Err(e) => {
                 warn!("Streaming stopped: '{:?}'", e);
-                let _ = self.driver.stop(info.handle);
-                let _ = self.driver.close_unit(info.handle);
+                let _ = self.driver.stop(*info.handle);
+                let _ = self.driver.close_unit(*info.handle);
 
-                State::Closed
+                Current::Closed
             }
         }
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn stop(&self, info: &TC08Info) -> State<TC08Info, u32> {
-        let _ = self.driver.stop(info.handle);
-        State::Open(info.clone())
+    fn stop(&self, info: &TC08Info) -> Current<TC08Info, u32> {
+        let _ = self.driver.stop(*info.handle);
+        Current::Open(info.clone())
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn close(&self, info: &TC08Info) -> State<TC08Info, u32> {
-        let _ = self.driver.close_unit(info.handle);
-        State::Closed
+    fn close(&self, info: &TC08Info) -> Current<TC08Info, u32> {
+        let _ = self.driver.close_unit(*info.handle);
+        Current::Closed
     }
 }

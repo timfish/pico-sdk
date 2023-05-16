@@ -1,9 +1,9 @@
+use pico_common::PicoResult;
+pub use pico_driver::tc08::ArcDriver;
+use pico_driver::tc08::{MainsRejectionFreq, TC08Info, TCType};
 use std::sync::Arc;
 
-use pico_common::PicoResult;
-use pico_driver::tc08::{MainsRejectionFreq, TC08Driver, TC08Info, TCType};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct TC08Config {
     pub interval_ms: u32,
     pub mains_rejection: MainsRejectionFreq,
@@ -18,30 +18,40 @@ pub struct TC08Config {
     pub channel_8: Option<TCType>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TC08Device {
-    pub driver: Arc<TC08Driver>,
+    pub driver: ArcDriver,
     pub serial: String,
     pub info: Option<TC08Info>,
 }
 
 impl TC08Device {
-    pub fn new(driver: Arc<TC08Driver>, serial: String) -> PicoResult<Self> {
-        Ok(Self {
+    pub fn new(driver: ArcDriver, serial: String, info: Option<TC08Info>) -> Self {
+        Self {
             driver,
             serial,
-            info: None,
-        })
+            info,
+        }
     }
-
-    pub fn try_open(driver: Arc<TC08Driver>, serial: Option<String>) -> PicoResult<Self> {
+    pub fn open(driver: &ArcDriver, serial: Option<&str>) -> PicoResult<Self> {
         let handle = driver.open_unit(serial)?;
         let info = driver.get_unit_info(handle)?;
 
         Ok(Self {
-            driver,
+            driver: driver.clone(),
             serial: info.serial.clone(),
             info: Some(info),
         })
+    }
+}
+
+impl Drop for TC08Device {
+    #[tracing::instrument(level = "debug", skip(self))]
+    fn drop(&mut self) {
+        if let Some(info) = &self.info {
+            if Arc::strong_count(&info.handle) <= 1 {
+                let _ = self.driver.close_unit(*info.handle);
+            }
+        }
     }
 }

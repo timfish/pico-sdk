@@ -4,7 +4,6 @@ use std::fmt;
 
 /// Pico channel ranges
 #[allow(non_camel_case_types)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, IntoEnumIterator)]
 pub enum PicoRange {
     X1_PROBE_10MV = 0,

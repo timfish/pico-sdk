@@ -8,5 +8,4 @@ This is a sub crate that you probably don't want to use directly. Try the top le
 Discovers Pico devices by USB Vendor ID, handles loading the required Pico drivers and
 enumerates them in parallel returning discovered devices and errors.
 
-
 License: MIT

@@ -194,7 +194,7 @@ pub struct tPS2000PwqConditions {
 pub type PS2000_PWQ_CONDITIONS = tPS2000PwqConditions;
 
 extern crate libloading;
-pub struct PS2000Loader {
+pub struct PS2000Bindings {
     __library: ::libloading::Library,
     pub ps2000_apply_fix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps2000_open_unit: Result<unsafe extern "C" fn() -> i16, ::libloading::Error>,
@@ -436,7 +436,7 @@ pub struct PS2000Loader {
     >,
     pub ps2000PingUnit: Result<unsafe extern "C" fn(handle: i16) -> i16, ::libloading::Error>,
 }
-impl PS2000Loader {
+impl PS2000Bindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -500,7 +500,7 @@ impl PS2000Loader {
             .map(|sym| *sym);
         let ps2000SetAdvTriggerDelay = __library.get(b"ps2000SetAdvTriggerDelay\0").map(|sym| *sym);
         let ps2000PingUnit = __library.get(b"ps2000PingUnit\0").map(|sym| *sym);
-        Ok(PS2000Loader {
+        Ok(PS2000Bindings {
             __library,
             ps2000_apply_fix,
             ps2000_open_unit,

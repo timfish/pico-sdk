@@ -1,8 +1,5 @@
 use console::Term;
-use pico_device::tc08::{TC08Config, TC08Device};
-use pico_driver::tc08::{TC08Driver, TCType};
 use pico_sdk::prelude::*;
-use pico_streaming::{EventHandler, IntoStreamingDevice, TC08StreamingEvent};
 use std::sync::Arc;
 
 struct PrintData;
@@ -30,9 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     download_drivers_to_cache(&[Driver::TC08])?;
 
-    let path = cache_resolution().get_path(Driver::TC08);
-    let driver = TC08Driver::new(path)?;
-    let device = TC08Device::try_open(driver, None)?;
+    let driver = Arc::new(TC08Driver::load(&cache_resolution())?);
+    let device = TC08Device::open(&driver, None)?;
     let device = device.into_streaming_device();
 
     let callback: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(PrintData);

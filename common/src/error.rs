@@ -3,7 +3,6 @@ use std::fmt;
 use thiserror::Error;
 
 /// Error encapsulating `PicoStatus` error codes with context
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Eq, PartialEq, Debug, Error)]
 pub struct PicoError {
     #[source]
@@ -14,9 +13,9 @@ pub struct PicoError {
 impl fmt::Display for PicoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ctx) = &self.context {
-            write!(f, "{}", ctx)
+            write!(f, "{}: {}", self.status, ctx)
         } else {
-            Ok(())
+            write!(f, "{}", self.status)
         }
     }
 }

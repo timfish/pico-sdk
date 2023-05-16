@@ -1,10 +1,10 @@
+use super::LibraryResolution;
 use num_derive::*;
 use pico_common::{FromPicoStr, PicoError, PicoResult, PicoStatus, TC08Error};
-use pico_sys_dynamic::tc08::{
-    TC08Loader, USBTC08Info, USBTC08_MAX_SERIAL_CHARS, USBTC08_MAX_VERSION_CHARS,
-};
+use pico_sys_dynamic::tc08::{TC08Bindings, USBTC08Info, USBTC08_MAX_SERIAL_CHARS};
 use std::{
     cmp::Ordering,
+    fmt, iter,
     mem::{size_of, MaybeUninit},
     sync::Arc,
 };
@@ -61,9 +61,8 @@ pub enum MainsRejectionFreq {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TC08Info {
-    pub handle: i16,
+    pub handle: Arc<i16>,
     pub serial: String,
-    pub driver_version: String,
     pub hardware_version: i16,
     pub variant: i16,
 }
@@ -72,37 +71,39 @@ impl TC08Info {
     fn from(handle: i16, value: USBTC08Info) -> Self {
         let serial = value
             .szSerial
-            .from_pico_i8_string(USBTC08_MAX_SERIAL_CHARS as usize);
-
-        let driver_version = value
-            .DriverVersion
-            .from_pico_i8_string(USBTC08_MAX_VERSION_CHARS as usize);
+            .into_string(USBTC08_MAX_SERIAL_CHARS as usize);
 
         let hardware_version = value.HardwareVersion;
         let variant = value.Variant;
 
         TC08Info {
-            handle,
+            handle: Arc::new(handle),
             serial,
             hardware_version,
             variant,
-            driver_version,
         }
     }
 }
 
 pub struct TC08Driver {
-    bindings: TC08Loader,
+    bindings: TC08Bindings,
 }
 
+impl fmt::Debug for TC08Driver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TC08Driver").finish()
+    }
+}
+
+pub type ArcDriver = Arc<TC08Driver>;
+
 impl TC08Driver {
-    pub fn new<P>(path: P) -> Result<Arc<Self>, ::libloading::Error>
-    where
-        P: AsRef<::std::ffi::OsStr>,
-    {
-        Ok(Arc::new(TC08Driver {
-            bindings: unsafe { TC08Loader::new(path)? },
-        }))
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+        let path = resolution.get_path(pico_common::Driver::TC08);
+
+        Ok(TC08Driver {
+            bindings: unsafe { TC08Bindings::new(path)? },
+        })
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -120,7 +121,8 @@ impl TC08Driver {
         }
     }
 
-    fn open_unit_internal(&self) -> Result<i16, PicoStatus> {
+    #[tracing::instrument(level = "trace", skip(self), ret)]
+    pub fn open_next_unit(&self) -> Result<i16, PicoStatus> {
         let result = unsafe { self.bindings.usb_tc08_open_unit() };
 
         match result.cmp(&0) {
@@ -130,16 +132,25 @@ impl TC08Driver {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(self))]
-    pub fn open_unit(&self, serial: Option<String>) -> PicoResult<i16> {
+    pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
+        iter::from_fn(|| match self.open_next_unit() {
+            Ok(handle) => Some(Ok(handle)),
+            Err(PicoStatus::NOT_FOUND) => None,
+            Err(error) => Some(Err(error.into())),
+        })
+    }
+
+    #[tracing::instrument(level = "trace", skip(self), ret)]
+    pub fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         // We keep track of handles to close when we're finished
         let mut handles_to_close = Vec::new();
 
         loop {
-            match self.open_unit_internal() {
+            match self.open_next_unit() {
                 Ok(handle) => {
                     if let Some(serial) = &serial {
                         let info = self.get_unit_info(handle)?;
+
                         if serial == &info.serial {
                             for each in handles_to_close {
                                 let _ = self.close_unit(each);
@@ -172,11 +183,6 @@ impl TC08Driver {
             self.bindings.usb_tc08_get_unit_info(handle, &mut info)
         })
         .to_result(TC08Info::from(handle, info), "get_unit_info")
-    }
-
-    #[tracing::instrument(level = "trace", skip(self))]
-    pub fn get_driver_version(&self) -> PicoResult<String> {
-        self.get_unit_info(0).map(|info| info.driver_version)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

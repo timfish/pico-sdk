@@ -18,7 +18,6 @@ fn enum_and_configure_device() {
     assert!(!results.is_empty(), "No devices were found");
 
     for result in results {
-        let enum_result = result.expect("Enumeration should not error");
-        let _device = enum_result.open().unwrap();
+        let _device = result.expect("Enumeration should not error");
     }
 }

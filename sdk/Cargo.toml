@@ -13,9 +13,6 @@ version = "0.4.0"
 crate-type = ["lib"]
 path = "src/lib.rs"
 
-[features]
-serde = ["pico-common/serde", "pico-device/serde", "pico-enumeration/serde", "pico-streaming/serde"]
-
 [dependencies]
 pico-common = {path = "../common", version = "0.4.0"}
 pico-device = {path = "../device", version = "0.4.0"}

@@ -11,5 +11,9 @@ members = [
 ]
 
 [profile.release]
+# codegen-units = 1
 debug = true
+debuginfo = 2
 lto = true
+split-debuginfo = "packed"
+strip = true

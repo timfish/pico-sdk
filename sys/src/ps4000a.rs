@@ -715,7 +715,7 @@ pub type ps4000aProbeInteractions = ::std::option::Option<
 >;
 
 extern crate libloading;
-pub struct PS4000ALoader {
+pub struct PS4000ABindings {
     __library: ::libloading::Library,
     pub ps4000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps4000aOpenUnitWithResolution: Result<
@@ -1381,7 +1381,7 @@ pub struct PS4000ALoader {
         ::libloading::Error,
     >,
 }
-impl PS4000ALoader {
+impl PS4000ABindings {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
@@ -1549,7 +1549,7 @@ impl PS4000ALoader {
         let ps4000aGetMinimumTimebaseStateless = __library
             .get(b"ps4000aGetMinimumTimebaseStateless\0")
             .map(|sym| *sym);
-        Ok(PS4000ALoader {
+        Ok(PS4000ABindings {
             __library,
             ps4000aApplyFix,
             ps4000aOpenUnitWithResolution,

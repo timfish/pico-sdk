@@ -46,20 +46,20 @@ impl TimeUnits {
 
 /// Sample configuration
 #[derive(Debug, Clone, Copy)]
-pub struct SampleConfig {
+pub struct OscilloscopeSampleConfig {
     pub interval: u32,
     pub units: TimeUnits,
 }
 
-impl SampleConfig {
-    pub fn new(interval: u32, units: TimeUnits) -> SampleConfig {
-        SampleConfig { interval, units }
+impl OscilloscopeSampleConfig {
+    pub fn new(interval: u32, units: TimeUnits) -> Self {
+        OscilloscopeSampleConfig { interval, units }
     }
 
-    pub fn from_samples_per_second(samples_per_second: u32) -> SampleConfig {
+    pub fn from_samples_per_second(samples_per_second: u32) -> OscilloscopeSampleConfig {
         let interval: f64 = (1f64 / (samples_per_second as f64)) * 1_000_000_000_f64;
 
-        SampleConfig {
+        OscilloscopeSampleConfig {
             interval: interval as u32,
             units: TimeUnits::NS,
         }
@@ -73,14 +73,14 @@ impl SampleConfig {
         (1f64 / self.get_interval()) as u32
     }
 
-    pub fn with_interval(self, interval: u32) -> SampleConfig {
-        SampleConfig { interval, ..self }
+    pub fn with_interval(self, interval: u32) -> OscilloscopeSampleConfig {
+        OscilloscopeSampleConfig { interval, ..self }
     }
 }
 
-impl Default for SampleConfig {
+impl Default for OscilloscopeSampleConfig {
     fn default() -> Self {
-        SampleConfig::new(1, TimeUnits::MS)
+        OscilloscopeSampleConfig::new(1, TimeUnits::MS)
     }
 }
 
@@ -91,17 +91,17 @@ mod tests {
 
     #[test]
     fn from_samples_per_second() {
-        let sc = SampleConfig::from_samples_per_second(1);
+        let sc = OscilloscopeSampleConfig::from_samples_per_second(1);
         assert_eq!(sc.interval, 1_000_000_000);
         assert_eq!(sc.units, TimeUnits::NS);
         assert_eq!(sc.samples_per_second(), 1);
 
-        let sc = SampleConfig::from_samples_per_second(1000);
+        let sc = OscilloscopeSampleConfig::from_samples_per_second(1000);
         assert_eq!(sc.interval, 1_000_000);
         assert_eq!(sc.units, TimeUnits::NS);
         assert_eq!(sc.samples_per_second(), 1000);
 
-        let sc = SampleConfig::from_samples_per_second(15657);
+        let sc = OscilloscopeSampleConfig::from_samples_per_second(15657);
         assert_eq!(sc.interval, 63_869);
         assert_eq!(sc.units, TimeUnits::NS);
         assert_eq!(sc.samples_per_second(), 15657);
@@ -109,35 +109,34 @@ mod tests {
 
     #[test]
     fn get_interval() {
-        let sc = SampleConfig::from_samples_per_second(1000);
+        let sc = OscilloscopeSampleConfig::from_samples_per_second(1000);
         assert_eq!(sc.get_interval(), 0.001);
 
-        let sc = SampleConfig::from_samples_per_second(1234);
+        let sc = OscilloscopeSampleConfig::from_samples_per_second(1234);
         assert_eq!(sc.get_interval(), 0.000_810_372_000_000_000_1);
     }
 }
 
 /// Channel configuration
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ChannelConfig {
+pub struct OscilloscopeChannelConfig {
     pub coupling: PicoCoupling,
     pub range: PicoRange,
-    pub offset: f64,
+    pub offset: Option<f64>,
 }
 
-impl ChannelConfig {
-    pub fn new() -> ChannelConfig {
-        ChannelConfig {
+impl OscilloscopeChannelConfig {
+    pub fn new() -> Self {
+        OscilloscopeChannelConfig {
             coupling: PicoCoupling::DC,
             range: PicoRange::X1_PROBE_20V,
-            offset: 0.0,
+            offset: None,
         }
     }
 }
 
-impl Default for ChannelConfig {
+impl Default for OscilloscopeChannelConfig {
     fn default() -> Self {
-        ChannelConfig::new()
+        OscilloscopeChannelConfig::new()
     }
 }
