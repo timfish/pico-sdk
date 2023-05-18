@@ -1,6 +1,8 @@
 use super::LibraryResolution;
-use num_derive::*;
-use pico_common::{FromPicoStr, PicoError, PicoResult, PicoStatus, TC08Error};
+use pico_common::{
+    FromPicoStr, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, TC08Channel, TC08Error,
+    TC08Info, TCType,
+};
 use pico_sys_dynamic::tc08::{TC08Bindings, USBTC08Info, USBTC08_MAX_SERIAL_CHARS};
 use std::{
     cmp::Ordering,
@@ -9,79 +11,19 @@ use std::{
     sync::Arc,
 };
 
-/// Pico TC08 Error codes
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, FromPrimitive, ToPrimitive)]
-pub enum TC08Channel {
-    CHANNEL_CJC = 0,
-    CHANNEL_1 = 1,
-    CHANNEL_2 = 2,
-    CHANNEL_3 = 3,
-    CHANNEL_4 = 4,
-    CHANNEL_5 = 5,
-    CHANNEL_6 = 6,
-    CHANNEL_7 = 7,
-    CHANNEL_8 = 8,
-}
+fn to_tc08_info(handle: i16, value: USBTC08Info) -> TC08Info {
+    let serial = value
+        .szSerial
+        .into_string(USBTC08_MAX_SERIAL_CHARS as usize);
 
-impl From<TC08Channel> for i16 {
-    fn from(value: TC08Channel) -> Self {
-        num_traits::ToPrimitive::to_i16(&value).expect("Non-valid channel")
-    }
-}
+    let hardware_version = value.HardwareVersion;
+    let variant = value.Variant;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum TCType {
-    B,
-    E,
-    J,
-    #[default]
-    K,
-    N,
-    R,
-    S,
-    T,
-}
-
-impl From<TCType> for i8 {
-    fn from(value: TCType) -> Self {
-        format!("{:?}", value)
-            .chars()
-            .next()
-            .expect("Could not get TCType character") as i8
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum MainsRejectionFreq {
-    #[default]
-    _50Hz,
-    _60Hz,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct TC08Info {
-    pub handle: Arc<i16>,
-    pub serial: String,
-    pub hardware_version: i16,
-    pub variant: i16,
-}
-
-impl TC08Info {
-    fn from(handle: i16, value: USBTC08Info) -> Self {
-        let serial = value
-            .szSerial
-            .into_string(USBTC08_MAX_SERIAL_CHARS as usize);
-
-        let hardware_version = value.HardwareVersion;
-        let variant = value.Variant;
-
-        TC08Info {
-            handle: Arc::new(handle),
-            serial,
-            hardware_version,
-            variant,
-        }
+    TC08Info {
+        handle: Arc::new(handle),
+        serial,
+        hardware_version,
+        variant,
     }
 }
 
@@ -175,14 +117,14 @@ impl TC08Driver {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(self))]
+    // #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<TC08Info> {
         let mut info: USBTC08Info = unsafe { MaybeUninit::zeroed().assume_init() };
         info.size = size_of::<USBTC08Info>() as i16;
         self.wrap_with_get_last_error(handle, || unsafe {
             self.bindings.usb_tc08_get_unit_info(handle, &mut info)
         })
-        .to_result(TC08Info::from(handle, info), "get_unit_info")
+        .to_result(to_tc08_info(handle, info), "get_unit_info")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

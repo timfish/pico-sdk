@@ -12,6 +12,7 @@ mod enums;
 mod error;
 mod range;
 mod status;
+mod tc08;
 mod utils;
 
 pub use config::*;
@@ -20,4 +21,5 @@ pub use enums::*;
 pub use error::*;
 pub use range::*;
 pub use status::*;
+pub use tc08::*;
 pub use utils::*;

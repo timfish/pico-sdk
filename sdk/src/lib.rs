@@ -139,15 +139,15 @@
 
 pub mod prelude {
     pub use pico_common::{
-        Driver, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo,
-        PicoRange, PicoStatus,
+        Driver, MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling,
+        PicoError, PicoInfo, PicoRange, PicoStatus, TCType,
     };
     pub use pico_device::{oscilloscope::*, tc08::*, PicoDevice};
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
         kernel_driver,
         oscilloscope::{DriverLoadError, EnumerationResult, OscilloscopeDriver},
-        tc08::{MainsRejectionFreq, TC08Driver, TCType},
+        tc08::TC08Driver,
         DriverLoader, LibraryResolution, PicoDriver,
     };
     pub use pico_enumeration::{DeviceEnumerator, EnumResultHelpers, EnumerationError};

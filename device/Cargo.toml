@@ -14,6 +14,7 @@ crate-type = ["lib"]
 path = "src/lib.rs"
 
 [dependencies]
+enum-iterator = "1"
 parking_lot = "0.11"
 pico-common = {path = "../common", version = "0.4.0"}
 pico-driver = {path = "../driver", version = "0.4.0"}

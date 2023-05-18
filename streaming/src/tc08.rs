@@ -1,9 +1,8 @@
 use super::state::{
     sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
 };
-use pico_common::{PicoError, PicoResult};
+use pico_common::{PicoError, PicoResult, TC08Channel, TC08Info, TCType};
 use pico_device::tc08::{TC08Config, TC08Device};
-use pico_driver::tc08::{TC08Channel, TC08Info, TCType};
 use std::collections::HashMap;
 use tracing::warn;
 

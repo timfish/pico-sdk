@@ -1,9 +1,9 @@
-use crate::ParseError;
-use enum_iterator::IntoEnumIterator;
+use super::ParseError;
+use enum_iterator::Sequence;
 use std::{fmt, str::FromStr};
 
 /// Supported Pico drivers
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, IntoEnumIterator)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Sequence)]
 pub enum Driver {
     PS2000,
     PS2000A,

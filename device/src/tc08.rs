@@ -1,6 +1,5 @@
-use pico_common::PicoResult;
+use pico_common::{MainsRejectionFreq, PicoResult, TC08Channel, TC08Info, TCType};
 pub use pico_driver::tc08::ArcDriver;
-use pico_driver::tc08::{MainsRejectionFreq, TC08Info, TCType};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -33,6 +32,7 @@ impl TC08Device {
             info,
         }
     }
+
     pub fn new_open(driver: &ArcDriver, serial: Option<&str>) -> PicoResult<Self> {
         let handle = driver.open_unit(serial)?;
         let info = driver.get_unit_info(handle)?;

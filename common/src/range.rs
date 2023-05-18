@@ -1,10 +1,10 @@
-use enum_iterator::IntoEnumIterator;
+use enum_iterator::Sequence;
 use num_derive::*;
 use std::fmt;
 
 /// Pico channel ranges
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, IntoEnumIterator)]
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, Sequence)]
 pub enum PicoRange {
     X1_PROBE_10MV = 0,
     X1_PROBE_20MV = 1,
@@ -138,8 +138,10 @@ pub enum PicoRange {
 impl PicoRange {
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
         let input = input.replace([' ', '±'], "").to_uppercase();
-        let all_ranges = PicoRange::into_enum_iter().collect::<Vec<Self>>();
-        let valid_ranges = valid_ranges.unwrap_or(&all_ranges);
+
+        let valid_ranges = valid_ranges
+            .map(|ranges| ranges.to_vec())
+            .unwrap_or_else(|| enum_iterator::all::<PicoRange>().collect::<Vec<Self>>());
 
         for range in valid_ranges {
             let to_cmp = format!("{}", range)
@@ -148,7 +150,7 @@ impl PicoRange {
                 .to_uppercase();
 
             if input == to_cmp {
-                return Some(*range);
+                return Some(range);
             }
         }
 

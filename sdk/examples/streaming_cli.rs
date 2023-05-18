@@ -142,7 +142,11 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<OscilloscopeDevice> {
         println!();
 
         match &devices[device_selection] {
-            Ok(device) => return Ok(device.clone().ensure_open().unwrap()),
+            Ok(device) => {
+                let mut device = device.clone();
+                device.ensure_open().expect("Could not open device");
+                return Ok(device);
+            }
             Err(error) => match error {
                 EnumerationError::DriverLoadError { driver, .. }
                 | EnumerationError::VersionError {
