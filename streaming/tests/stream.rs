@@ -95,7 +95,7 @@ mod streaming_tests {
             .return_const(Ok(OscilloscopeSampleConfig::default()));
 
         let driver: ArcDriver = Arc::new(mock);
-        let device = OscilloscopeDevice::open(&driver, None).unwrap();
+        let device = OscilloscopeDevice::new_open(&driver, None).unwrap();
         let streaming = device.into_streaming_device();
 
         let mut config = OscilloscopeConfig::default();

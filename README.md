@@ -11,27 +11,29 @@ numerous Pico drivers.
 
 ### Sub Crates
 
- - ### `pico-common` [![Crates.io](https://img.shields.io/crates/v/pico-common)](https://crates.io/crates/pico-common)
-    Common enums, structs and traits.
- - ### `pico-sys-dynamic` [![Crates.io](https://img.shields.io/crates/v/pico-sys-dynamic)](https://crates.io/crates/pico-sys-dynamic)
-    Dynamically loaded unsafe bindings for every Pico oscilloscope driver. **This crate contains unsafe code.**
- - ### `pico-driver` [![Crates.io](https://img.shields.io/crates/v/pico-driver)](https://crates.io/crates/pico-driver)
-    Common, safe wrappers implementing the `OscilloscopeDriver` trait. **This crate contains unsafe code.**
- - ### `pico-download` [![Crates.io](https://img.shields.io/crates/v/pico-download)](https://crates.io/crates/pico-download)
-    Download missing drivers on any platform.
- - ### `pico-device` [![Crates.io](https://img.shields.io/crates/v/pico-device)](https://crates.io/crates/pico-device)
-    Device abstraction over `OscilloscopeDriver` trait. Detects available channels and valid ranges.
- - ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
-    Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
- - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
-    Implements continuous gap-less streaming on top of `OscilloscopeDevice`.
+- ### `pico-common` [![Crates.io](https://img.shields.io/crates/v/pico-common)](https://crates.io/crates/pico-common)
+  Common enums, structs and traits.
+- ### `pico-sys-dynamic` [![Crates.io](https://img.shields.io/crates/v/pico-sys-dynamic)](https://crates.io/crates/pico-sys-dynamic)
+  Dynamically loaded unsafe bindings for every Pico oscilloscope driver. **This crate contains unsafe code.**
+- ### `pico-driver` [![Crates.io](https://img.shields.io/crates/v/pico-driver)](https://crates.io/crates/pico-driver)
+  Common, safe wrappers implementing the `OscilloscopeDriver` trait. **This crate contains unsafe code.**
+- ### `pico-download` [![Crates.io](https://img.shields.io/crates/v/pico-download)](https://crates.io/crates/pico-download)
+  Download missing drivers on any platform.
+- ### `pico-device` [![Crates.io](https://img.shields.io/crates/v/pico-device)](https://crates.io/crates/pico-device)
+  Device abstraction over `OscilloscopeDriver` trait. Detects available channels and valid ranges.
+- ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
+  Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
+- ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
+  Implements continuous gap-less streaming on top of `OscilloscopeDevice`.
 
 ## Prerequisites
+
 On linux `pico-enumeration` [requires
 `libudev-dev`](https://github.com/meatysolutions/pico-sdk/blob/700ab24efe81063316baffff638988cf626c6ffe/.github/workflows/build-and-publish.yml#L32)
 to be installed.
 
 ## Tests
+
 Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.
 To run these tests, ensure that ignored tests are run too:
 
@@ -54,18 +56,20 @@ Attempts to enumerate devices and downloads drivers which were not found in the 
 
 Loads the specified driver and attempts open the optionally specified device serial.
 
-
 ## Usage Examples
+
 Opening and configuring a specific ps2000 device as a `OscilloscopeDevice`:
+
 ```rust
 use pico_sdk::prelude::*;
 
 let driver = Driver::PS2000.load(&LibraryResolution::Default)?;
-let device = OscilloscopeDevice::open(&driver, Some("ABC/123"))?;
+let device = OscilloscopeDevice::new_open(&driver, Some("ABC/123"))?;
 ```
 
 Enumerate all required Pico oscilloscope drivers, configure the first device that's returned and stream
 gap-less data from it:
+
 ```rust
 use std::sync::Arc;
 use pico_sdk::prelude::*;
@@ -108,6 +112,7 @@ stream_device.start(config)?;
 
 Enumerate all required Pico oscilloscope drivers. If a device is found but no matching
 driver is available, attempt to download missing drivers and try enumerating again:
+
 ```rust
 use pico_sdk::prelude::*;
 

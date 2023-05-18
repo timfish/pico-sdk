@@ -103,7 +103,7 @@ fn sha256_digest_for_file<P: AsRef<Path>>(path: P) -> Result<Digest, DriverDownl
     let mut src_file = fs::File::open(&path)?;
 
     let mut context = Context::new(&SHA256);
-    let mut buffer = [0; 1024];
+    let mut buffer = [0; 1024 * 4];
 
     loop {
         let count = src_file.read(&mut buffer)?;

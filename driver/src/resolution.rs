@@ -10,7 +10,7 @@ pub enum LibraryResolution {
     Default,
     /// Searches for drivers in the application root directory
     AppRoot,
-    /// Searches for drivers at a specific path
+    /// Searches for drivers in a specific path
     Custom(PathBuf),
 }
 

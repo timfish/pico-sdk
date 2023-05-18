@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     download_drivers_to_cache(&[Driver::TC08])?;
 
     let driver = Arc::new(TC08Driver::load(&cache_resolution())?);
-    let device = TC08Device::open(&driver, None)?;
+    let device = TC08Device::new_open(&driver, None)?;
     let device = device.into_streaming_device();
 
     let callback: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(PrintData);

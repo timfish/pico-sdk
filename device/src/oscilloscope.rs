@@ -68,7 +68,10 @@ impl OscilloscopeDevice {
         }
     }
 
-    pub fn open<'a, D: Into<&'a ArcDriver>>(driver: D, serial: Option<&str>) -> PicoResult<Self> {
+    pub fn new_open<'a, D: Into<&'a ArcDriver>>(
+        driver: D,
+        serial: Option<&str>,
+    ) -> PicoResult<Self> {
         let driver = driver.into();
         let handle = driver.open_unit(serial)?;
 
@@ -88,14 +91,10 @@ impl OscilloscopeDevice {
         })
     }
 
-    pub fn get_info(&self) -> PicoResult<OscilloscopeInfo> {
-        let handle = self.driver.open_unit(Some(&self.serial))?;
-        OscilloscopeDevice::get_unit_info(&self.driver, handle)
-    }
-
     pub fn ensure_open(mut self) -> PicoResult<Self> {
         if self.info.is_none() {
-            self.info = Some(self.get_info()?);
+            let handle = self.driver.open_unit(Some(&self.serial))?;
+            self.info = Some(OscilloscopeDevice::get_unit_info(&self.driver, handle)?);
         }
 
         Ok(self)

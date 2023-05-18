@@ -21,7 +21,7 @@
 //! // Load the required driver
 //! let driver = Driver::PS2000.load(&LibraryResolution::Default)?;
 //! // Try and load the first available ps2000 device
-//! let device = OscilloscopeDevice::open(&driver, None)?;
+//! let device = OscilloscopeDevice::new_open(&driver, None)?;
 //! // Get a streaming device from a OscilloscopeDevice
 //! let stream_device = device.into_streaming_device();
 //!

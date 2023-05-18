@@ -62,7 +62,7 @@
 //! use pico_sdk::prelude::*;
 //!
 //! let driver = Driver::PS2000.load(&LibraryResolution::Default)?;
-//! let device = OscilloscopeDevice::open(&driver, Some("ABC/123"))?;
+//! let device = OscilloscopeDevice::new_open(&driver, Some("ABC/123"))?;
 //! # Ok(())
 //! # }
 //! ```

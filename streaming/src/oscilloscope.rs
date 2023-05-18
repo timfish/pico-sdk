@@ -86,7 +86,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
     #[tracing::instrument(level = "debug", skip_all)]
     fn open(&self, serial: &str) -> PicoResult<Current<OscilloscopeInfo, ScopeStreamState>> {
-        OscilloscopeDevice::open(&self.driver, Some(serial)).map(|device| {
+        OscilloscopeDevice::new_open(&self.driver, Some(serial)).map(|device| {
             let mut device = device;
             Current::Open(
                 device

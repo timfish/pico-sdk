@@ -26,14 +26,14 @@ pub struct TC08Device {
 }
 
 impl TC08Device {
-    pub fn new(driver: ArcDriver, serial: String, info: Option<TC08Info>) -> Self {
+    pub fn new_closed(driver: ArcDriver, serial: String, info: Option<TC08Info>) -> Self {
         Self {
             driver,
             serial,
             info,
         }
     }
-    pub fn open(driver: &ArcDriver, serial: Option<&str>) -> PicoResult<Self> {
+    pub fn new_open(driver: &ArcDriver, serial: Option<&str>) -> PicoResult<Self> {
         let handle = driver.open_unit(serial)?;
         let info = driver.get_unit_info(handle)?;
 

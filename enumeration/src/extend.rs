@@ -30,7 +30,7 @@ impl EnumerateDriver<tc08::TC08Device> for tc08::ArcDriver {
             .flat_map(|result| {
                 result.map(|handle| {
                     self.get_unit_info(handle).map(|info| {
-                        tc08::TC08Device::new(self.clone(), info.serial.clone(), Some(info))
+                        tc08::TC08Device::new_closed(self.clone(), info.serial.clone(), Some(info))
                     })
                 })
             })
