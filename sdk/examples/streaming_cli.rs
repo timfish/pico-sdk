@@ -226,7 +226,7 @@ fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, Stri
             }
 
             if let Some(range) = select_range(&ranges) {
-                device.enable_channel(edit_channel, range, PicoCoupling::DC);
+                device.enable_channel(edit_channel, range, PicoCoupling::DC, 0.0);
             } else {
                 device.disable_channel(edit_channel);
             }

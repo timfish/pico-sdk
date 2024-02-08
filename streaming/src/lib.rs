@@ -215,13 +215,13 @@ impl PicoStreamingDevice {
         self.device.variant.to_string()
     }
 
-    pub fn enable_channel(&self, channel: PicoChannel, range: PicoRange, coupling: PicoCoupling) {
+    pub fn enable_channel(&self, channel: PicoChannel, range: PicoRange, coupling: PicoCoupling, offset: f64) {
         self.enabled_channels.write().insert(
             channel,
             ChannelConfig {
                 range,
                 coupling,
-                offset: 0.0,
+                offset,
             },
         );
     }
