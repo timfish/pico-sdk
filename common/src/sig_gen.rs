@@ -39,6 +39,7 @@ pub struct SigGenArbitraryMinMaxValues {
     pub max_value: i16,
     pub min_size: u32,
     pub max_size: u32,
+    pub dwell_count: u32,
 }
 
 // Rust addition: encode the potential values of sweeps and shots, to avoid invalid states

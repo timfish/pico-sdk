@@ -13,8 +13,8 @@ use pico_common::{
     SweepShotCount, SigGenArbitraryMinMaxValues, SetSigGenBuiltInV2Properties,
 };
 use pico_sys_dynamic::ps2000a::{
-    PS2000ALoader,
-    PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE,
+    PS2000ALoader, PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_MIN_DWELL_COUNT,
+    PS2000A_SIGGEN_TRIG_SOURCE, PS2000A_SIGGEN_TRIG_TYPE, PS2000A_SWEEP_TYPE,
 };
 use std::{pin::Pin, sync::Arc};
 
@@ -413,12 +413,18 @@ impl PicoDriver for PS2000ADriver {
                 &mut max_value,
                 &mut min_size,
                 &mut max_size,
-        )}).to_result(SigGenArbitraryMinMaxValues {
-            min_value,
-            max_value,
-            min_size,
-            max_size,
-        }, "sig_gen_arbitrary_min_max_values")
+            )
+        })
+        .to_result(
+            SigGenArbitraryMinMaxValues {
+                min_value,
+                max_value,
+                min_size,
+                max_size,
+                dwell_count: PS2000A_MIN_DWELL_COUNT,
+            },
+            "sig_gen_arbitrary_min_max_values",
+        )
     }
 
     fn sig_gen_frequency_to_phase(

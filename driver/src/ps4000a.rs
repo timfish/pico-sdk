@@ -14,9 +14,12 @@ use pico_common::{
     PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
     SweepShotCount, SigGenArbitraryMinMaxValues,
 };
-use pico_sys_dynamic::ps4000a::{
-    PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS,
-    PS4000A_EXTRA_OPERATIONS, PS4000A_INDEX_MODE, PS4000A_SIGGEN_TRIG_SOURCE, PS4000A_SIGGEN_TRIG_TYPE, PS4000A_SWEEP_TYPE,
+use pico_sys_dynamic::{
+    ps4000a::PS4000A_MIN_DWELL_COUNT,
+    ps4000a::{
+        PS4000ALoader, PS4000A_EXTRA_OPERATIONS, PS4000A_INDEX_MODE, PS4000A_SIGGEN_TRIG_SOURCE,
+        PS4000A_SIGGEN_TRIG_TYPE, PS4000A_SWEEP_TYPE, PS4000A_USER_PROBE_INTERACTIONS,
+    },
 };
 use std::{collections::HashMap, matches, pin::Pin, sync::Arc};
 
@@ -461,12 +464,18 @@ impl PicoDriver for PS4000ADriver {
                 &mut max_value,
                 &mut min_size,
                 &mut max_size,
-        )}).to_result(SigGenArbitraryMinMaxValues {
-            min_value,
-            max_value,
-            min_size,
-            max_size,
-        }, "sig_gen_arbitrary_min_max_values")
+            )
+        })
+        .to_result(
+            SigGenArbitraryMinMaxValues {
+                min_value,
+                max_value,
+                min_size,
+                max_size,
+                dwell_count: PS4000A_MIN_DWELL_COUNT,
+            },
+            "sig_gen_arbitrary_min_max_values",
+        )
     }
 
     fn sig_gen_frequency_to_phase(
