@@ -6,11 +6,10 @@ use crate::{
 };
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange,
-    PicoResult, PicoStatus, SampleConfig, ToPicoStr,
-    PicoSweepType,
-    PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
-    SweepShotCount, SigGenArbitraryMinMaxValues, SetSigGenBuiltInV2Properties,
+    ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError,
+    PicoExtraOperations, PicoIndexMode, PicoInfo, PicoRange, PicoResult, PicoSigGenTrigSource,
+    PicoSigGenTrigType, PicoStatus, PicoSweepType, SampleConfig, SetSigGenBuiltInV2Properties,
+    SigGenArbitraryMinMaxValues, SweepShotCount, ToPicoStr,
 };
 use pico_sys_dynamic::ps2000a::{
     PS2000ALoader, PS2000A_EXTRA_OPERATIONS, PS2000A_INDEX_MODE, PS2000A_MIN_DWELL_COUNT,
@@ -299,7 +298,7 @@ impl PicoDriver for PS2000ADriver {
         sweeps_shots: SweepShotCount,
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
-        ext_in_threshold: i16
+        ext_in_threshold: i16,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps2000aSetSigGenPropertiesBuiltIn(
@@ -313,21 +312,16 @@ impl PicoDriver for PS2000ADriver {
                 sweeps_shots.to_sweeps(),
                 trigger_type as u32,
                 trigger_source as u32,
-                ext_in_threshold
+                ext_in_threshold,
             )
-        }).to_result((), "set_sig_gen_properties_build_in")
+        })
+        .to_result((), "set_sig_gen_properties_build_in")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn sig_gen_software_control(
-        &self,
-        handle: i16,
-        state: i16,
-    ) -> PicoResult<()> {
-
-        PicoStatus::from(unsafe {
-            self.bindings.ps2000aSigGenSoftwareControl(handle, state)
-        }).to_result((), "sig_gen_software_control")
+    fn sig_gen_software_control(&self, handle: i16, state: i16) -> PicoResult<()> {
+        PicoStatus::from(unsafe { self.bindings.ps2000aSigGenSoftwareControl(handle, state) })
+            .to_result((), "sig_gen_software_control")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -335,8 +329,11 @@ impl PicoDriver for PS2000ADriver {
         &self,
         handle: i16,
         props: SetSigGenBuiltInV2Properties,
-     ) ->  PicoResult<()> {
-        tracing::trace!(sweeps = props.sweeps_shots.to_sweeps(), shots = props.sweeps_shots.to_shots());
+    ) -> PicoResult<()> {
+        tracing::trace!(
+            sweeps = props.sweeps_shots.to_sweeps(),
+            shots = props.sweeps_shots.to_shots()
+        );
         PicoStatus::from(unsafe {
             self.bindings.ps2000aSetSigGenBuiltInV2(
                 handle,
@@ -354,8 +351,10 @@ impl PicoDriver for PS2000ADriver {
                 props.trig_type as PS2000A_SIGGEN_TRIG_TYPE,
                 props.trig_source as PS2000A_SIGGEN_TRIG_SOURCE,
                 props.ext_in_threshold,
-        )}).to_result((), "set_sig_gen_built_in_v2")
-     }
+            )
+        })
+        .to_result((), "set_sig_gen_built_in_v2")
+    }
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn set_sig_gen_arbitrary(
@@ -375,7 +374,7 @@ impl PicoDriver for PS2000ADriver {
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16,
-    ) ->  PicoResult<()> {
+    ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps2000aSetSigGenArbitrary(
                 handle,
@@ -394,8 +393,10 @@ impl PicoDriver for PS2000ADriver {
                 sweeps_shots.to_sweeps(),
                 trigger_type as PS2000A_SIGGEN_TRIG_TYPE,
                 trigger_source as PS2000A_SIGGEN_TRIG_SOURCE,
-                ext_in_threshold)
-        }).to_result((), "set_sig_gen_arbitrary")
+                ext_in_threshold,
+            )
+        })
+        .to_result((), "set_sig_gen_arbitrary")
     }
 
     fn sig_gen_arbitrary_min_max_values(
@@ -442,6 +443,8 @@ impl PicoDriver for PS2000ADriver {
                 index_mode as u32,
                 buffer_length,
                 &mut phase,
-        )}).to_result(phase, "sig_gen_arbitrary_min_max_values")
+            )
+        })
+        .to_result(phase, "sig_gen_arbitrary_min_max_values")
     }
 }

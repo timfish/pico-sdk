@@ -1,4 +1,4 @@
-use num_derive::{ToPrimitive, FromPrimitive};
+use num_derive::{FromPrimitive, ToPrimitive};
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoWaveType {

@@ -8,11 +8,10 @@ use c_vec::CVec;
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
-    ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
-    PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
-    PicoSweepType,
-    PicoExtraOperations, PicoIndexMode, PicoSigGenTrigType, PicoSigGenTrigSource,
-    SweepShotCount, SigGenArbitraryMinMaxValues,
+    ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError,
+    PicoExtraOperations, PicoIndexMode, PicoInfo, PicoRange, PicoResult, PicoSigGenTrigSource,
+    PicoSigGenTrigType, PicoStatus, PicoSweepType, SampleConfig, SigGenArbitraryMinMaxValues,
+    SweepShotCount, ToPicoStr,
 };
 use pico_sys_dynamic::{
     ps4000a::PS4000A_MIN_DWELL_COUNT,
@@ -375,7 +374,7 @@ impl PicoDriver for PS4000ADriver {
         sweeps_shots: SweepShotCount,
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
-        ext_in_threshold: i16
+        ext_in_threshold: i16,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps4000aSetSigGenPropertiesBuiltIn(
@@ -389,21 +388,16 @@ impl PicoDriver for PS4000ADriver {
                 sweeps_shots.to_sweeps(),
                 trigger_type as u32,
                 trigger_source as u32,
-                ext_in_threshold
+                ext_in_threshold,
             )
-        }).to_result((), "set_sig_gen_properties_build_in")
+        })
+        .to_result((), "set_sig_gen_properties_build_in")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn sig_gen_software_control(
-        &self,
-        handle: i16,
-        state: i16,
-    ) -> PicoResult<()> {
-
-        PicoStatus::from(unsafe {
-            self.bindings.ps4000aSigGenSoftwareControl(handle, state)
-        }).to_result((), "sig_gen_software_control")
+    fn sig_gen_software_control(&self, handle: i16, state: i16) -> PicoResult<()> {
+        PicoStatus::from(unsafe { self.bindings.ps4000aSigGenSoftwareControl(handle, state) })
+            .to_result((), "sig_gen_software_control")
     }
 
     // PS4000A has no SetSigGenBuiltInV2
@@ -426,7 +420,7 @@ impl PicoDriver for PS4000ADriver {
         trigger_type: PicoSigGenTrigType,
         trigger_source: PicoSigGenTrigSource,
         ext_in_threshold: i16,
-    ) ->  PicoResult<()> {
+    ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps4000aSetSigGenArbitrary(
                 handle,
@@ -445,8 +439,10 @@ impl PicoDriver for PS4000ADriver {
                 sweeps_shots.to_sweeps(),
                 trigger_type as PS4000A_SIGGEN_TRIG_TYPE,
                 trigger_source as PS4000A_SIGGEN_TRIG_SOURCE,
-                ext_in_threshold)
-        }).to_result((), "set_sig_gen_arbitrary")
+                ext_in_threshold,
+            )
+        })
+        .to_result((), "set_sig_gen_arbitrary")
     }
 
     fn sig_gen_arbitrary_min_max_values(
@@ -493,6 +489,8 @@ impl PicoDriver for PS4000ADriver {
                 index_mode as u32,
                 buffer_length,
                 &mut phase,
-        )}).to_result(phase, "sig_gen_arbitrary_min_max_values")
+            )
+        })
+        .to_result(phase, "sig_gen_arbitrary_min_max_values")
     }
 }
