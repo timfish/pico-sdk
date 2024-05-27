@@ -139,8 +139,6 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<OscilloscopeDevice> {
             .interact()
             .unwrap();
 
-        println!();
-
         match &devices[device_selection] {
             Ok(device) => {
                 let mut device = device.clone();

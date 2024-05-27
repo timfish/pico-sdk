@@ -1,9 +1,10 @@
 use super::LibraryResolution;
 use pico_common::{
-    FromPicoStr, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, TC08Channel, TC08Error,
-    TC08Info, TCType,
+    Driver, FromPicoStr, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, TC08Channel,
+    TC08Error, TC08Info, TCType,
 };
 use pico_sys_dynamic::tc08::{TC08Bindings, USBTC08Info, USBTC08_MAX_SERIAL_CHARS};
+use std::ops::Deref;
 use std::{
     cmp::Ordering,
     fmt, iter,
@@ -27,27 +28,11 @@ fn to_tc08_info(handle: i16, value: USBTC08Info) -> TC08Info {
     }
 }
 
-pub struct TC08Driver {
+pub struct TC08DriverInternal {
     bindings: TC08Bindings,
 }
 
-impl fmt::Debug for TC08Driver {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TC08Driver").finish()
-    }
-}
-
-pub type ArcDriver = Arc<TC08Driver>;
-
-impl TC08Driver {
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
-        let path = resolution.get_path(pico_common::Driver::TC08);
-
-        Ok(TC08Driver {
-            bindings: unsafe { TC08Bindings::new(path)? },
-        })
-    }
-
+impl TC08DriverInternal {
     #[tracing::instrument(level = "trace", skip(self))]
     fn get_last_error(&self, handle: i16) -> TC08Error {
         TC08Error::from(unsafe { self.bindings.usb_tc08_get_last_error(handle) })
@@ -218,5 +203,32 @@ impl TC08Driver {
             self.bindings.usb_tc08_close_unit(handle)
         })
         .to_result((), "close_unit")
+    }
+}
+
+#[derive(Clone)]
+pub struct TC08Driver(Arc<TC08DriverInternal>);
+
+impl TC08Driver {
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+        let path = resolution.get_path(Driver::TC08);
+
+        Ok(TC08Driver(Arc::new(TC08DriverInternal {
+            bindings: unsafe { TC08Bindings::new(path)? },
+        })))
+    }
+}
+
+impl fmt::Debug for TC08Driver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TC08Driver").finish()
+    }
+}
+
+impl Deref for TC08Driver {
+    type Target = TC08DriverInternal;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

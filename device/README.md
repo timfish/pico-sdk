@@ -10,10 +10,9 @@ When a `OscilloscopeDevice` is created, it is opened, its channels and capabilit
 automatically detected.
 
 ## Example
-
 ```rust
 use pico_common::Driver;
-use pico_driver::{DriverLoader, LibraryResolution};
+use pico_driver::{DriverLoad, LibraryResolution};
 use pico_device::oscilloscope::OscilloscopeDevice;
 
 // Load the required driver

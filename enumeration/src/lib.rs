@@ -17,7 +17,7 @@ use extend::EnumerateDriver;
 pub use helpers::EnumResultHelpers;
 use pico_common::Driver;
 use pico_device::{oscilloscope::OscilloscopeDevice, PicoDevice};
-use pico_driver::{kernel_driver, DriverLoader, LibraryResolution};
+use pico_driver::{kernel_driver, DriverLoad, LibraryResolution};
 use rayon::prelude::*;
 use std::collections::HashMap;
 

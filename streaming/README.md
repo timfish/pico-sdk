@@ -9,8 +9,8 @@ Once streaming is started, a `PicoStreamingDevice` returns `StreamingEvent`s. Th
 and `Connected`, `Disconnected` and `Data`. The `Data` event contains raw `Vec<i16>` samples for
 each enabled channel that can easily be scaled to the channel units (ie. Volts, Amps, etc).
 
-## Example
 
+## Example
 ```rust
 // Load the required driver
 let driver = Driver::PS2000.load(&LibraryResolution::Default)?;

@@ -33,8 +33,11 @@ impl BackgroundThreadHandle {
 impl Drop for BackgroundThreadHandle {
     #[tracing::instrument(skip(self), level = "debug")]
     fn drop(&mut self) {
-        self.tx_terminate.send(()).unwrap();
-        self.handle.take().unwrap().join().unwrap();
+        self.tx_terminate.send(()).ok();
+
+        if let Some(handle) = self.handle.take() {
+            handle.join().ok();
+        }
     }
 }
 

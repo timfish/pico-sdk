@@ -2,36 +2,43 @@ use console::Term;
 use pico_sdk::prelude::*;
 use std::sync::Arc;
 
-struct PrintData;
-
-impl EventHandler<TC08StreamingEvent> for PrintData {
-    fn new_data(&self, event: &TC08StreamingEvent) {
-        println!("{:#?}", event);
+fn get_level() -> tracing::Level {
+    if std::env::args().any(|a| a.contains("--info")) {
+        tracing::Level::INFO
+    } else if std::env::args().any(|a| a.contains("--debug")) {
+        tracing::Level::DEBUG
+    } else if std::env::args().any(|a| a.contains("--trace")) {
+        tracing::Level::TRACE
+    } else {
+        tracing::Level::WARN
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::args().any(|a| a.contains("--debug")) {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-            .init();
-    }
-
-    if std::env::args().any(|a| a.contains("--trace")) {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-            .init();
-    }
+    tracing_subscriber::fmt()
+        .with_max_level(get_level())
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+        .init();
 
     download_drivers_to_cache(&[Driver::TC08])?;
 
-    let driver = Arc::new(TC08Driver::load(&cache_resolution())?);
-    let device = TC08Device::new_open(&driver, None)?;
+    let driver = Driver::TC08.load(&cache_resolution())?;
+    let device = match driver.open_device(None)? {
+        PicoDevice::TC08(device) => device,
+        _ => unreachable!(),
+    };
+
     let device = device.into_streaming_device();
 
-    let callback: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(PrintData);
+    struct PrintData;
+
+    impl EventHandler<TC08StreamingEvent> for PrintData {
+        fn new_data(&self, event: &TC08StreamingEvent) {
+            println!("{:#?}", event);
+        }
+    }
+
+    let callback: Arc<dyn EventHandler<_>> = Arc::new(PrintData);
 
     device.events.subscribe(&callback);
 

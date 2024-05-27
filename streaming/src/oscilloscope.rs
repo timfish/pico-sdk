@@ -3,7 +3,10 @@ use super::state::{
 };
 use parking_lot::RwLock;
 use pico_common::{OscilloscopeSampleConfig, PicoChannel, PicoResult, PicoStatus};
-use pico_device::oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo};
+use pico_device::{
+    oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
+    DeviceOpen,
+};
 use std::{collections::HashMap, fmt, sync::Arc};
 use tracing::warn;
 
@@ -86,7 +89,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
     #[tracing::instrument(level = "debug", skip_all)]
     fn open(&self, serial: &str) -> PicoResult<Current<OscilloscopeInfo, ScopeStreamState>> {
-        OscilloscopeDevice::new_open(&self.driver, Some(serial)).map(|device| {
+        self.driver.open_device(Some(serial)).map(|device| {
             let mut device = device;
             Current::Open(
                 device
@@ -203,7 +206,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                     let len = { buffer.read().len() };
                     self.driver
                         .set_data_buffer(*info.handle, *channel, buffer.clone(), len)
-                        .unwrap();
+                        .expect("could not set buffers");
                 }
 
                 sleep_ms(50);

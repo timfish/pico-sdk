@@ -1,6 +1,6 @@
 use pico_common::Driver;
 use pico_download::{cache_resolution, download_drivers_to_cache};
-use pico_driver::DriverLoader;
+use pico_driver::DriverLoad;
 
 #[test]
 fn load_all_drivers() {

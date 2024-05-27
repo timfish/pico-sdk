@@ -42,19 +42,19 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-mod resolution;
-
-pub use resolution::{DriverLoader, LibraryResolution};
 pub mod kernel_driver;
 pub mod oscilloscope;
+mod resolution;
 pub mod tc08;
+
+pub use resolution::{DriverLoad, LibraryResolution};
 
 use std::fmt;
 
 #[derive(Clone)]
 pub enum PicoDriver {
-    Oscilloscope(oscilloscope::ArcDriver),
-    TC08(tc08::ArcDriver),
+    Oscilloscope(oscilloscope::OscilloscopeDriver),
+    TC08(tc08::TC08Driver),
 }
 
 impl fmt::Debug for PicoDriver {
@@ -66,11 +66,20 @@ impl fmt::Debug for PicoDriver {
     }
 }
 
-impl<'a> From<&'a PicoDriver> for &'a oscilloscope::ArcDriver {
-    fn from(value: &'a PicoDriver) -> Self {
-        match value {
-            PicoDriver::Oscilloscope(driver) => driver,
-            _ => panic!("Cannot convert {value:?} to OscilloscopeDriver"),
-        }
-    }
-}
+// impl<'a> From<&'a PicoDriver> for &'a oscilloscope::OscilloscopeDriver {
+//     fn from(value: &'a PicoDriver) -> Self {
+//         match value {
+//             PicoDriver::Oscilloscope(driver) => driver,
+//             _ => panic!("Cannot convert {value:?} to OscilloscopeDriver"),
+//         }
+//     }
+// }
+
+// impl<'a> From<&'a PicoDriver> for &'a tc08::TC08Driver {
+//     fn from(value: &'a PicoDriver) -> Self {
+//         match value {
+//             PicoDriver::TC08(driver) => driver,
+//             _ => panic!("Cannot convert {value:?} to TC08Driver"),
+//         }
+//     }
+// }

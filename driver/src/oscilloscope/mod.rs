@@ -25,7 +25,7 @@ use pico_common::{
     PicoError, PicoInfo, PicoRange, PicoResult,
 };
 
-use std::{fmt, sync::Arc};
+use std::{fmt, ops::Deref, sync::Arc};
 use thiserror::Error;
 use version_compare::Version;
 
@@ -50,7 +50,7 @@ pub struct EnumerationResult {
 }
 
 /// Common trait implemented for every driver
-pub trait OscilloscopeDriver: fmt::Debug + Send + Sync {
+pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     /// Gets the underlying driver type
     fn get_driver(&self) -> Driver;
     /// Gets the driver version string
@@ -123,7 +123,28 @@ pub trait OscilloscopeDriver: fmt::Debug + Send + Sync {
     }
 }
 
-pub type ArcDriver = Arc<dyn OscilloscopeDriver>;
+#[derive(Clone)]
+pub struct OscilloscopeDriver(Arc<dyn OscilloscopeDriverInternal>);
+
+impl OscilloscopeDriver {
+    pub fn new<D: OscilloscopeDriverInternal + 'static>(driver: D) -> Self {
+        OscilloscopeDriver(Arc::new(driver))
+    }
+}
+
+impl Deref for OscilloscopeDriver {
+    type Target = Arc<dyn OscilloscopeDriverInternal>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl fmt::Debug for OscilloscopeDriver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 pub(crate) fn get_version_string(input: &str) -> String {
     input

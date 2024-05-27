@@ -3,7 +3,7 @@ use super::{
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, OscilloscopeDriver,
+    EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal,
 };
 use parking_lot::RwLock;
 use pico_common::{
@@ -28,20 +28,20 @@ impl std::fmt::Debug for PS5000ADriver {
 }
 
 impl PS5000ADriver {
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    pub fn load(resolution: &LibraryResolution) -> Result<OscilloscopeDriver, ::libloading::Error> {
         let path = resolution.get_path(Driver::PS5000A);
         let dependencies = load_dependencies(&path);
         let bindings = unsafe { PS5000ABindings::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps5000aApplyFix(0x1ced9168, 0x11e6) };
-        Ok(PS5000ADriver {
+        Ok(OscilloscopeDriver::new(PS5000ADriver {
             bindings,
             _dependencies: dependencies,
-        })
+        }))
     }
 }
 
-impl OscilloscopeDriver for PS5000ADriver {
+impl OscilloscopeDriverInternal for PS5000ADriver {
     fn get_driver(&self) -> Driver {
         Driver::PS3000A
     }

@@ -15,7 +15,7 @@
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! # use std::sync::Arc;
 //! # use pico_common::{Driver, PicoChannel, PicoCoupling, PicoRange};
-//! # use pico_driver::{DriverLoader, LibraryResolution};
+//! # use pico_driver::{DriverLoad, LibraryResolution};
 //! # use pico_device::oscilloscope::{OscilloscopeDevice, OscilloscopeConfig};
 //! # use pico_streaming::{EventHandler, OscilloscopeStreamEvent, IntoStreamingDevice};
 //! // Load the required driver

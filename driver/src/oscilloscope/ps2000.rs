@@ -1,7 +1,7 @@
 use super::{
     super::LibraryResolution,
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, EnumerationResult, OscilloscopeDriver,
+    get_version_string, EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal,
 };
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
@@ -129,15 +129,15 @@ impl std::fmt::Debug for PS2000Driver {
 }
 
 impl PS2000Driver {
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    pub fn load(resolution: &LibraryResolution) -> Result<OscilloscopeDriver, ::libloading::Error> {
         let path = resolution.get_path(Driver::PS2000);
         let dependencies = load_dependencies(&path);
         let bindings = unsafe { PS2000Bindings::new(path)? };
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
-        Ok(PS2000Driver {
+        Ok(OscilloscopeDriver::new(PS2000Driver {
             bindings,
             _dependencies: dependencies,
-        })
+        }))
     }
 
     #[tracing::instrument(level = "trace", skip(self), ret)]
@@ -150,7 +150,7 @@ impl PS2000Driver {
     }
 }
 
-impl OscilloscopeDriver for PS2000Driver {
+impl OscilloscopeDriverInternal for PS2000Driver {
     fn get_driver(&self) -> Driver {
         Driver::PS2000
     }

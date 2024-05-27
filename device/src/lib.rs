@@ -13,7 +13,7 @@
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! use pico_common::Driver;
-//! use pico_driver::{DriverLoader, LibraryResolution};
+//! use pico_driver::{DriverLoad, LibraryResolution};
 //! use pico_device::oscilloscope::OscilloscopeDevice;
 //!
 //! // Load the required driver
@@ -29,6 +29,9 @@
 //! # }
 //! ```
 
+use pico_common::PicoResult;
+use pico_driver::PicoDriver;
+
 pub mod oscilloscope;
 pub mod tc08;
 
@@ -36,4 +39,35 @@ pub mod tc08;
 pub enum PicoDevice {
     Oscilloscope(oscilloscope::OscilloscopeDevice),
     TC08(tc08::TC08Device),
+}
+
+impl PicoDevice {
+    pub fn get_serial(&self) -> &str {
+        match self {
+            PicoDevice::Oscilloscope(device) => &device.serial,
+            PicoDevice::TC08(device) => &device.serial,
+        }
+    }
+
+    pub fn get_variant(&self) -> Option<&str> {
+        match self {
+            PicoDevice::Oscilloscope(device) => Some(&device.variant),
+            PicoDevice::TC08(_) => None,
+        }
+    }
+}
+
+pub trait DeviceOpen<D> {
+    fn open_device(&self, serial: Option<&str>) -> PicoResult<D>;
+}
+
+impl DeviceOpen<PicoDevice> for PicoDriver {
+    fn open_device(&self, serial: Option<&str>) -> PicoResult<PicoDevice> {
+        match self {
+            PicoDriver::Oscilloscope(driver) => {
+                driver.open_device(serial).map(PicoDevice::Oscilloscope)
+            }
+            PicoDriver::TC08(driver) => driver.open_device(serial).map(PicoDevice::TC08),
+        }
+    }
 }

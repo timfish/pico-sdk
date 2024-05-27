@@ -6,16 +6,16 @@ mod streaming_tests {
         Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel, PicoCoupling,
         PicoInfo, PicoRange, PicoResult,
     };
-    use pico_device::oscilloscope::{OscilloscopeConfig, OscilloscopeDevice};
+    use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
     use pico_driver::oscilloscope::{
-        ArcDriver, DriverLoadError, EnumerationResult, OscilloscopeDriver,
+        DriverLoadError, EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal,
     };
     use pico_streaming::IntoStreamingDevice;
     use std::{sync::Arc, thread, time::Duration};
 
     mock! {
         MockDriver {}
-        impl OscilloscopeDriver for MockDriver{
+        impl OscilloscopeDriverInternal for MockDriver{
             fn get_driver(&self) -> Driver;
             fn get_version(&self) -> PicoResult<String>;
             fn get_path(&self) -> PicoResult<Option<String>>;
@@ -94,8 +94,8 @@ mod streaming_tests {
         mock.expect_start_streaming()
             .return_const(Ok(OscilloscopeSampleConfig::default()));
 
-        let driver: ArcDriver = Arc::new(mock);
-        let device = OscilloscopeDevice::new_open(&driver, None).unwrap();
+        let driver = OscilloscopeDriver::new(mock);
+        let device = driver.open_device(None).unwrap();
         let streaming = device.into_streaming_device();
 
         let mut config = OscilloscopeConfig::default();

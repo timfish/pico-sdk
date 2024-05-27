@@ -1,8 +1,10 @@
 use pico_common::{
     OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResult,
 };
-pub use pico_driver::oscilloscope::ArcDriver;
+use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
+
+use crate::DeviceOpen;
 
 #[derive(Debug, Clone, Default)]
 pub struct OscilloscopeConfig {
@@ -52,43 +54,25 @@ impl OscilloscopeInfo {
 
 #[derive(Clone, Debug)]
 pub struct OscilloscopeDevice {
-    pub driver: ArcDriver,
+    pub driver: OscilloscopeDriver,
     pub serial: String,
     pub variant: String,
     pub info: Option<OscilloscopeInfo>,
 }
 
 impl OscilloscopeDevice {
-    pub fn new_closed(driver: &ArcDriver, serial: String, variant: String) -> Self {
+    pub fn new_closed<'a, D: Into<&'a OscilloscopeDriver>>(
+        driver: D,
+        serial: String,
+        variant: String,
+    ) -> Self {
+        let driver = driver.into();
         Self {
             driver: driver.clone(),
             serial,
             variant,
             info: None,
         }
-    }
-
-    pub fn new_open<'a, D: Into<&'a ArcDriver>>(
-        driver: D,
-        serial: Option<&str>,
-    ) -> PicoResult<Self> {
-        let driver = driver.into();
-        let handle = driver.open_unit(serial)?;
-
-        let serial = match serial {
-            Some(s) => s.to_string(),
-            None => driver.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?,
-        };
-
-        let variant = driver.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-        let info = OscilloscopeDevice::get_unit_info(driver, handle)?;
-
-        Ok(Self {
-            driver: driver.clone(),
-            serial,
-            variant,
-            info: Some(info),
-        })
     }
 
     pub fn ensure_open(&mut self) -> PicoResult<()> {
@@ -100,7 +84,7 @@ impl OscilloscopeDevice {
         Ok(())
     }
 
-    fn get_unit_info(driver: &ArcDriver, handle: i16) -> PicoResult<OscilloscopeInfo> {
+    fn get_unit_info(driver: &OscilloscopeDriver, handle: i16) -> PicoResult<OscilloscopeInfo> {
         let variant = driver.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
         let usb_version = driver.get_unit_info(handle, PicoInfo::USB_VERSION)?;
 
@@ -135,5 +119,26 @@ impl Drop for OscilloscopeDevice {
                 let _ = self.driver.close(*info.handle);
             }
         }
+    }
+}
+
+impl DeviceOpen<OscilloscopeDevice> for OscilloscopeDriver {
+    fn open_device(&self, serial: Option<&str>) -> PicoResult<OscilloscopeDevice> {
+        let handle = self.open_unit(serial)?;
+
+        let serial = match serial {
+            Some(s) => s.to_string(),
+            None => self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?,
+        };
+
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
+        let info = OscilloscopeDevice::get_unit_info(self, handle)?;
+
+        Ok(OscilloscopeDevice {
+            driver: self.clone(),
+            serial,
+            variant,
+            info: Some(info),
+        })
     }
 }
