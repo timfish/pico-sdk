@@ -25,6 +25,7 @@ pub fn get_expected_driver_hash(driver: Driver) -> &'static str {
         Driver::PS5000A => "SHA256:303e2f287d916f234a4e74ad891b50c417b9cc43050fd5fa5c03959fa1c2ac0c",
         Driver::PS6000 => "SHA256:cd7f9ab9ce6551e869c2a9040297d7d758626ef35ff53dab5f6eac97ae19d984",
         Driver::PS6000A => "SHA256:64e7655746e1c9e1456fe69d3e62270347243711c5a1d657fb1c35f24cfad820",
+        Driver::PSOSPA => "SHA256:f30d21053da32c812106bfe81ee3a1e22fcdf1640fb66357707ddac7b6ec3e05",
         Driver::PicoIPP => "SHA256:a26381ac9bcdb3364b52fa934b337e8486e58bc7f0755f8d2d73dc237d2d1958",
         _ => ""
     }
@@ -37,6 +38,8 @@ pub fn get_expected_driver_hash(driver: Driver) -> &'static str {
         Driver::PS4000A => "SHA256:cf6bbc7d54fe7cd18243dbd6a3f30bb53dec40d36bda523dd43bb9cd953059e7",
         Driver::PS5000A => "SHA256:dac03cf4aa9d24f9828ada0cee14624c78a44f33f3493f4c66ea1c0614468b57",
         Driver::PS6000 => "SHA256:5da7622446aed202724ac7754190a68e0bb1165a52bf5a1792e5f664d536a578",
+        Driver::PS6000A => "SHA256:5ecb9d24a0b709c27ebb9213ce2fbd1d9eeed7a282851cd6901ead13964b0a02",
+        Driver::PSOSPA => "SHA256:6e485459fc108f9359c085b1bb3b221f4f1ca25aaaa378bda34c96762e54e944",
         Driver::PicoIPP => "SHA256:23d90a67a0d545e8377a60ef11434d4a744afaa0bf0b7b4f0322a1f75bc26ac8",
         Driver::IOMP5 => "SHA256:f76e798755b75f5dc2faa6474375a4c185da65b0ed0528336bd83b4e58d20256",
         _ => ""
@@ -51,6 +54,7 @@ pub fn get_expected_driver_hash(driver: Driver) -> &'static str {
         Driver::PS5000A => "SHA256:4e15a1ebd358a71bfefd51844a2390f96efea7abe2e40c8e89121e9ba538f28c",
         Driver::PS6000 => "SHA256:90275b12fd6bb78df36a45f80d5e7cc8360f795039b7a7fc7b2e1ee4ad7af9aa",
         Driver::PS6000A => "SHA256:54fdf8c6dcd1f0108507b19287d0526bfe94301080c526fd7f011b5baa62518c",
+        Driver::PSOSPA => "SHA256:51e958b3c2fdc73251d517c1b4c22155cfabbe1b35c83a63f1143e0e2d4c7cfe",
         Driver::PicoIPP => "SHA256:69ba217f477c5bd7dcca9d3fac0efa17ff8cdca59c27c927ea8f2ac606781b60",
         Driver::IOMP5 => "SHA256:64a85a2b94c307d95ed9a08a613bf72261afeb6b1e0a295eb6e410f565f5fd69",
         _ => ""
@@ -65,6 +69,7 @@ pub fn get_expected_driver_hash(driver: Driver) -> &'static str {
         Driver::PS5000A => "SHA256:af58a1c0bfedea56d5ce9b2c53d69ec1e41f6098d1d03ce9b14579277893327f",
         Driver::PS6000 => "SHA256:32ca7e7eebac2c1772423d3b5b74eaac5559bac8b33454f1757d3cfd4b788a14",
         Driver::PS6000A => "SHA256:2ebc87f9b3c638bce175f5cb69dabc9da50a3eca0ec4e44143e3ab9adfe8f119",
+        Driver::PSOSPA => "SHA256:b30b1be11998716b4e15783a463c3542dc28cb67f01a1ce651e50d93444817cc",
         Driver::PicoIPP => "SHA256:cde63e4aaafd567acc6c991c403a600fd0b8e4274c85ccad4eed04952b51daad",
         _ => ""
     }

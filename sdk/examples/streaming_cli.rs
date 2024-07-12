@@ -66,6 +66,7 @@ fn main() -> Result<()> {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
+            .pretty()
             .init();
     }
 
@@ -78,7 +79,9 @@ fn main() -> Result<()> {
     streaming_device.new_data.subscribe(capture_stats.clone());
 
     println!("Press Enter to stop streaming");
-    streaming_device.start(samples_per_second).unwrap();
+    streaming_device
+        .start(samples_per_second)
+        .expect("Failed to start streaming");
 
     Term::stdout().read_line().unwrap();
 

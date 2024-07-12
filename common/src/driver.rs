@@ -18,6 +18,7 @@ pub enum Driver {
     PS5000A,
     PS6000,
     PS6000A,
+    PSOSPA,
     /// Only used to get the full dependency name on each platform
     PicoIPP,
     /// Only used to get the full dependency name on each platform
@@ -62,6 +63,7 @@ impl Driver {
             0x1019 | 0x1203 | 0x1217 | 0x1218 => Some(Driver::PS5000A),
             0x100E | 0x1204 => Some(Driver::PS6000),
             0x1215 | 0x1216 | 0x12A0 | 0x12A1 => Some(Driver::PS6000A),
+            0x1020 => Some(Driver::PSOSPA),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None

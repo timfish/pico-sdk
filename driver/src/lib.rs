@@ -62,6 +62,7 @@ pub mod ps4000a;
 pub mod ps5000a;
 pub mod ps6000;
 pub mod ps6000a;
+pub mod psospa;
 mod resolution;
 mod trampoline;
 
