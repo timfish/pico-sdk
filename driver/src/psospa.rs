@@ -9,9 +9,8 @@ use pico_common::{
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
-    enPicoDeviceResolution_PICO_DR_10BIT,
-    enPicoRatioMode_PICO_RATIO_MODE_RAW, PSOSPALoader, PICO_POINTER, PICO_STREAMING_DATA_INFO,
-    PICO_STREAMING_DATA_TRIGGER_INFO,
+    enPicoDeviceResolution_PICO_DR_10BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PSOSPALoader,
+    PICO_POINTER, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
 };
 use std::{mem::MaybeUninit, sync::Arc};
 use tinyjson::JsonValue;
@@ -198,7 +197,7 @@ impl PicoDriver for PSOSPADriver {
 
         let mut variant_buf = variant.into_pico_i8_string();
         let mut json_buf = vec![0i8; 20_000];
-        let mut json_buf_len = json_buf.len() as i16;
+        let mut json_buf_len = json_buf.len() as i32;
 
         let status = PicoStatus::from(unsafe {
             self.bindings.psospaGetVariantDetails(
@@ -280,7 +279,8 @@ impl PicoDriver for PSOSPADriver {
         enabled_channels: u8,
     ) -> PicoResult<SampleConfig> {
         let status = PicoStatus::from(unsafe {
-            self.bindings.psospaSetDeviceResolution(handle, enPicoDeviceResolution_PICO_DR_10BIT)
+            self.bindings
+                .psospaSetDeviceResolution(handle, enPicoDeviceResolution_PICO_DR_10BIT)
         });
 
         if status != PicoStatus::OK {

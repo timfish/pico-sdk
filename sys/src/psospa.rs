@@ -863,7 +863,7 @@ pub struct PSOSPALoader {
             variantName: *const i8,
             variantNameLength: i16,
             outputString: *mut i8,
-            outputStringLength: *mut i16,
+            outputStringLength: *mut i32,
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
@@ -1728,7 +1728,7 @@ impl PSOSPALoader {
         variantName: *const i8,
         variantNameLength: i16,
         outputString: *mut i8,
-        outputStringLength: *mut i16,
+        outputStringLength: *mut i32,
     ) -> PICO_STATUS {
         (self
             .psospaGetVariantDetails
