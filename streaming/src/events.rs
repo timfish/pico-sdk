@@ -1,17 +1,23 @@
 use parking_lot::Mutex;
-use pico_common::PicoChannel;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Weak},
-};
+use pico_driver::{PicoError, StreamingResult};
+use std::sync::{Arc, Weak};
 
-pub trait NewDataHandler: Send + Sync {
+#[derive(Debug)]
+pub enum StreamingEvent {
+    Open,
+    Close(Option<PicoError>),
+    StreamStart,
+    StreamStop,
+    StreamData(StreamingResult),
+}
+
+pub trait EventHandler: Send + Sync {
     fn handle_event(&self, value: &StreamingEvent);
 }
 
 #[derive(Clone)]
 pub struct EventsInner {
-    pub listeners: Vec<Weak<dyn NewDataHandler>>,
+    pub listeners: Vec<Weak<dyn EventHandler>>,
 }
 
 impl EventsInner {
@@ -35,7 +41,7 @@ impl StreamingEvents {
     }
 
     #[tracing::instrument(level = "trace", skip(self, observer))]
-    pub fn subscribe(&self, observer: Arc<dyn NewDataHandler>) {
+    pub fn subscribe(&self, observer: Arc<dyn EventHandler>) {
         self.inner.lock().listeners.push(Arc::downgrade(&observer));
     }
 
@@ -52,34 +58,5 @@ impl StreamingEvents {
 impl Default for StreamingEvents {
     fn default() -> Self {
         StreamingEvents::new()
-    }
-}
-
-#[derive(Clone)]
-/// Events returned by the `PicoStreamingDevice`
-pub struct StreamingEvent {
-    pub length: usize,
-    pub samples_per_second: u32,
-    pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
-}
-
-#[derive(Clone)]
-/// A struct containing raw channel data and scaling factors to get scaled samples
-pub struct RawChannelDataBlock {
-    pub multiplier: f64,
-    pub samples: Vec<i16>,
-}
-
-impl RawChannelDataBlock {
-    pub fn scale_samples(&self) -> Vec<f64> {
-        self.samples
-            .iter()
-            .map(|v| *v as f64 * self.multiplier)
-            .collect()
-    }
-
-    #[inline(always)]
-    pub fn scale_sample(&self, index: usize) -> f64 {
-        self.samples[index] as f64 * self.multiplier
     }
 }

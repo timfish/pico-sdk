@@ -18,6 +18,7 @@ serde = ["pico-common/serde", "pico-device/serde", "pico-enumeration/serde", "pi
 
 [dependencies]
 pico-common = {path = "../common", version = "0.4.0"}
+pico-config = {path = "../config", version = "0.4.0"}
 pico-device = {path = "../device", version = "0.4.0"}
 pico-download = {path = "../download", version = "0.4.0"}
 pico-driver = {path = "../driver", version = "0.4.0"}

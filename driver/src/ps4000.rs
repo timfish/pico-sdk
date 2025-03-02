@@ -1,12 +1,12 @@
 use crate::{
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, PicoDriver,
+    utils::parse_enum_result,
+    EnumerationResult, OpenResult, PicoDriver, PicoError, StreamingResult, StreamingState,
 };
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
+    FromPicoStr, PicoChannel, PicoCoupling, PicoDriverError, PicoDriverResult, PicoInfo, PicoRange,
     PicoStatus, SampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::ps4000::PS4000Loader;
@@ -37,29 +37,9 @@ impl PS4000Driver {
             _dependencies: dependencies,
         })
     }
-}
-
-impl PicoDriver for PS4000Driver {
-    fn get_driver(&self) -> Driver {
-        Driver::PS3000A
-    }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn get_version(&self) -> PicoResult<String> {
-        let raw_version = self.get_unit_info(0, PicoInfo::DRIVER_VERSION)?;
-
-        // On non-Windows platforms, the drivers return extra text before the
-        // version string
-        Ok(get_version_string(&raw_version))
-    }
-
-    #[tracing::instrument(level = "trace", skip(self))]
-    fn get_path(&self) -> PicoResult<Option<String>> {
-        Ok(Some(self.get_unit_info(0, PicoInfo::DRIVER_PATH)?))
-    }
-
-    #[tracing::instrument(level = "trace", skip(self))]
-    fn enumerate_units(&self) -> PicoResult<Vec<EnumerationResult>> {
+    pub fn enumerate_units(&self) -> PicoDriverResult<Vec<EnumerationResult>> {
         let mut device_count = 0;
         let mut serial_buf = "-v".into_pico_i8_string();
         serial_buf.extend(vec![0i8; 1000]);
@@ -76,12 +56,12 @@ impl PicoDriver for PS4000Driver {
         match status {
             PicoStatus::NOT_FOUND => Ok(Vec::new()),
             PicoStatus::OK => Ok(parse_enum_result(&serial_buf, serial_buf_len as usize)),
-            x => Err(PicoError::from_status(x, "enumerate_units")),
+            x => Err(PicoDriverError::from_status(x, "enumerate_units")),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
+    pub fn open_unit(&self, serial: Option<&str>) -> PicoDriverResult<i16> {
         let serial = serial.map(|s| s.into_pico_i8_string());
 
         let mut handle = -1i16;
@@ -98,28 +78,28 @@ impl PicoDriver for PS4000Driver {
 
         match status {
             PicoStatus::OK => Ok(handle),
-            x => Err(PicoError::from_status(x, "open_unit")),
+            x => Err(PicoDriverError::from_status(x, "open_unit")),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn ping_unit(&self, handle: i16) -> PicoResult<()> {
+    pub fn ping_unit(&self, handle: i16) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps4000PingUnit(handle) }).to_result((), "ping_unit")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn maximum_value(&self, handle: i16) -> PicoResult<i16> {
+    pub fn maximum_adc_value(&self, handle: i16) -> PicoDriverResult<i16> {
         Ok(32_764)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn close(&self, handle: i16) -> PicoResult<()> {
+    pub fn close(&self, handle: i16) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps4000CloseUnit(handle) })
             .to_result((), "close_unit")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String> {
+    pub fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoDriverResult<String> {
         let mut string_buf: Vec<i8> = vec![0i8; 256];
         let mut string_buf_out_len = vec![0i16];
 
@@ -135,12 +115,16 @@ impl PicoDriver for PS4000Driver {
 
         match status {
             PicoStatus::OK => Ok(string_buf.from_pico_i8_string(string_buf_out_len[0] as usize)),
-            x => Err(PicoError::from_status(x, "get_unit_info")),
+            x => Err(PicoDriverError::from_status(x, "get_unit_info")),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>> {
+    pub fn get_channel_ranges(
+        &self,
+        handle: i16,
+        channel: PicoChannel,
+    ) -> PicoDriverResult<Vec<PicoRange>> {
         let mut ranges = vec![0i32; 30];
         let mut len = vec![30i32];
 
@@ -161,31 +145,27 @@ impl PicoDriver for PS4000Driver {
                 .iter()
                 .map(|v| PicoRange::from(*v))
                 .collect()),
-            x => Err(PicoError::from_status(x, "get_channel_ranges")),
+            x => Err(PicoDriverError::from_status(x, "get_channel_ranges")),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn enable_channel(
+    pub fn enable_channel(
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
-    ) -> PicoResult<()> {
+        coupling: PicoCoupling,
+        range: PicoRange,
+    ) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe {
-            self.bindings.ps4000SetChannel(
-                handle,
-                channel.into(),
-                1,
-                config.coupling.into(),
-                config.range.into(),
-            )
+            self.bindings
+                .ps4000SetChannel(handle, channel.into(), 1, coupling.into(), range.into())
         })
         .to_result((), "set_channel")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()> {
+    pub fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe {
             self.bindings
                 .ps4000SetChannel(handle, channel.into(), 0, 0, 0)
@@ -194,13 +174,13 @@ impl PicoDriver for PS4000Driver {
     }
 
     #[tracing::instrument(level = "trace", skip(self, buffer))]
-    fn set_data_buffer(
+    pub fn set_data_buffer(
         &self,
         handle: i16,
         channel: PicoChannel,
         buffer: Arc<RwLock<Vec<i16>>>,
         buffer_len: usize,
-    ) -> PicoResult<()> {
+    ) -> PicoDriverResult<()> {
         let mut buffer = buffer.write();
 
         PicoStatus::from(unsafe {
@@ -215,12 +195,11 @@ impl PicoDriver for PS4000Driver {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn start_streaming(
+    pub fn start_streaming(
         &self,
         handle: i16,
         sample_config: &SampleConfig,
-        _enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoDriverResult<SampleConfig> {
         let mut sample_interval = vec![sample_config.interval];
 
         PicoStatus::from(unsafe {
@@ -242,12 +221,11 @@ impl PicoDriver for PS4000Driver {
     }
 
     #[tracing::instrument(level = "trace", skip(self, callback))]
-    fn get_latest_streaming_values<'a>(
+    pub fn get_latest_streaming_values<'a>(
         &self,
         handle: i16,
-        _channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
-    ) -> PicoResult<()> {
+    ) -> PicoDriverResult<()> {
         let mut simplify_args =
             |_: i16, sample_count: i32, start_index: u32, _: i16, _: u32, _: i16, _: i16| {
                 callback(start_index as usize, sample_count as usize);
@@ -262,12 +240,75 @@ impl PicoDriver for PS4000Driver {
 
         match status {
             PicoStatus::OK | PicoStatus::BUSY => Ok(()),
-            x => Err(PicoError::from_status(x, "get_latest_streaming_values")),
+            x => Err(PicoDriverError::from_status(
+                x,
+                "get_latest_streaming_values",
+            )),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn stop(&self, handle: i16) -> PicoResult<()> {
+    pub fn stop(&self, handle: i16) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps4000Stop(handle) }).to_result((), "stop")
+    }
+}
+
+impl PicoDriver for PS4000Driver {
+    fn enumerate_units(&self) -> Result<Vec<EnumerationResult>, PicoError> {
+        Ok(self.enumerate_units()?)
+    }
+
+    fn open_device(&self, serial: Option<&str>) -> Result<OpenResult, PicoError> {
+        let handle = self.open_unit(serial)?;
+        let serial = self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?;
+        Ok(OpenResult { handle, serial })
+    }
+
+    fn get_device_info(&self, _handle: i16) -> Result<pico_config::DeviceInfo, PicoError> {
+        todo!()
+    }
+
+    fn get_device_config(&self, _handle: i16) -> Result<pico_config::DeviceConfig, PicoError> {
+        todo!()
+    }
+
+    fn configure_device(
+        &self,
+        _handle: i16,
+        _config: &pico_config::DeviceConfig,
+    ) -> Result<(), PicoError> {
+        todo!()
+    }
+
+    fn start_streaming(
+        &self,
+        _handle: i16,
+        _config: &pico_config::DeviceConfig,
+    ) -> Result<StreamingState, PicoError> {
+        todo!()
+    }
+
+    fn update_streaming_buffers(
+        &self,
+        _handle: i16,
+        _state: &StreamingState,
+    ) -> Result<StreamingState, PicoError> {
+        todo!("Not implemented")
+    }
+
+    fn get_streaming_values(
+        &self,
+        _handle: i16,
+        _state: &StreamingState,
+    ) -> Result<StreamingResult, PicoError> {
+        todo!()
+    }
+
+    fn stop(&self, _handle: i16) -> Result<(), PicoError> {
+        todo!()
+    }
+
+    fn close_device(&self, _handle: i16) -> Result<(), PicoError> {
+        todo!()
     }
 }

@@ -139,9 +139,9 @@
 
 pub mod prelude {
     pub use pico_common::{
-        ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-        PicoStatus,
+        Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoStatus,
     };
+    pub use pico_config::{ChannelConfig, DeviceConfig, DeviceInfo};
     pub use pico_device::PicoDevice;
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
@@ -156,6 +156,11 @@ pub mod prelude {
 /// Common enums, structs and traits
 pub mod common {
     pub use pico_common::*;
+}
+
+/// Common enums, structs and traits
+pub mod config {
+    pub use pico_config::*;
 }
 
 /// Dynamically loaded unsafe bindings for every Pico oscilloscope driver

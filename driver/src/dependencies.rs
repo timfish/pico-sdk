@@ -24,9 +24,10 @@ lazy_static! {
 /// non-standard paths
 ///
 /// Depending on which platform you're running on, most Pico drivers depend on one
-/// or more external libraries. If we're not loading drivers from the platforms
-/// default search paths, we can manually load the dependencies into memory so
-/// that they can be found.
+/// or more external libraries.
+///
+/// If we're not loading drivers from the platforms default search paths, we can
+/// manually load the dependencies into memory so that they can be found.
 pub fn load_dependencies<P: AsRef<Path>>(path: P) -> LoadedDependencies {
     let parent = path.as_ref().parent().expect("Driver path has no parent");
     let to_load = Driver::get_dependencies_for_platform();

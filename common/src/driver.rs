@@ -1,14 +1,9 @@
 use crate::ParseError;
-use enum_iterator::IntoEnumIterator;
+use enum_iterator::Sequence;
 use std::{fmt, str::FromStr};
 
 /// Supported Pico drivers
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(rename_all = "lowercase")
-)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, IntoEnumIterator)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Sequence)]
 pub enum Driver {
     PS2000,
     PS2000A,
@@ -40,6 +35,7 @@ impl FromStr for Driver {
             "5000A" => Ok(Driver::PS5000A),
             "6000" => Ok(Driver::PS6000),
             "6000A" => Ok(Driver::PS6000A),
+            "OSPA" => Ok(Driver::PSOSPA),
             _ => Err(ParseError),
         }
     }
@@ -71,7 +67,7 @@ impl Driver {
         }
     }
 
-    /// Returns the platform dependent name of the driver binary with file
+    /// Returns the platform specific file name of the driver binary with file
     /// extension
     /// ```
     /// let driver = pico_common::Driver::PS2000A;

@@ -50,14 +50,13 @@
 
 use crossbeam::channel::{bounded, Sender};
 use events::StreamingEvents;
-pub use events::{NewDataHandler, RawChannelDataBlock, StreamingEvent};
-use parking_lot::RwLock;
-use pico_common::{
-    ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
-};
+pub use events::{EventHandler, StreamingEvent};
+use parking_lot::{RwLock, RwLockReadGuard};
+use pico_common::PicoStatus;
+use pico_config::DeviceConfig;
 use pico_device::PicoDevice;
+use pico_driver::{PicoDriver, PicoError, StreamingState};
 use std::{
-    collections::HashMap,
     fmt,
     sync::Arc,
     thread::{self, JoinHandle},
@@ -67,42 +66,39 @@ use tracing::*;
 
 mod events;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Target {
     Closed,
     Open,
-    Streaming { requested_sample_rate: u32 },
+    Streaming(DeviceConfig),
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone)]
-struct LockedTarget(Arc<RwLock<Target>>);
+struct LockedTarget {
+    state: Arc<RwLock<Target>>,
+}
 
 impl LockedTarget {
     pub fn new(target: Target) -> Self {
-        LockedTarget(Arc::new(RwLock::new(target)))
+        LockedTarget {
+            state: Arc::new(RwLock::new(target)),
+        }
     }
 
-    pub fn set(&self, new: Target) {
-        *self.0.write() = new;
+    pub fn set(&self, target: Target) {
+        *self.state.write() = target;
     }
 
-    pub fn get(&self) -> Target {
-        *self.0.read()
+    pub fn read(&self) -> RwLockReadGuard<Target> {
+        self.state.read()
+    }
+
+    pub fn try_read(&self) -> Option<Target> {
+        self.state.try_read().map(|t| t.clone())
     }
 }
 
-impl fmt::Debug for LockedTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{:?}", self.0.try_read()))
-    }
-}
-
-type BufferMap = HashMap<PicoChannel, Arc<RwLock<Vec<i16>>>>;
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Clone)]
+#[derive(Debug)]
 enum State {
     Closed,
     Open {
@@ -110,38 +106,46 @@ enum State {
     },
     Streaming {
         handle: i16,
-        actual_sample_rate: u32,
-        #[cfg_attr(feature = "serde", serde(skip))]
-        buffers: BufferMap,
+        device_state: StreamingState,
     },
 }
 
-impl PartialEq for State {
-    fn eq(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (State::Closed, State::Closed)
-                | (State::Open { .. }, State::Open { .. })
-                | (State::Streaming { .. }, State::Streaming { .. })
-        )
+impl State {
+    fn name(&self) -> &'static str {
+        match self {
+            State::Closed => "Closed",
+            State::Open { .. } => "Open",
+            State::Streaming { .. } => "Streaming",
+        }
     }
 }
 
-impl fmt::Debug for State {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            State::Closed => f.debug_struct("Closed").finish(),
-            State::Open { handle } => f.debug_struct("Open").field("handle", handle).finish(),
-            State::Streaming {
-                handle,
-                actual_sample_rate,
-                ..
-            } => f
-                .debug_struct("Streaming")
-                .field("handle", handle)
-                .field("actual_sample_rate", actual_sample_rate)
-                .finish(),
+#[derive(Clone)]
+struct LockedState {
+    state: Arc<RwLock<State>>,
+}
+
+impl LockedState {
+    pub fn new(state: State) -> Self {
+        LockedState {
+            state: Arc::new(RwLock::new(state)),
         }
+    }
+
+    pub fn is_streaming(&self) -> bool {
+        matches!(*self.state.read(), State::Streaming { .. })
+    }
+
+    pub fn is_closed(&self) -> bool {
+        matches!(*self.state.read(), State::Closed)
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.state.read().name()
+    }
+
+    pub fn write(&self) -> parking_lot::RwLockWriteGuard<State> {
+        self.state.write()
     }
 }
 
@@ -149,32 +153,29 @@ impl fmt::Debug for State {
 ///
 /// Automatically reconfigures and restarts streaming if the device connection
 /// is lost.
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone)]
 pub struct PicoStreamingDevice {
-    device: PicoDevice,
+    driver: Arc<dyn PicoDriver>,
+    pub serial: String,
     target_state: LockedTarget,
-    current_state: Arc<RwLock<State>>,
-    enabled_channels: Arc<RwLock<HashMap<PicoChannel, ChannelConfig>>>,
-    #[cfg_attr(feature = "serde", serde(skip))]
+    current_state: LockedState,
     background_handle: Option<Arc<BackgroundThreadHandle>>,
-    #[cfg_attr(feature = "serde", serde(skip))]
     pub new_data: StreamingEvents,
 }
 
 impl fmt::Debug for PicoStreamingDevice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PicoStreamingDevice")
-            .field("device", &self.device)
-            .field("target_state", &self.target_state)
-            .field("current_state", &self.current_state.try_read())
+            .field("serial", &self.serial)
+            .field("target_state", &self.target_state.try_read())
+            .field("current_state", &self.current_state.name())
             .finish()
     }
 }
 
 impl PartialEq for PicoStreamingDevice {
     fn eq(&self, other: &Self) -> bool {
-        self.get_serial() == other.get_serial()
+        self.serial == other.serial
     }
 }
 
@@ -182,7 +183,7 @@ impl Eq for PicoStreamingDevice {}
 
 impl std::hash::Hash for PicoStreamingDevice {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.get_serial().hash(state);
+        self.serial.hash(state);
     }
 }
 
@@ -194,17 +195,19 @@ impl From<PicoDevice> for PicoStreamingDevice {
 
 impl PicoStreamingDevice {
     fn new(device: PicoDevice) -> Self {
-        let (current_state, target_state) = match device.handle.lock().take() {
+        let (driver, serial, handle) = device.consume();
+
+        let (current_state, target_state) = match handle {
             Some(handle) => (State::Open { handle }, Target::Open),
             None => (State::Closed, Target::Closed),
         };
 
         let mut device = PicoStreamingDevice {
-            device,
+            driver,
+            serial,
             target_state: LockedTarget::new(target_state),
-            current_state: Arc::new(RwLock::new(current_state)),
+            current_state: LockedState::new(current_state),
             new_data: Default::default(),
-            enabled_channels: Default::default(),
             background_handle: Default::default(),
         };
 
@@ -213,82 +216,42 @@ impl PicoStreamingDevice {
         device
     }
 
-    pub fn get_serial(&self) -> String {
-        self.device.serial.to_string()
-    }
-
-    pub fn get_variant(&self) -> String {
-        self.device.variant.to_string()
-    }
-
-    pub fn enable_channel(&self, channel: PicoChannel, range: PicoRange, coupling: PicoCoupling) {
-        self.enabled_channels.write().insert(
-            channel,
-            ChannelConfig {
-                range,
-                coupling,
-                offset: 0.0,
-            },
-        );
-    }
-
-    pub fn disable_channel(&self, channel: PicoChannel) {
-        self.enabled_channels.write().remove(&channel);
-    }
-
-    pub fn get_channels(&self) -> Vec<PicoChannel> {
-        self.device.get_channels()
-    }
-
-    pub fn get_valid_ranges(&self, channel: PicoChannel) -> Option<Vec<PicoRange>> {
-        self.device.channel_ranges.get(&channel).cloned()
-    }
-
-    pub fn get_channel_config(&self, channel: PicoChannel) -> Option<ChannelConfig> {
-        self.enabled_channels.read().get(&channel).cloned()
-    }
-
     /// Start streaming
-    #[tracing::instrument(level = "info")]
-    pub fn start(&self, requested_sample_rate: u32) -> PicoResult<u32> {
+    #[tracing::instrument(skip(self, config), level = "info")]
+    pub fn start(&self, config: DeviceConfig) -> Result<(), PicoError> {
         // Set the target state
 
-        self.target_state.set(Target::Streaming {
-            requested_sample_rate,
-        });
+        self.target_state.set(Target::Streaming(config));
 
         // Drive the state until we get the correct state or an error we can return
         let mut count = 0;
         loop {
             if let Err(e) = self.run_state() {
+                println!("run_state Error: {:?}", e);
                 self.target_state.set(Target::Open);
                 return Err(e);
             }
 
-            let current = self.current_state.read();
-            if let State::Streaming {
-                actual_sample_rate, ..
-            } = *current
-            {
-                return Ok(actual_sample_rate);
+            if self.current_state.is_streaming() {
+                return Ok(());
             }
 
             count += 1;
 
             if count > 5 {
-                return Err(PicoStatus::TIMEOUT.into());
+                return Err(PicoError::DriverError(PicoStatus::TIMEOUT.into()));
             }
         }
     }
 
     /// Stop streaming
-    #[tracing::instrument(level = "info")]
+    #[tracing::instrument(skip(self), level = "info")]
     pub fn stop(&self) {
         self.target_state.set(Target::Open);
     }
 
     /// Close device
-    #[tracing::instrument(level = "info")]
+    #[tracing::instrument(skip(self), level = "info")]
     pub fn close(&self) {
         self.target_state.set(Target::Closed);
     }
@@ -313,7 +276,7 @@ impl PicoStreamingDevice {
                     }
 
                     if wait_for_closed {
-                        if let State::Closed = *device.current_state.read() {
+                        if device.current_state.is_closed() {
                             return;
                         }
                     }
@@ -324,202 +287,92 @@ impl PicoStreamingDevice {
         self.background_handle = Some(BackgroundThreadHandle::new(tx_terminate, handle));
     }
 
-    #[tracing::instrument(skip(self), level = "debug", err(Display))]
-    fn run_state(&self) -> PicoResult<Duration> {
+    #[tracing::instrument(skip(self), level = "trace", err(Display))]
+    fn run_state(&self) -> Result<Duration, PicoError> {
+        let target_state = self.target_state.read().clone();
         let mut current_state = self.current_state.write();
-        let initial_state = current_state.clone();
 
-        let target = self.target_state.get();
-
-        let (next_state, next_duration) = match current_state.clone() {
-            State::Closed => match target {
-                Target::Closed => (State::Closed, Duration::from_millis(500)),
+        let result = match *current_state {
+            State::Closed => match target_state {
+                Target::Closed => Ok(Duration::from_millis(500)),
                 Target::Open | Target::Streaming { .. } => {
-                    let handle = self.device.driver.open_unit(Some(&self.device.serial))?;
-                    (State::Open { handle }, Duration::from_millis(1))
+                    self.driver.open_device(Some(&self.serial)).map(|result| {
+                        *current_state = State::Open {
+                            handle: result.handle,
+                        };
+                        self.new_data.emit(StreamingEvent::Open);
+                        Duration::from_millis(1)
+                    })
                 }
             },
-            State::Open { handle } => match target {
+            State::Open { handle } => match target_state {
                 Target::Closed => {
-                    self.device.driver.close(handle)?;
-                    (State::Closed, Duration::from_millis(500))
+                    let _ = self.driver.close_device(handle);
+                    *current_state = State::Closed;
+                    self.new_data.emit(StreamingEvent::Close(None));
+                    Ok(Duration::from_millis(500))
                 }
-                Target::Open => self.ping(handle),
-                Target::Streaming {
-                    requested_sample_rate,
-                } => self.configure_and_start(handle, requested_sample_rate)?,
+                Target::Open => {
+                    // ping
+                    Ok(Duration::from_millis(500))
+                }
+                Target::Streaming(config) => {
+                    self.driver
+                        .start_streaming(handle, &config)
+                        .map(|device_state| {
+                            *current_state = State::Streaming {
+                                handle,
+                                device_state,
+                            };
+                            self.new_data.emit(StreamingEvent::StreamStart);
+                            Duration::from_millis(100)
+                        })
+                }
             },
             State::Streaming {
                 handle,
-                actual_sample_rate,
-                buffers,
-            } => match target {
+                ref device_state,
+            } => match target_state {
                 Target::Closed | Target::Open => {
-                    self.device.driver.stop(handle)?;
-                    (State::Open { handle }, Duration::from_millis(1))
+                    let _ = self.driver.stop(handle);
+                    *current_state = State::Open { handle };
+                    self.new_data.emit(StreamingEvent::StreamStop);
+                    Ok(Duration::from_millis(1))
                 }
-                Target::Streaming { .. } => self.stream(handle, buffers, actual_sample_rate),
+                Target::Streaming(_) => {
+                    match self.driver.get_streaming_values(handle, device_state) {
+                        Ok(result) => {
+                            self.new_data.emit(StreamingEvent::StreamData(result));
+
+                            Ok(Duration::from_millis(500))
+                        }
+                        Err(PicoError::DriverError(error))
+                            if error.status == PicoStatus::WAITING_FOR_DATA_BUFFERS =>
+                        {
+                            self.driver
+                                .update_streaming_buffers(handle, device_state)
+                                .map(|device_state| {
+                                    *current_state = State::Streaming {
+                                        handle,
+                                        device_state,
+                                    };
+
+                                    Duration::from_millis(5)
+                                })
+                        }
+                        Err(error) => {
+                            self.new_data.emit(StreamingEvent::Close(Some(error)));
+                            let _ = self.driver.stop(handle);
+                            let _ = self.driver.close_device(handle);
+                            *current_state = State::Closed;
+                            Ok(Duration::from_millis(200))
+                        }
+                    }
+                }
             },
         };
 
-        if initial_state != next_state {
-            info!("State changed '{:?}' > '{:?}'", initial_state, next_state);
-        }
-
-        *current_state = next_state;
-
-        Ok(next_duration)
-    }
-
-    fn ping(&self, handle: i16) -> (State, Duration) {
-        if self.device.driver.ping_unit(handle).is_err() {
-            let _ = self.device.driver.stop(handle);
-            let _ = self.device.driver.close(handle);
-
-            (State::Closed, Duration::from_millis(500))
-        } else {
-            (State::Open { handle }, Duration::from_millis(500))
-        }
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    fn configure_and_start(
-        &self,
-        handle: i16,
-        samples_per_second: u32,
-    ) -> PicoResult<(State, Duration)> {
-        let mut buffers = HashMap::new();
-
-        let enabled_channels = self.enabled_channels.read();
-
-        let mut enabled_channel_count = 0;
-
-        for (channel, ranges) in &self.device.channel_ranges {
-            // If there are no valid ranges, skip configuring this channel
-            if ranges.is_empty() {
-                continue;
-            }
-
-            // is this channel enabled?
-            if let Some(config) = enabled_channels.get(channel) {
-                let buffer_size = samples_per_second as usize;
-
-                self.device
-                    .driver
-                    .enable_channel(handle, *channel, config)?;
-
-                let ch_buf = buffers
-                    .entry(*channel)
-                    .or_insert_with(|| Arc::new(RwLock::new(vec![0i16; buffer_size])));
-
-                self.device.driver.set_data_buffer(
-                    handle,
-                    *channel,
-                    ch_buf.clone(),
-                    buffer_size,
-                )?;
-
-                enabled_channel_count += 1;
-            } else {
-                self.device.driver.disable_channel(handle, *channel)?;
-            }
-        }
-
-        let target_config = SampleConfig::from_samples_per_second(samples_per_second);
-        let actual_sample_rate = self
-            .device
-            .driver
-            .start_streaming(handle, &target_config, enabled_channel_count)
-            .map(|sc| sc.samples_per_second())?;
-
-        Ok((
-            State::Streaming {
-                handle,
-                actual_sample_rate,
-                buffers,
-            },
-            Duration::from_millis(100),
-        ))
-    }
-
-    #[tracing::instrument(skip(self, buffers), level = "trace")]
-    fn stream(
-        &self,
-        handle: i16,
-        buffers: BufferMap,
-        actual_sample_rate: u32,
-    ) -> (State, Duration) {
-        let callback = |start_index, sample_count| {
-            let channels = self.enabled_channels.read();
-
-            let channels = channels
-                .iter()
-                .map(|(ch, config)| {
-                    let ch_buf = buffers
-                        .get(ch)
-                        .expect("Channel is enabled but has no buffer")
-                        .read();
-
-                    (
-                        *ch,
-                        RawChannelDataBlock {
-                            multiplier: config.range.get_max_scaled_value()
-                                / self.device.max_adc_value as f64,
-                            samples: ch_buf[start_index..(start_index + sample_count)].to_vec(),
-                        },
-                    )
-                })
-                .collect::<HashMap<_, _>>();
-
-            self.new_data.emit(StreamingEvent {
-                samples_per_second: actual_sample_rate,
-                length: sample_count,
-                channels,
-            });
-        };
-
-        let channels = buffers.keys().copied().collect::<Vec<_>>();
-
-        if let Err(error) =
-            self.device
-                .driver
-                .get_latest_streaming_values(handle, &channels, Box::new(callback))
-        {
-            if error.status == PicoStatus::WAITING_FOR_DATA_BUFFERS {
-                for (channel, buffer) in &buffers {
-                    let len = { buffer.read().len() };
-                    self.device
-                        .driver
-                        .set_data_buffer(handle, *channel, buffer.clone(), len)
-                        .unwrap();
-                }
-
-                (
-                    State::Streaming {
-                        handle,
-                        buffers,
-                        actual_sample_rate,
-                    },
-                    Duration::from_millis(5),
-                )
-            } else {
-                warn!("Streaming stopped: '{:?}'", error);
-
-                let _ = self.device.driver.stop(handle);
-                let _ = self.device.driver.close(handle);
-
-                (State::Closed, Duration::from_millis(200))
-            }
-        } else {
-            (
-                State::Streaming {
-                    handle,
-                    actual_sample_rate,
-                    buffers,
-                },
-                Duration::from_millis(50),
-            )
-        }
+        result
     }
 }
 

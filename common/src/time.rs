@@ -1,4 +1,3 @@
-use super::{PicoCoupling, PicoRange};
 use num_derive::*;
 use std::convert::From;
 
@@ -114,30 +113,5 @@ mod tests {
 
         let sc = SampleConfig::from_samples_per_second(1234);
         assert_eq!(sc.get_interval(), 0.000_810_372_000_000_000_1);
-    }
-}
-
-/// Channel configuration
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ChannelConfig {
-    pub coupling: PicoCoupling,
-    pub range: PicoRange,
-    pub offset: f64,
-}
-
-impl ChannelConfig {
-    pub fn new() -> ChannelConfig {
-        ChannelConfig {
-            coupling: PicoCoupling::DC,
-            range: PicoRange::X1_PROBE_20V,
-            offset: 0.0,
-        }
-    }
-}
-
-impl Default for ChannelConfig {
-    fn default() -> Self {
-        ChannelConfig::new()
     }
 }

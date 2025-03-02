@@ -1,4 +1,4 @@
-use super::{PicoError, PicoResult};
+use super::{PicoDriverError, PicoDriverResult};
 use num_derive::*;
 use std::convert::From;
 use thiserror::Error;
@@ -7,7 +7,6 @@ use thiserror::Error;
 ///
 /// Error strings are taken from picostatus.h
 #[allow(non_camel_case_types)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive, Error)]
 pub enum PicoStatus {
     #[error("The PicoScope is functioning correctly")]
@@ -756,10 +755,10 @@ pub enum PicoStatus {
     #[error("The adc was powered down when trying to capture data")]
     ADC_POWERED_DOWN = 50_339_840,
     #[error("")]
-    OPTIONAL_BOOTLOADER_UPDATE_AVAILABLE_WITH_THIS_DRIVER  = 50_352_128,
+    OPTIONAL_BOOTLOADER_UPDATE_AVAILABLE_WITH_THIS_DRIVER = 50_352_128,
     #[error("")]
     BOOTLOADER_VERSION_NOT_AVAILABLE = 50_352_129,
-    #[error("An internal error has occurred and a watchdog timer has been called")]    
+    #[error("An internal error has occurred and a watchdog timer has been called")]
     WATCHDOGTIMER = 268_435_456,
     #[error("The picoipp library has not been found")]
     IPP_NOT_FOUND = 268_435_457,
@@ -818,7 +817,7 @@ impl From<PicoStatus> for u32 {
 impl From<u32> for PicoStatus {
     fn from(value: u32) -> Self {
         num_traits::FromPrimitive::from_u32(value)
-            .unwrap_or_else(|| panic!("Non-valid status code {}", value))
+            .unwrap_or_else(|| panic!("Unknown status code '{}'", value))
     }
 }
 
@@ -833,10 +832,10 @@ impl From<i16> for PicoStatus {
 
 impl PicoStatus {
     /// Converts a `PicoStatus` to a `PicoResult<T>` with context
-    pub fn to_result<T>(self, ok_val: T, context: &str) -> PicoResult<T> {
+    pub fn to_result<T>(self, ok_val: T, context: &str) -> PicoDriverResult<T> {
         match self {
             PicoStatus::OK => Ok(ok_val),
-            x => Err(PicoError::from_status(x, context)),
+            x => Err(PicoDriverError::from_status(x, context)),
         }
     }
 }

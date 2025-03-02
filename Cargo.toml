@@ -1,11 +1,12 @@
 [workspace]
 members = [
   "./common",
+  "./config",
   "./device",
   "./download",
   "./driver",
   "./enumeration",
-  "./sdk",
+  # "./sdk",
   "./streaming",
   "./sys",
 ]

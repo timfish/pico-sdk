@@ -28,112 +28,107 @@
 //! # }
 //! ```
 
-use parking_lot::Mutex;
-use pico_common::{PicoChannel, PicoInfo, PicoRange, PicoResult};
-use pico_driver::{ArcDriver, PicoDriver};
-use std::{
-    collections::HashMap,
-    fmt,
-    fmt::{Debug, Display},
-    sync::Arc,
-};
+use pico_config::{DeviceConfig, DeviceInfo};
+use pico_driver::{PicoDriver, PicoError, StreamingResult, StreamingState};
+use std::sync::Arc;
 
-pub type HandleMutex = Arc<Mutex<Option<i16>>>;
+#[derive(Clone, Copy, Debug)]
+enum DeviceState {
+    Closed,
+    Open { handle: i16 },
+}
 
-/// Base Pico device
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PicoDevice {
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub handle: HandleMutex,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub driver: ArcDriver,
-    pub variant: String,
+    driver: Arc<dyn PicoDriver>,
     pub serial: String,
-    pub usb_version: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub max_adc_value: i16,
-    pub channel_ranges: HashMap<PicoChannel, Vec<PicoRange>>,
-}
-
-impl Debug for PicoDevice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.debug_struct("PicoDevice")
-            .field("variant", &self.variant)
-            .field("serial", &self.serial)
-            .finish()
-    }
-}
-
-impl Display for PicoDevice {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.variant, self.serial)
-    }
+    state: DeviceState,
 }
 
 impl PicoDevice {
-    /// Creates a PicoDevice with the supplied `PicoDriver` and serial string.
-    /// If `None` is passed for the serial, the first discovered device will be
-    /// opened.
-    /// ```no_run
-    /// use pico_common::Driver;
-    /// use pico_driver::LibraryResolution;
-    /// use pico_device::PicoDevice;
-    ///
-    /// // Load the required driver with a specific resolution
-    /// let driver = LibraryResolution::Default.try_load(Driver::PS2000).unwrap();
-    /// let device1 = PicoDevice::try_open(&driver, Some("ABC/123")).unwrap();
-    /// let device2 = PicoDevice::try_open(&driver, Some("ABC/987")).unwrap();
-    ///
-    /// assert_eq!(device1.variant, "2204A");
-    /// assert_eq!(device2.variant, "2205A");
-    /// ```
-    pub fn try_open(driver: &Arc<dyn PicoDriver>, serial: Option<&str>) -> PicoResult<PicoDevice> {
-        let handle = driver.open_unit(serial)?;
-
-        let serial = match serial {
-            Some(s) => s.to_string(),
-            None => driver.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?,
-        };
-
-        let variant = driver.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-        let usb_version = driver.get_unit_info(handle, PicoInfo::USB_VERSION)?;
-
-        // Get the second letter of the device variant to get the number of channels
-        let ch_count = variant[1..2]
-            .parse::<i32>()
-            .expect("Could not parse device variant for number of channels");
-
-        let channel_ranges = (0..ch_count)
-            .flat_map(|ch| -> PicoResult<(PicoChannel, Vec<_>)> {
-                let ch: PicoChannel = ch.into();
-                Ok((ch, driver.get_channel_ranges(handle, ch)?))
-            })
-            .collect();
-
-        let max_adc_value = driver.maximum_value(handle)?;
-
-        Ok(PicoDevice {
-            handle: Arc::new(Mutex::new(Some(handle))),
+    pub fn new_closed(driver: &Arc<dyn PicoDriver>, serial: &str) -> Self {
+        Self {
             driver: driver.clone(),
-            serial,
-            variant,
-            usb_version,
-            max_adc_value,
-            channel_ranges,
+            serial: serial.to_string(),
+            state: DeviceState::Closed,
+        }
+    }
+
+    pub fn new_open(driver: &Arc<dyn PicoDriver>, serial: Option<&str>) -> Result<Self, PicoError> {
+        let result = driver.open_device(serial)?;
+
+        Ok(Self {
+            driver: driver.clone(),
+            serial: result.serial,
+            state: DeviceState::Open {
+                handle: result.handle,
+            },
         })
     }
 
-    pub fn get_channels(&self) -> Vec<PicoChannel> {
-        self.channel_ranges.keys().copied().collect()
+    pub fn device_config(&self) -> Result<Option<DeviceConfig>, PicoError> {
+        match self.state {
+            DeviceState::Open { handle } => Ok(Some(self.driver.get_device_config(handle)?)),
+            DeviceState::Closed => Ok(None),
+        }
+    }
+
+    pub fn device_info(&self) -> Result<Option<DeviceInfo>, PicoError> {
+        match self.state {
+            DeviceState::Open { handle } => Ok(Some(self.driver.get_device_info(handle)?)),
+            DeviceState::Closed => Ok(None),
+        }
+    }
+
+    pub fn configure_device(&self, config: &DeviceConfig) -> Result<(), PicoError> {
+        match self.state {
+            DeviceState::Open { handle } => self.driver.configure_device(handle, config),
+            _ => todo!(),
+        }
+    }
+
+    pub fn start_streaming(&self, config: &DeviceConfig) -> Result<StreamingState, PicoError> {
+        match self.state {
+            DeviceState::Open { handle } => self.driver.start_streaming(handle, config),
+            _ => todo!(),
+        }
+    }
+
+    pub fn stop(&self) -> Result<(), PicoError> {
+        match self.state {
+            DeviceState::Open { handle } => self.driver.stop(handle),
+            _ => todo!(),
+        }
+    }
+
+    pub fn get_streaming_values(
+        &self,
+        state: &mut StreamingState,
+    ) -> Result<StreamingResult, PicoError> {
+        match self.state {
+            DeviceState::Open { handle } => self.driver.get_streaming_values(handle, state),
+            _ => todo!(),
+        }
+    }
+
+    pub fn consume(mut self) -> (Arc<dyn PicoDriver>, String, Option<i16>) {
+        let handle = match self.state {
+            DeviceState::Open { handle } => Some(handle),
+            DeviceState::Closed => None,
+        };
+        self.state = DeviceState::Closed;
+        (self.driver.clone(), self.serial.clone(), handle)
+    }
+
+    pub fn driver(&self) -> &Arc<dyn PicoDriver> {
+        &self.driver
     }
 }
 
 impl Drop for PicoDevice {
-    #[tracing::instrument(level = "trace", skip(self))]
     fn drop(&mut self) {
-        if let Some(handle) = self.handle.lock().take() {
-            let _ = self.driver.close(handle);
+        if let DeviceState::Open { handle } = self.state {
+            let _ = self.driver.close_device(handle);
         }
     }
 }

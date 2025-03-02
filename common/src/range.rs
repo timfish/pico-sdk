@@ -1,12 +1,19 @@
-use enum_iterator::IntoEnumIterator;
 use num_derive::*;
 use std::fmt;
 
 /// Pico channel ranges
 #[allow(non_camel_case_types)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(
-    Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, PartialOrd, Ord, IntoEnumIterator,
+    Debug,
+    Clone,
+    Copy,
+    FromPrimitive,
+    ToPrimitive,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    enum_iterator::Sequence,
 )]
 pub enum PicoRange {
     X1_PROBE_5MV = -1,
@@ -138,19 +145,33 @@ pub enum PicoRange {
     CURRENT_CLAMP_60A_V2_20A = 10605,
     CURRENT_CLAMP_60A_V2_50A = 10606,
     CURRENT_CLAMP_60A_V2_60A = 10607,
+
+    HIGH_VOLTAGE_DIFFERENTIAL_5V = 10650,
+    HIGH_VOLTAGE_DIFFERENTIAL_10V,
+    HIGH_VOLTAGE_DIFFERENTIAL_20V,
+    HIGH_VOLTAGE_DIFFERENTIAL_50V,
+    HIGH_VOLTAGE_DIFFERENTIAL_100V,
+    HIGH_VOLTAGE_DIFFERENTIAL_200V,
+    HIGH_VOLTAGE_DIFFERENTIAL_500V,
+    HIGH_VOLTAGE_DIFFERENTIAL_1000V,
+    HIGH_VOLTAGE_DIFFERENTIAL_1400V,
+
+    X10_ACTIVE_PROBE_100MV = 10700,
+    X10_ACTIVE_PROBE_200MV,
+    X10_ACTIVE_PROBE_500MV,
+    X10_ACTIVE_PROBE_1V,
+    X10_ACTIVE_PROBE_2V,
+    X10_ACTIVE_PROBE_5V,
 }
 
 impl PicoRange {
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
         let input = input.replace([' ', '±'], "").to_uppercase();
-        let all_ranges = PicoRange::into_enum_iter().collect::<Vec<Self>>();
+        let all_ranges = enum_iterator::all::<PicoRange>().collect::<Vec<Self>>();
         let valid_ranges = valid_ranges.unwrap_or(&all_ranges);
 
         for range in valid_ranges {
-            let to_cmp = format!("{}", range)
-                .replace(' ', "")
-                .replace('±', "")
-                .to_uppercase();
+            let to_cmp = format!("{}", range).replace([' ', '±'], "").to_uppercase();
 
             if input == to_cmp {
                 return Some(*range);
@@ -339,6 +360,21 @@ impl fmt::Display for PicoRange {
             PicoRange::CURRENT_CLAMP_60A_20A => write!(f, "±20 A"),
             PicoRange::CURRENT_CLAMP_60A_50A => write!(f, "±50 A"),
             PicoRange::CURRENT_CLAMP_60A_60A => write!(f, "±60 A"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_5V => write!(f, "±5 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_10V => write!(f, "±10 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_20V => write!(f, "±20 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_50V => write!(f, "±50 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_100V => write!(f, "±100 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_200V => write!(f, "±200 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_500V => write!(f, "±500 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1000V => write!(f, "±1 kV"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1400V => write!(f, "±1.4 kV"),
+            PicoRange::X10_ACTIVE_PROBE_100MV => write!(f, "±100 mV"),
+            PicoRange::X10_ACTIVE_PROBE_200MV => write!(f, "±200 mV"),
+            PicoRange::X10_ACTIVE_PROBE_500MV => write!(f, "±500 mV"),
+            PicoRange::X10_ACTIVE_PROBE_1V => write!(f, "±1 V"),
+            PicoRange::X10_ACTIVE_PROBE_2V => write!(f, "±2 V"),
+            PicoRange::X10_ACTIVE_PROBE_5V => write!(f, "±5 V"),
             rest => write!(f, "{:?}", rest),
         }
     }
@@ -555,6 +591,21 @@ impl PicoRange {
             PicoRange::CURRENT_CLAMP_60A_20A => 20.0,
             PicoRange::CURRENT_CLAMP_60A_50A => 50.0,
             PicoRange::CURRENT_CLAMP_60A_60A => 60.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_5V => 5.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_10V => 10.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_20V => 20.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_50V => 50.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_100V => 100.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_200V => 200.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_500V => 500.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1000V => 1_000.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1400V => 1_400.0,
+            PicoRange::X10_ACTIVE_PROBE_100MV => 0.1,
+            PicoRange::X10_ACTIVE_PROBE_200MV => 0.2,
+            PicoRange::X10_ACTIVE_PROBE_500MV => 0.5,
+            PicoRange::X10_ACTIVE_PROBE_1V => 1.0,
+            PicoRange::X10_ACTIVE_PROBE_2V => 2.0,
+            PicoRange::X10_ACTIVE_PROBE_5V => 5.0,
             oops => panic!("Scaling for range '{:?}' not defined", oops),
         }
     }

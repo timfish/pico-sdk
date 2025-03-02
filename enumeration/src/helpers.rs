@@ -11,8 +11,7 @@ impl EnumResultHelpers for Vec<Result<EnumeratedDevice, EnumerationError>> {
         let mut failed_results = self
             .iter()
             .flat_map(|r| match r {
-                Err(EnumerationError::DriverLoadError { driver, .. }) => Some(*driver),
-                Err(EnumerationError::VersionError { driver, .. }) => Some(*driver),
+                Err(EnumerationError::PicoError { driver, .. }) => Some(*driver),
                 _ => None,
             })
             .collect::<Vec<Driver>>();

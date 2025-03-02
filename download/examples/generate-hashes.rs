@@ -1,4 +1,3 @@
-use enum_iterator::IntoEnumIterator;
 use http_req::request;
 use pico_common::Driver;
 use ring::digest::{Context, Digest, SHA256};
@@ -56,7 +55,7 @@ fn main() {
             );
             println!("    match driver {{");
 
-            Driver::into_enum_iter().for_each(|driver| {
+            enum_iterator::all::<Driver>().for_each(|driver| {
                 let url = get_remote_url(driver, os, arch);
 
                 let buf = vec![];

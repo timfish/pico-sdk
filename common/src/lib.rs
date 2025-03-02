@@ -6,18 +6,18 @@
 //! This is a sub crate that you probably don't want to use directly. Try the top level
 //! [`pico-sdk`](https://crates.io/crates/pico-sdk) crate which exposes everything from here.
 
-mod config;
 mod driver;
 mod enums;
 mod error;
 mod range;
 mod status;
+mod time;
 mod utils;
 
-pub use config::*;
 pub use driver::*;
 pub use enums::*;
 pub use error::*;
 pub use range::*;
 pub use status::*;
+pub use time::*;
 pub use utils::*;

@@ -11,10 +11,10 @@
 
 pub use helpers::EnumResultHelpers;
 use parking_lot::RwLock;
-use pico_common::PicoError;
-use pico_common::{Driver, PicoResult};
+use pico_common::Driver;
 use pico_device::PicoDevice;
-use pico_driver::{kernel_driver, ArcDriver, DriverLoadError, LibraryResolution};
+use pico_driver::PicoDriver;
+use pico_driver::{kernel_driver, LibraryResolution, PicoError};
 use rayon::prelude::*;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -24,17 +24,15 @@ mod helpers;
 const PICO_VENDOR_ID: u16 = 0x0CE9;
 
 /// Devices returned by the enumerator
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug)]
 pub struct EnumeratedDevice {
-    #[cfg_attr(feature = "serde", serde(skip))]
-    driver: ArcDriver,
+    driver: Arc<dyn PicoDriver>,
     pub variant: String,
     pub serial: String,
 }
 
 impl EnumeratedDevice {
-    pub(crate) fn new(driver: ArcDriver, variant: String, serial: String) -> Self {
+    pub(crate) fn new(driver: Arc<dyn PicoDriver>, variant: String, serial: String) -> Self {
         EnumeratedDevice {
             driver,
             variant,
@@ -43,54 +41,21 @@ impl EnumeratedDevice {
     }
 
     /// Opens the device
-    pub fn open(&self) -> PicoResult<PicoDevice> {
-        PicoDevice::try_open(&self.driver, Some(&self.serial))
+    pub fn open(&self) -> Result<PicoDevice, PicoError> {
+        PicoDevice::new_open(&self.driver, Some(&self.serial))
     }
 }
 
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(tag = "type")
-)]
 #[derive(Error, Debug, Clone)]
 pub enum EnumerationError {
     #[error("Pico driver error: {error}")]
-    DriverError {
+    PicoError {
         driver: Driver,
         #[source]
         error: PicoError,
     },
-
     #[error("The {driver} driver could not find any devices. The Pico Technology kernel driver appears to be missing.")]
     KernelDriverError { driver: Driver },
-
-    #[error("The {driver} driver could not be found or failed to load")]
-    DriverLoadError { driver: Driver, error: String },
-
-    #[error("Invalid Driver Version: Requires >= {required}, Found: {found}")]
-    VersionError {
-        driver: Driver,
-        found: String,
-        required: String,
-    },
-}
-
-impl EnumerationError {
-    pub fn from(driver: Driver, error: DriverLoadError) -> Self {
-        match error {
-            DriverLoadError::DriverError(error) => EnumerationError::DriverError { driver, error },
-            DriverLoadError::LibloadingError(error) => EnumerationError::DriverLoadError {
-                driver,
-                error: error.to_string(),
-            },
-            DriverLoadError::VersionError { found, required } => EnumerationError::VersionError {
-                driver,
-                found,
-                required,
-            },
-        }
-    }
 }
 
 /// Enumerates `PicoDevice`'s
@@ -107,7 +72,7 @@ impl EnumerationError {
 #[derive(Clone, Default)]
 pub struct DeviceEnumerator {
     resolution: LibraryResolution,
-    loaded_drivers: Arc<RwLock<HashMap<Driver, ArcDriver>>>,
+    loaded_drivers: Arc<RwLock<HashMap<Driver, Arc<dyn PicoDriver>>>>,
 }
 
 impl DeviceEnumerator {
@@ -160,7 +125,13 @@ impl DeviceEnumerator {
         let driver = match self.cached_driver_load(driver_type) {
             Ok(driver) => driver,
             Err(error) => {
-                return vec![Err(EnumerationError::from(driver_type, error)); device_count]
+                return vec![
+                    Err(EnumerationError::PicoError {
+                        driver: driver_type,
+                        error
+                    });
+                    device_count
+                ]
             }
         };
 
@@ -184,7 +155,7 @@ impl DeviceEnumerator {
                 }
             }
             Err(error) => vec![
-                Err(EnumerationError::DriverError {
+                Err(EnumerationError::PicoError {
                     driver: driver_type,
                     error,
                 });
@@ -194,7 +165,7 @@ impl DeviceEnumerator {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    fn cached_driver_load(&self, driver_type: Driver) -> Result<ArcDriver, DriverLoadError> {
+    fn cached_driver_load(&self, driver_type: Driver) -> Result<Arc<dyn PicoDriver>, PicoError> {
         let driver = {
             let loaded_drivers = self.loaded_drivers.read();
             loaded_drivers.get(&driver_type).cloned()

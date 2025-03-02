@@ -3,15 +3,14 @@ use std::fmt;
 use thiserror::Error;
 
 /// Error encapsulating `PicoStatus` error codes with context
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Eq, PartialEq, Debug, Error)]
-pub struct PicoError {
+pub struct PicoDriverError {
     #[source]
     pub status: PicoStatus,
     context: Option<String>,
 }
 
-impl fmt::Display for PicoError {
+impl fmt::Display for PicoDriverError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ctx) = &self.context {
             write!(f, "{} > {:?}", ctx, self.status)
@@ -21,18 +20,18 @@ impl fmt::Display for PicoError {
     }
 }
 
-impl PicoError {
-    pub fn from_status(status: PicoStatus, context: &str) -> PicoError {
-        PicoError {
+impl PicoDriverError {
+    pub fn from_status(status: PicoStatus, context: &str) -> PicoDriverError {
+        PicoDriverError {
             status,
             context: Some(context.to_string()),
         }
     }
 }
 
-impl From<PicoStatus> for PicoError {
+impl From<PicoStatus> for PicoDriverError {
     fn from(value: PicoStatus) -> Self {
-        PicoError {
+        PicoDriverError {
             status: value,
             context: None,
         }
@@ -40,4 +39,4 @@ impl From<PicoStatus> for PicoError {
 }
 
 /// A result wrapping driver error codes: `Result<T, PicoError>`
-pub type PicoResult<T> = Result<T, PicoError>;
+pub type PicoDriverResult<T> = Result<T, PicoDriverError>;

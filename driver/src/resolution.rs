@@ -1,12 +1,14 @@
 use crate::{
-    ps2000, ps2000a, ps3000a, ps4000, ps4000a, ps5000a, ps6000, ps6000a, psospa, ArcDriver, DriverLoadError
+    ps2000, ps2000a, ps3000a, ps4000, ps4000a, ps5000a, ps6000, ps6000a, psospa, PicoDriver,
+    PicoError,
 };
 use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf, sync::Arc};
 
 /// Instructs the loader where to load drivers from
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub enum LibraryResolution {
+    #[default]
     /// Searches for drivers using the OS default path resolution
     Default,
     /// Searches for drivers in the application root directory
@@ -31,7 +33,7 @@ impl LibraryResolution {
         }
     }
 
-    pub fn try_load(&self, driver: Driver) -> Result<ArcDriver, DriverLoadError> {
+    pub fn try_load(&self, driver: Driver) -> Result<Arc<dyn PicoDriver>, PicoError> {
         let path = self.get_path(driver);
         Ok(match driver {
             Driver::PS2000 => Arc::new(ps2000::PS2000Driver::new(path)?),
@@ -47,11 +49,5 @@ impl LibraryResolution {
                 panic!("{driver} is a library used by Pico drivers and cannot be loaded directly",)
             }
         })
-    }
-}
-
-impl Default for LibraryResolution {
-    fn default() -> Self {
-        LibraryResolution::Default
     }
 }

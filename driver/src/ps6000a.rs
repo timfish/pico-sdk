@@ -1,14 +1,18 @@
 use crate::{
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, parse_enum_result, EnumerationResult, PicoDriver,
+    utils::parse_enum_result,
+    EnumerationResult, OpenResult, PicoDriver, PicoError, StreamingResult, StreamingState,
 };
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, SampleConfig, ToPicoStr,
+    FromPicoStr, PicoChannel, PicoCoupling, PicoDriverError, PicoDriverResult, PicoInfo, PicoRange,
+    PicoStatus, PicoVerticalResolution, SampleConfig, ToPicoStr,
 };
+use pico_config::{DeviceConfig, DeviceInfo};
 use pico_sys_dynamic::ps6000a::{
-    enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T, enPicoDeviceResolution_PICO_DR_10BIT, enPicoDeviceResolution_PICO_DR_12BIT, enPicoDeviceResolution_PICO_DR_8BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO
+    enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
+    enPicoDeviceResolution_PICO_DR_8BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader,
+    PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
 };
 use std::{mem::MaybeUninit, sync::Arc};
 
@@ -35,29 +39,9 @@ impl PS6000ADriver {
             _dependencies: dependencies,
         })
     }
-}
-
-impl PicoDriver for PS6000ADriver {
-    fn get_driver(&self) -> Driver {
-        Driver::PS3000A
-    }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn get_version(&self) -> PicoResult<String> {
-        let raw_version = self.get_unit_info(0, PicoInfo::DRIVER_VERSION)?;
-
-        // On non-Windows platforms, the drivers return extra text before the
-        // version string
-        Ok(get_version_string(&raw_version))
-    }
-
-    #[tracing::instrument(level = "trace", skip(self))]
-    fn get_path(&self) -> PicoResult<Option<String>> {
-        Ok(Some(self.get_unit_info(0, PicoInfo::DRIVER_PATH)?))
-    }
-
-    #[tracing::instrument(level = "trace", skip(self))]
-    fn enumerate_units(&self) -> PicoResult<Vec<EnumerationResult>> {
+    pub fn enumerate_units(&self) -> PicoDriverResult<Vec<EnumerationResult>> {
         let mut device_count = 0;
         let mut serial_buf = "-v".into_pico_i8_string();
         serial_buf.extend(vec![0i8; 1000]);
@@ -74,12 +58,12 @@ impl PicoDriver for PS6000ADriver {
         match status {
             PicoStatus::NOT_FOUND => Ok(Vec::new()),
             PicoStatus::OK => Ok(parse_enum_result(&serial_buf, serial_buf_len as usize)),
-            x => Err(PicoError::from_status(x, "enumerate_units")),
+            x => Err(PicoDriverError::from_status(x, "enumerate_units")),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
+    pub fn open_unit(&self, serial: Option<&str>) -> PicoDriverResult<i16> {
         let serial = serial.map(|s| s.into_pico_i8_string());
 
         let mut handle = -1i16;
@@ -100,39 +84,43 @@ impl PicoDriver for PS6000ADriver {
 
         match status {
             PicoStatus::OK => Ok(handle),
-            x => Err(PicoError::from_status(x, "open_unit")),
+            x => Err(PicoDriverError::from_status(x, "open_unit")),
         }
     }
 
-    fn ping_unit(&self, handle: i16) -> PicoResult<()> {
+    pub fn ping_unit(&self, handle: i16) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps6000aPingUnit(handle) })
             .to_result((), "ping_unit")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn maximum_value(&self, handle: i16) -> PicoResult<i16> {
+    pub fn maximum_adc_value(
+        &self,
+        handle: i16,
+        resolution: PicoVerticalResolution,
+    ) -> PicoDriverResult<i16> {
         let mut min_value = 0;
         let mut max_value = 0;
 
         PicoStatus::from(unsafe {
             self.bindings.ps6000aGetAdcLimits(
                 handle,
-                enPicoDeviceResolution_PICO_DR_12BIT,
+                resolution.into(),
                 &mut min_value,
                 &mut max_value,
             )
         })
-        .to_result(max_value, "maximum_value")
+        .to_result(max_value, "maximum_adc_value")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn close(&self, handle: i16) -> PicoResult<()> {
+    pub fn close(&self, handle: i16) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps6000aCloseUnit(handle) })
             .to_result((), "close_unit")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String> {
+    pub fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoDriverResult<String> {
         let mut string_buf: Vec<i8> = vec![0i8; 256];
         let mut string_buf_out_len = 0;
 
@@ -148,31 +136,37 @@ impl PicoDriver for PS6000ADriver {
 
         match status {
             PicoStatus::OK => Ok(string_buf.from_pico_i8_string(string_buf_out_len as usize)),
-            x => Err(PicoError::from_status(x, "get_unit_info")),
+            x => Err(PicoDriverError::from_status(x, "get_unit_info")),
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>> {
+    pub fn get_channel_ranges(
+        &self,
+        handle: i16,
+        channel: PicoChannel,
+    ) -> PicoDriverResult<Vec<PicoRange>> {
         // The 6000a doesn't support querying of supported channel ranges but
         // fortunately they use the same 10mV to 20v ranges
         Ok((0..=10).map(|r| r.into()).collect())
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn enable_channel(
+    pub fn enable_channel(
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
-    ) -> PicoResult<()> {
+        coupling: PicoCoupling,
+        range: PicoRange,
+        offset: f64,
+    ) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps6000aSetChannelOn(
                 handle,
                 channel.into(),
-                config.coupling.into(),
-                config.range.into(),
-                config.offset,
+                coupling.into(),
+                range.into(),
+                offset,
                 enPicoBandwidthLimiter_PICO_BW_FULL,
             )
         })
@@ -180,19 +174,19 @@ impl PicoDriver for PS6000ADriver {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()> {
+    pub fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps6000aSetChannelOff(handle, channel.into()) })
             .to_result((), "disable_channel")
     }
 
     #[tracing::instrument(level = "trace", skip(self, buffer))]
-    fn set_data_buffer(
+    pub fn set_data_buffer(
         &self,
         handle: i16,
         channel: PicoChannel,
         buffer: Arc<RwLock<Vec<i16>>>,
         buffer_len: usize,
-    ) -> PicoResult<()> {
+    ) -> PicoDriverResult<()> {
         let mut buffer = buffer.write();
 
         PicoStatus::from(unsafe {
@@ -210,26 +204,24 @@ impl PicoDriver for PS6000ADriver {
         .to_result((), "set_data_buffer")
     }
 
+    pub fn set_vertical_resolution(
+        &self,
+        handle: i16,
+        resolution: PicoVerticalResolution,
+    ) -> PicoDriverResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings
+                .ps6000aSetDeviceResolution(handle, resolution.into())
+        })
+        .to_result((), "set_vertical_resolution")
+    }
+
     #[tracing::instrument(level = "trace", skip(self))]
-    fn start_streaming(
+    pub fn start_streaming(
         &self,
         handle: i16,
         sample_config: &SampleConfig,
-        enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
-        let resolution = match enabled_channels {
-            1 | 2 => enPicoDeviceResolution_PICO_DR_12BIT,
-            _ => enPicoDeviceResolution_PICO_DR_10BIT,
-        };
-
-        let status = PicoStatus::from(unsafe {
-            self.bindings.ps6000aSetDeviceResolution(handle, resolution)
-        });
-
-        if status != PicoStatus::OK {
-            return status.to_result(SampleConfig::default(), "ps6000aSetDeviceResolution");
-        }
-
+    ) -> PicoDriverResult<SampleConfig> {
         let mut sample_interval = sample_config.interval as f64;
 
         PicoStatus::from(unsafe {
@@ -251,12 +243,12 @@ impl PicoDriver for PS6000ADriver {
     }
 
     #[tracing::instrument(level = "trace", skip(self, callback))]
-    fn get_latest_streaming_values<'a>(
+    pub fn get_latest_streaming_values<'a>(
         &self,
         handle: i16,
         channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
-    ) -> PicoResult<()> {
+    ) -> PicoDriverResult<()> {
         let mut info: Vec<PICO_STREAMING_DATA_INFO> = channels
             .iter()
             .map(|ch| PICO_STREAMING_DATA_INFO {
@@ -287,13 +279,72 @@ impl PicoDriver for PS6000ADriver {
 
             match status {
                 PicoStatus::OK | PicoStatus::BUSY => Ok(()),
-                x => Err(PicoError::from_status(x, "get_latest_streaming_values")),
+                x => Err(PicoDriverError::from_status(
+                    x,
+                    "get_latest_streaming_values",
+                )),
             }
         }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn stop(&self, handle: i16) -> PicoResult<()> {
+    pub fn stop(&self, handle: i16) -> PicoDriverResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps6000aStop(handle) }).to_result((), "stop")
+    }
+}
+
+impl PicoDriver for PS6000ADriver {
+    fn enumerate_units(&self) -> Result<Vec<EnumerationResult>, PicoError> {
+        Ok(self.enumerate_units()?)
+    }
+
+    fn open_device(&self, serial: Option<&str>) -> Result<OpenResult, PicoError> {
+        let handle = self.open_unit(serial)?;
+        let serial = self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?;
+        Ok(OpenResult { handle, serial })
+    }
+
+    fn get_device_info(&self, _handle: i16) -> Result<DeviceInfo, PicoError> {
+        todo!()
+    }
+
+    fn get_device_config(&self, _handle: i16) -> Result<DeviceConfig, PicoError> {
+        todo!()
+    }
+
+    fn configure_device(&self, _handle: i16, _config: &DeviceConfig) -> Result<(), PicoError> {
+        todo!()
+    }
+
+    fn start_streaming(
+        &self,
+        _handle: i16,
+        _config: &DeviceConfig,
+    ) -> Result<StreamingState, PicoError> {
+        todo!()
+    }
+
+    fn update_streaming_buffers(
+        &self,
+        _handle: i16,
+        _state: &StreamingState,
+    ) -> Result<StreamingState, PicoError> {
+        todo!("Not implemented")
+    }
+
+    fn get_streaming_values(
+        &self,
+        _handle: i16,
+        _state: &StreamingState,
+    ) -> Result<StreamingResult, PicoError> {
+        todo!()
+    }
+
+    fn stop(&self, _handle: i16) -> Result<(), PicoError> {
+        todo!()
+    }
+
+    fn close_device(&self, _handle: i16) -> Result<(), PicoError> {
+        todo!()
     }
 }
