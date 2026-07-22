@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: ✅ Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
       - name: ⚙️ Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -58,7 +58,7 @@ jobs:
     needs: test_and_build
     steps:
       - name: ✅ Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
       - name: ⚙️ Rust
         uses: actions-rs/toolchain@v1
         with:
