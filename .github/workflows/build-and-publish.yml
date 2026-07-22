@@ -30,6 +30,12 @@ jobs:
       - name: 🍏 Dependencies
         if: matrix.os == 'macos-latest'
         run: brew install automake
+      - name: 🍏 x86_64 target
+        # Pico only distribute x86_64 macOS drivers so we build and test under Rosetta
+        if: matrix.os == 'macos-latest'
+        run: |
+          rustup target add x86_64-apple-darwin
+          echo "CARGO_BUILD_TARGET=x86_64-apple-darwin" >> "$GITHUB_ENV"
       - name: ⚡ Cache
         uses: Swatinem/rust-cache@v2
       - name: 🔎 Test
