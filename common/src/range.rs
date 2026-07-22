@@ -140,24 +140,38 @@ pub enum PicoRange {
     CURRENT_CLAMP_60A_V2_60A = 10607,
 }
 
+/// Strips whitespace and '±' so that ranges can be compared to user input
+fn normalize(input: &str) -> String {
+    input.replace([' ', '±'], "").to_uppercase()
+}
+
+/// Strips a trailing probe attenuation suffix, eg. `200MV(X10)` becomes `200MV`
+fn strip_probe_suffix(input: &str) -> &str {
+    ["(X1)", "(X10)", "(X100)"]
+        .iter()
+        .find_map(|suffix| input.strip_suffix(suffix))
+        .unwrap_or(input)
+}
+
 impl PicoRange {
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
-        let input = input.replace([' ', '±'], "").to_uppercase();
+        let input = normalize(input);
         let all_ranges = PicoRange::into_enum_iter().collect::<Vec<Self>>();
         let valid_ranges = valid_ranges.unwrap_or(&all_ranges);
 
-        for range in valid_ranges {
-            let to_cmp = format!("{}", range)
-                .replace(' ', "")
-                .replace('±', "")
-                .to_uppercase();
-
-            if input == to_cmp {
-                return Some(*range);
-            }
+        // Prefer an exact match, including any probe attenuation suffix
+        if let Some(range) = valid_ranges
+            .iter()
+            .find(|range| normalize(&range.to_string()) == input)
+        {
+            return Some(*range);
         }
 
-        None
+        // Otherwise, fall back to matching without the probe attenuation suffix
+        valid_ranges
+            .iter()
+            .find(|range| strip_probe_suffix(&normalize(&range.to_string())) == input)
+            .copied()
     }
 
     pub fn from_probe_and_nano_volts(probe: u32, nano_volts: i64) -> Option<Self> {
@@ -564,6 +578,15 @@ impl PicoRange {
 mod range_tests {
     use super::*;
 
+    const X10_RANGES: &[PicoRange] = &[
+        PicoRange::X10_PROBE_100MV,
+        PicoRange::X10_PROBE_200MV,
+        PicoRange::X10_PROBE_500MV,
+        PicoRange::X10_PROBE_1V,
+        PicoRange::X10_PROBE_2V,
+        PicoRange::X10_PROBE_5V,
+    ];
+
     #[test]
     fn channel_parse() {
         assert_eq!(
@@ -575,18 +598,40 @@ mod range_tests {
             Some(PicoRange::X1_PROBE_20V)
         );
         assert_eq!(
-            PicoRange::parse(
-                "200 mv",
-                Some(&[
-                    PicoRange::X10_PROBE_100MV,
-                    PicoRange::X10_PROBE_200MV,
-                    PicoRange::X10_PROBE_500MV,
-                    PicoRange::X10_PROBE_1V,
-                    PicoRange::X10_PROBE_2V,
-                    PicoRange::X10_PROBE_5V
-                ])
-            ),
+            PicoRange::parse("±20V", None),
+            Some(PicoRange::X1_PROBE_20V)
+        );
+        assert_eq!(PicoRange::parse("20 Gigavolts", None), None);
+    }
+
+    #[test]
+    fn channel_parse_with_probe_suffix() {
+        // The probe attenuation suffix is matched when it's supplied
+        assert_eq!(
+            PicoRange::parse("200 mv (x10)", None),
             Some(PicoRange::X10_PROBE_200MV)
-        )
+        );
+        assert_eq!(
+            PicoRange::parse("±200mV(x10)", Some(X10_RANGES)),
+            Some(PicoRange::X10_PROBE_200MV)
+        );
+    }
+
+    #[test]
+    fn channel_parse_falls_back_to_ignoring_probe_suffix() {
+        // Without the suffix, the x1 range is an exact match so it wins
+        assert_eq!(
+            PicoRange::parse("200 mv", None),
+            Some(PicoRange::X1_PROBE_200MV)
+        );
+
+        // ...but when only x10 ranges are valid, we fall back to those
+        assert_eq!(
+            PicoRange::parse("200 mv", Some(X10_RANGES)),
+            Some(PicoRange::X10_PROBE_200MV)
+        );
+
+        // The fallback still only matches valid ranges
+        assert_eq!(PicoRange::parse("50 mv", Some(X10_RANGES)), None);
     }
 }
