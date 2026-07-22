@@ -21,12 +21,9 @@ jobs:
 
     steps:
       - name: ✅ Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
       - name: ⚙️ Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: 🐧 Dependencies
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
@@ -34,22 +31,11 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: brew install automake
       - name: ⚡ Cache
-        uses: actions/cache@v2.1.4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ matrix.os }}-${{ hashFiles('**/Cargo.toml') }}
+        uses: Swatinem/rust-cache@v2
       - name: 🔎 Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+        run: cargo test
       - name: 🔨 Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --all-features
+        run: cargo build --release --all-features
 
   publish:
     name: Publish
@@ -58,28 +44,12 @@ jobs:
     needs: test_and_build
     steps:
       - name: ✅ Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
       - name: ⚙️ Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: ⚡ Cache
-        uses: actions/cache@v2.1.4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: windows-latest-${{ hashFiles('**/Cargo.toml') }}
-      - name: ⚡ Cache Bin
-        uses: actions/cache@v2.1.4
-        with:
-          path: |
-            ~/.cargo/bin/cargo-release
-          key: cargo-bin
+        uses: Swatinem/rust-cache@v2
       - name: 🚀 Publish
-        run: |
-          cargo login ${{ secrets.CRATES_IO_TOKEN }}
-          cargo install cargo-release
-          cargo release --no-confirm --no-dev-version --skip-tag --skip-push
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish
