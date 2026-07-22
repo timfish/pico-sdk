@@ -1,0 +1,3 @@
+[build]
+# Pico's macOS driver libraries are x86_64-only, so build/run under Rosetta.
+target = "x86_64-apple-darwin"
