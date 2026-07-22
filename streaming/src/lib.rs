@@ -56,7 +56,13 @@ use pico_common::{
     ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
 };
 use pico_device::PicoDevice;
-use std::{collections::HashMap, fmt, sync::Arc, thread, thread::JoinHandle, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt,
+    sync::Arc,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 use tracing::*;
 
 mod events;
@@ -246,16 +252,18 @@ impl PicoStreamingDevice {
     #[tracing::instrument(level = "info")]
     pub fn start(&self, requested_sample_rate: u32) -> PicoResult<u32> {
         // Set the target state
-        {
-            self.target_state.set(Target::Streaming {
-                requested_sample_rate,
-            });
-        }
+
+        self.target_state.set(Target::Streaming {
+            requested_sample_rate,
+        });
 
         // Drive the state until we get the correct state or an error we can return
         let mut count = 0;
         loop {
-            self.run_state()?;
+            if let Err(e) = self.run_state() {
+                self.target_state.set(Target::Open);
+                return Err(e);
+            }
 
             let current = self.current_state.read();
             if let State::Streaming {
@@ -267,7 +275,7 @@ impl PicoStreamingDevice {
 
             count += 1;
 
-            if count > 20 {
+            if count > 5 {
                 return Err(PicoStatus::TIMEOUT.into());
             }
         }
@@ -316,6 +324,7 @@ impl PicoStreamingDevice {
         self.background_handle = Some(BackgroundThreadHandle::new(tx_terminate, handle));
     }
 
+    #[tracing::instrument(skip(self), level = "debug", err(Display))]
     fn run_state(&self) -> PicoResult<Duration> {
         let mut current_state = self.current_state.write();
         let initial_state = current_state.clone();

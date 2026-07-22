@@ -5,8 +5,11 @@ use std::fmt;
 /// Pico channel ranges
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, IntoEnumIterator)]
+#[derive(
+    Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, PartialOrd, Ord, IntoEnumIterator,
+)]
 pub enum PicoRange {
+    X1_PROBE_5MV = -1,
     X1_PROBE_10MV = 0,
     X1_PROBE_20MV = 1,
     X1_PROBE_50MV = 2,
@@ -22,6 +25,7 @@ pub enum PicoRange {
     X1_PROBE_100V = 12,
     X1_PROBE_200V = 13,
 
+    X10_PROBE_50MV = 31,
     X10_PROBE_100MV = 32,
     X10_PROBE_200MV = 33,
     X10_PROBE_500MV = 34,
@@ -136,30 +140,148 @@ pub enum PicoRange {
     CURRENT_CLAMP_60A_V2_60A = 10607,
 }
 
+/// Strips whitespace and '±' so that ranges can be compared to user input
+fn normalize(input: &str) -> String {
+    input.replace([' ', '±'], "").to_uppercase()
+}
+
+/// Strips a trailing probe attenuation suffix, eg. `200MV(X10)` becomes `200MV`
+fn strip_probe_suffix(input: &str) -> &str {
+    ["(X1)", "(X10)", "(X100)"]
+        .iter()
+        .find_map(|suffix| input.strip_suffix(suffix))
+        .unwrap_or(input)
+}
+
 impl PicoRange {
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
-        let input = input.replace([' ', '±'], "").to_uppercase();
+        let input = normalize(input);
         let all_ranges = PicoRange::into_enum_iter().collect::<Vec<Self>>();
         let valid_ranges = valid_ranges.unwrap_or(&all_ranges);
 
-        for range in valid_ranges {
-            let to_cmp = format!("{}", range)
-                .replace(' ', "")
-                .replace('±', "")
-                .to_uppercase();
-
-            if input == to_cmp {
-                return Some(*range);
-            }
+        // Prefer an exact match, including any probe attenuation suffix
+        if let Some(range) = valid_ranges
+            .iter()
+            .find(|range| normalize(&range.to_string()) == input)
+        {
+            return Some(*range);
         }
 
-        None
+        // Otherwise, fall back to matching without the probe attenuation suffix
+        valid_ranges
+            .iter()
+            .find(|range| strip_probe_suffix(&normalize(&range.to_string())) == input)
+            .copied()
+    }
+
+    pub fn from_probe_and_nano_volts(probe: u32, nano_volts: i64) -> Option<Self> {
+        match (probe, nano_volts) {
+            (1, 5_000_000) => Some(PicoRange::X1_PROBE_5MV),
+            (1, 10_000_000) => Some(PicoRange::X1_PROBE_10MV),
+            (1, 20_000_000) => Some(PicoRange::X1_PROBE_20MV),
+            (1, 50_000_000) => Some(PicoRange::X1_PROBE_50MV),
+            (1, 100_000_000) => Some(PicoRange::X1_PROBE_100MV),
+            (1, 200_000_000) => Some(PicoRange::X1_PROBE_200MV),
+            (1, 500_000_000) => Some(PicoRange::X1_PROBE_500MV),
+            (1, 1_000_000_000) => Some(PicoRange::X1_PROBE_1V),
+            (1, 2_000_000_000) => Some(PicoRange::X1_PROBE_2V),
+            (1, 5_000_000_000) => Some(PicoRange::X1_PROBE_5V),
+            (1, 10_000_000_000) => Some(PicoRange::X1_PROBE_10V),
+            (1, 20_000_000_000) => Some(PicoRange::X1_PROBE_20V),
+            (1, 50_000_000_000) => Some(PicoRange::X1_PROBE_50V),
+            (1, 100_000_000_000) => Some(PicoRange::X1_PROBE_100V),
+            (1, 200_000_000_000) => Some(PicoRange::X1_PROBE_200V),
+            (10, 50_000_000) => Some(PicoRange::X10_PROBE_50MV),
+            (10, 100_000_000) => Some(PicoRange::X10_PROBE_100MV),
+            (10, 200_000_000) => Some(PicoRange::X10_PROBE_200MV),
+            (10, 500_000_000) => Some(PicoRange::X10_PROBE_500MV),
+            (10, 1_000_000_000) => Some(PicoRange::X10_PROBE_1V),
+            (10, 2_000_000_000) => Some(PicoRange::X10_PROBE_2V),
+            (10, 5_000_000_000) => Some(PicoRange::X10_PROBE_5V),
+            (10, 10_000_000_000) => Some(PicoRange::X10_PROBE_10V),
+            (10, 20_000_000_000) => Some(PicoRange::X10_PROBE_20V),
+            (10, 50_000_000_000) => Some(PicoRange::X10_PROBE_50V),
+            (10, 100_000_000_000) => Some(PicoRange::X10_PROBE_100V),
+            (10, 200_000_000_000) => Some(PicoRange::X10_PROBE_200V),
+            (10, 500_000_000_000) => Some(PicoRange::X10_PROBE_500V),
+            _ => None,
+        }
+    }
+
+    pub fn to_nano_volts(&self) -> i64 {
+        match self {
+            PicoRange::X1_PROBE_5MV => 5_000_000,
+            PicoRange::X1_PROBE_10MV => 10_000_000,
+            PicoRange::X1_PROBE_20MV => 20_000_000,
+            PicoRange::X1_PROBE_50MV => 50_000_000,
+            PicoRange::X1_PROBE_100MV => 100_000_000,
+            PicoRange::X1_PROBE_200MV => 200_000_000,
+            PicoRange::X1_PROBE_500MV => 500_000_000,
+            PicoRange::X1_PROBE_1V => 1_000_000_000,
+            PicoRange::X1_PROBE_2V => 2_000_000_000,
+            PicoRange::X1_PROBE_5V => 5_000_000_000,
+            PicoRange::X1_PROBE_10V => 10_000_000_000,
+            PicoRange::X1_PROBE_20V => 20_000_000_000,
+            PicoRange::X1_PROBE_50V => 50_000_000_000,
+            PicoRange::X1_PROBE_100V => 100_000_000_000,
+            PicoRange::X1_PROBE_200V => 200_000_000_000,
+            PicoRange::X10_PROBE_50MV => 50_000_000,
+            PicoRange::X10_PROBE_100MV => 100_000_000,
+            PicoRange::X10_PROBE_200MV => 200_000_000,
+            PicoRange::X10_PROBE_500MV => 500_000_000,
+            PicoRange::X10_PROBE_1V => 1_000_000_000,
+            PicoRange::X10_PROBE_2V => 2_000_000_000,
+            PicoRange::X10_PROBE_5V => 5_000_000_000,
+            PicoRange::X10_PROBE_10V => 10_000_000_000,
+            PicoRange::X10_PROBE_20V => 20_000_000_000,
+            PicoRange::X10_PROBE_50V => 50_000_000_000,
+            PicoRange::X10_PROBE_100V => 100_000_000_000,
+            PicoRange::X10_PROBE_200V => 200_000_000_000,
+            PicoRange::X10_PROBE_500V => 500_000_000_000,
+            _ => panic!("Does not support conversion from {} to nano volts", self),
+        }
+    }
+
+    pub fn to_probe_range(&self) -> u32 {
+        match self {
+            PicoRange::X1_PROBE_5MV
+            | PicoRange::X1_PROBE_10MV
+            | PicoRange::X1_PROBE_20MV
+            | PicoRange::X1_PROBE_50MV
+            | PicoRange::X1_PROBE_100MV
+            | PicoRange::X1_PROBE_200MV
+            | PicoRange::X1_PROBE_500MV
+            | PicoRange::X1_PROBE_1V
+            | PicoRange::X1_PROBE_2V
+            | PicoRange::X1_PROBE_5V
+            | PicoRange::X1_PROBE_10V
+            | PicoRange::X1_PROBE_20V
+            | PicoRange::X1_PROBE_50V
+            | PicoRange::X1_PROBE_100V
+            | PicoRange::X1_PROBE_200V => 1,
+
+            PicoRange::X10_PROBE_50MV
+            | PicoRange::X10_PROBE_100MV
+            | PicoRange::X10_PROBE_200MV
+            | PicoRange::X10_PROBE_500MV
+            | PicoRange::X10_PROBE_1V
+            | PicoRange::X10_PROBE_2V
+            | PicoRange::X10_PROBE_5V
+            | PicoRange::X10_PROBE_10V
+            | PicoRange::X10_PROBE_20V
+            | PicoRange::X10_PROBE_50V
+            | PicoRange::X10_PROBE_100V
+            | PicoRange::X10_PROBE_200V
+            | PicoRange::X10_PROBE_500V => 10,
+            _ => panic!("Does not support conversion from {} to nano volts", self),
+        }
     }
 }
 
 impl fmt::Display for PicoRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            PicoRange::X1_PROBE_5MV => write!(f, "±5 mV"),
             PicoRange::X1_PROBE_10MV => write!(f, "±10 mV"),
             PicoRange::X1_PROBE_20MV => write!(f, "±20 mV"),
             PicoRange::X1_PROBE_50MV => write!(f, "±50 mV"),
@@ -174,18 +296,19 @@ impl fmt::Display for PicoRange {
             PicoRange::X1_PROBE_50V => write!(f, "±50 V"),
             PicoRange::X1_PROBE_100V => write!(f, "±100 V"),
             PicoRange::X1_PROBE_200V => write!(f, "±200 V"),
-            PicoRange::X10_PROBE_100MV => write!(f, "±100 mV"),
-            PicoRange::X10_PROBE_200MV => write!(f, "±200 mV"),
-            PicoRange::X10_PROBE_500MV => write!(f, "±500 mV"),
-            PicoRange::X10_PROBE_1V => write!(f, "±1 V"),
-            PicoRange::X10_PROBE_2V => write!(f, "±2 V"),
-            PicoRange::X10_PROBE_5V => write!(f, "±5 V"),
-            PicoRange::X10_PROBE_10V => write!(f, "±10 V"),
-            PicoRange::X10_PROBE_20V => write!(f, "±20 V"),
-            PicoRange::X10_PROBE_50V => write!(f, "±50 V"),
-            PicoRange::X10_PROBE_100V => write!(f, "±100 V"),
-            PicoRange::X10_PROBE_200V => write!(f, "±200 V"),
-            PicoRange::X10_PROBE_500V => write!(f, "±500 V"),
+            PicoRange::X10_PROBE_50MV => write!(f, "±50 mV (x10)"),
+            PicoRange::X10_PROBE_100MV => write!(f, "±100 mV (x10)"),
+            PicoRange::X10_PROBE_200MV => write!(f, "±200 mV (x10)"),
+            PicoRange::X10_PROBE_500MV => write!(f, "±500 mV (x10)"),
+            PicoRange::X10_PROBE_1V => write!(f, "±1 V (x10)"),
+            PicoRange::X10_PROBE_2V => write!(f, "±2 V (x10)"),
+            PicoRange::X10_PROBE_5V => write!(f, "±5 V (x10)"),
+            PicoRange::X10_PROBE_10V => write!(f, "±10 V (x10)"),
+            PicoRange::X10_PROBE_20V => write!(f, "±20 V (x10)"),
+            PicoRange::X10_PROBE_50V => write!(f, "±50 V (x10)"),
+            PicoRange::X10_PROBE_100V => write!(f, "±100 V (x10)"),
+            PicoRange::X10_PROBE_200V => write!(f, "±200 V (x10)"),
+            PicoRange::X10_PROBE_500V => write!(f, "±500 V (x10)"),
             PicoRange::CURRENT_CLAMP_200A_2kA_1A => write!(f, "±1 A"),
             PicoRange::CURRENT_CLAMP_200A_2kA_2A => write!(f, "±2 A"),
             PicoRange::CURRENT_CLAMP_200A_2kA_5A => write!(f, "±5 A"),
@@ -455,6 +578,15 @@ impl PicoRange {
 mod range_tests {
     use super::*;
 
+    const X10_RANGES: &[PicoRange] = &[
+        PicoRange::X10_PROBE_100MV,
+        PicoRange::X10_PROBE_200MV,
+        PicoRange::X10_PROBE_500MV,
+        PicoRange::X10_PROBE_1V,
+        PicoRange::X10_PROBE_2V,
+        PicoRange::X10_PROBE_5V,
+    ];
+
     #[test]
     fn channel_parse() {
         assert_eq!(
@@ -466,18 +598,40 @@ mod range_tests {
             Some(PicoRange::X1_PROBE_20V)
         );
         assert_eq!(
-            PicoRange::parse(
-                "200 mv",
-                Some(&[
-                    PicoRange::X10_PROBE_100MV,
-                    PicoRange::X10_PROBE_200MV,
-                    PicoRange::X10_PROBE_500MV,
-                    PicoRange::X10_PROBE_1V,
-                    PicoRange::X10_PROBE_2V,
-                    PicoRange::X10_PROBE_5V
-                ])
-            ),
+            PicoRange::parse("±20V", None),
+            Some(PicoRange::X1_PROBE_20V)
+        );
+        assert_eq!(PicoRange::parse("20 Gigavolts", None), None);
+    }
+
+    #[test]
+    fn channel_parse_with_probe_suffix() {
+        // The probe attenuation suffix is matched when it's supplied
+        assert_eq!(
+            PicoRange::parse("200 mv (x10)", None),
             Some(PicoRange::X10_PROBE_200MV)
-        )
+        );
+        assert_eq!(
+            PicoRange::parse("±200mV(x10)", Some(X10_RANGES)),
+            Some(PicoRange::X10_PROBE_200MV)
+        );
+    }
+
+    #[test]
+    fn channel_parse_falls_back_to_ignoring_probe_suffix() {
+        // Without the suffix, the x1 range is an exact match so it wins
+        assert_eq!(
+            PicoRange::parse("200 mv", None),
+            Some(PicoRange::X1_PROBE_200MV)
+        );
+
+        // ...but when only x10 ranges are valid, we fall back to those
+        assert_eq!(
+            PicoRange::parse("200 mv", Some(X10_RANGES)),
+            Some(PicoRange::X10_PROBE_200MV)
+        );
+
+        // The fallback still only matches valid ranges
+        assert_eq!(PicoRange::parse("50 mv", Some(X10_RANGES)), None);
     }
 }

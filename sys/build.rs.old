@@ -5,7 +5,7 @@ fn build(header: &str, name: &str) {
     let bindings = bindgen::Builder::default()
         .header(format!("./inc/{}.h", header))
         .dynamic_library_name(name)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
 
@@ -26,4 +26,5 @@ fn main() {
     build("ps5000aApi", "PS5000ALoader");
     build("ps6000Api", "PS6000Loader");
     build("ps6000aApi", "PS6000ALoader");
+    build("psospaApi", "PSOSPALoader");
 }

@@ -2,3 +2,6 @@
 Cargo.lock
 **/*.rs.bk
 .env
+# Host specific. On macOS this sets `build.target = "x86_64-apple-darwin"` as Pico
+# only distribute x86_64 drivers, but cargo can't apply that conditionally
+/.cargo/config.toml

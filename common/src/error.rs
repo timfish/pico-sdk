@@ -14,9 +14,9 @@ pub struct PicoError {
 impl fmt::Display for PicoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ctx) = &self.context {
-            write!(f, "{}", ctx)
+            write!(f, "{} > {:?}", ctx, self.status)
         } else {
-            Ok(())
+            write!(f, "{:?}", self.status)
         }
     }
 }

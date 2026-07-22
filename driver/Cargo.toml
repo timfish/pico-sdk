@@ -20,9 +20,10 @@ libloading = "0.7"
 parking_lot = "0.11"
 pico-common = {path = "../common", version = "0.4.0"}
 pico-sys-dynamic = {path = "../sys", version = "0.4.0"}
-thiserror = "^1.0"
+thiserror = "1"
 tracing = {version = "0.1", features = ["attributes"]}
 version-compare = "0.0.11"
+tinyjson = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = {version = "0.3", features = ["setupapi", "impl-default"]}

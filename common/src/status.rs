@@ -717,8 +717,7 @@ pub enum PicoStatus {
     AWG_OVER_VOLTAGE_RANGE = 50_331_704,
     #[error("")]
     NOT_LOCKED_TO_REFERENCE_FREQUENCY = 50_331_705,
-    #[error("udev rules are incorrectly configured. The user does not have read/write permissions on the device's file descriptor"
-    )]
+    #[error("udev rules are incorrectly configured. The user does not have read/write permissions on the device's file descriptor")]
     PERMISSIONS_ERROR = 50_331_712,
     #[error("")]
     PORTS_WITHOUT_ANALOGUE_CHANNELS_ONLY_ALLOWED_IN_8BIT_RESOLUTION = 50_335_744,
@@ -728,6 +727,8 @@ pub enum PicoStatus {
     FRONT_PANEL_MISSING = 50_343_938,
     #[error("")]
     ANALOGUE_FRONTEND_AND_FRONT_PANEL_MISSING = 50_343_939,
+    #[error("The digital board has reported an error to the driver")]
+    DIGITAL_BOARD_HARDWARE_ERROR = 50_345_984,
     #[error("")]
     FIRMWARE_UPDATE_REQUIRED_TO_USE_DEVICE_WITH_THIS_DRIVER = 50_348_032,
     #[error("")]
@@ -749,14 +750,16 @@ pub enum PicoStatus {
     #[error("")]
     FIRMWARE_VERSION_OUT_OF_RANGE = 50_348_041,
     #[error("")]
-    FRONTPANEL_FIRMWARE_UPDATE_REQUIRED_TO_USE_DEVICE_WITH_THIS_DRIVER = 50_348_042,
-    #[error("")]
     NO_APPS_AVAILABLE = 50_364_416,
     #[error("")]
     UNSUPPORTED_APP = 50_364_417,
     #[error("The adc was powered down when trying to capture data")]
     ADC_POWERED_DOWN = 50_339_840,
-    #[error("An internal error has occurred and a watchdog timer has been called")]
+    #[error("")]
+    OPTIONAL_BOOTLOADER_UPDATE_AVAILABLE_WITH_THIS_DRIVER  = 50_352_128,
+    #[error("")]
+    BOOTLOADER_VERSION_NOT_AVAILABLE = 50_352_129,
+    #[error("An internal error has occurred and a watchdog timer has been called")]    
     WATCHDOGTIMER = 268_435_456,
     #[error("The picoipp library has not been found")]
     IPP_NOT_FOUND = 268_435_457,

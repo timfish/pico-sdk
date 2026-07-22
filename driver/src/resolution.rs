@@ -1,5 +1,5 @@
 use crate::{
-    ps2000, ps2000a, ps3000a, ps4000, ps4000a, ps5000a, ps6000, ps6000a, ArcDriver, DriverLoadError,
+    ps2000, ps2000a, ps3000a, ps4000, ps4000a, ps5000a, ps6000, ps6000a, psospa, ArcDriver, DriverLoadError
 };
 use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf, sync::Arc};
@@ -42,6 +42,7 @@ impl LibraryResolution {
             Driver::PS5000A => Arc::new(ps5000a::PS5000ADriver::new(path)?),
             Driver::PS6000 => Arc::new(ps6000::PS6000Driver::new(path)?),
             Driver::PS6000A => Arc::new(ps6000a::PS6000ADriver::new(path)?),
+            Driver::PSOSPA => Arc::new(psospa::PSOSPADriver::new(path)?),
             Driver::PicoIPP | Driver::IOMP5 => {
                 panic!("{driver} is a library used by Pico drivers and cannot be loaded directly",)
             }
