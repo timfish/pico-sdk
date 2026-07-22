@@ -732,7 +732,7 @@ impl PS5000Loader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
+        let __library = ::libloading::Library::new(path.as_ref())?;
         let ps5000ApplyFix = __library.get(b"ps5000ApplyFix\0").map(|sym| *sym);
         let ps5000OpenUnit = __library.get(b"ps5000OpenUnit\0").map(|sym| *sym);
         let ps5000OpenUnitAsync = __library.get(b"ps5000OpenUnitAsync\0").map(|sym| *sym);

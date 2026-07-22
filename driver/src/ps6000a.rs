@@ -1,20 +1,24 @@
 use crate::{
     dependencies::{load_dependencies, LoadedDependencies},
-    utils::parse_enum_result,
-    EnumerationResult, OpenResult, PicoDriver, PicoError, StreamingResult, StreamingState,
+    utils::{parse_enum_result, parse_version_string},
+    EnumerationResult, OpenResult, PicoDriver, PicoError, StreamingChannelResult, StreamingResult,
+    StreamingState,
 };
 use parking_lot::RwLock;
 use pico_common::{
     FromPicoStr, PicoChannel, PicoCoupling, PicoDriverError, PicoDriverResult, PicoInfo, PicoRange,
     PicoStatus, PicoVerticalResolution, SampleConfig, ToPicoStr,
 };
-use pico_config::{DeviceConfig, DeviceInfo};
+use pico_config::{
+    parse_pico_range_fuzzy, ChannelConfig, ChannelConfigExt, ConfigType, DeviceConfig,
+    DeviceConfigExt, DeviceInfo,
+};
 use pico_sys_dynamic::ps6000a::{
     enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
     enPicoDeviceResolution_PICO_DR_8BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader,
     PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
 };
-use std::{mem::MaybeUninit, sync::Arc};
+use std::{collections::HashMap, mem::MaybeUninit, str::FromStr, sync::Arc};
 
 pub struct PS6000ADriver {
     _dependencies: LoadedDependencies,
@@ -293,6 +297,16 @@ impl PS6000ADriver {
     }
 }
 
+struct InternalChannelState {
+    pub buffer: Arc<RwLock<Vec<i16>>>,
+    pub multiplier: f64,
+}
+
+struct InternalState {
+    pub channels: HashMap<PicoChannel, InternalChannelState>,
+    pub nano_seconds_interval: u32,
+}
+
 impl PicoDriver for PS6000ADriver {
     fn enumerate_units(&self) -> Result<Vec<EnumerationResult>, PicoError> {
         Ok(self.enumerate_units()?)
@@ -304,24 +318,139 @@ impl PicoDriver for PS6000ADriver {
         Ok(OpenResult { handle, serial })
     }
 
-    fn get_device_info(&self, _handle: i16) -> Result<DeviceInfo, PicoError> {
-        todo!()
+    fn get_device_info(&self, handle: i16) -> Result<DeviceInfo, PicoError> {
+        let serial = self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?;
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
+        let usb_version = self.get_unit_info(handle, PicoInfo::USB_VERSION)?;
+        let driver_version =
+            parse_version_string(&self.get_unit_info(handle, PicoInfo::DRIVER_VERSION)?);
+        let hardware_version = self.get_unit_info(handle, PicoInfo::HARDWARE_VERSION)?;
+        let calibration_date = self.get_unit_info(handle, PicoInfo::CAL_DATE)?;
+        let digital_hardware_version =
+            self.get_unit_info(handle, PicoInfo::DIGITAL_HARDWARE_VERSION)?;
+        let analogue_hardware_version =
+            self.get_unit_info(handle, PicoInfo::ANALOGUE_HARDWARE_VERSION)?;
+
+        Ok(DeviceInfo::new(
+            [
+                ("serial", serial),
+                ("variant", variant),
+                ("usb_version", usb_version),
+                ("driver_version", driver_version),
+                ("hardware_version", hardware_version),
+                ("calibration_date", calibration_date),
+                ("digital_hardware_version", digital_hardware_version),
+                ("analogue_hardware_version", analogue_hardware_version),
+            ]
+            .iter(),
+        ))
     }
 
-    fn get_device_config(&self, _handle: i16) -> Result<DeviceConfig, PicoError> {
-        todo!()
+    fn get_device_config(&self, handle: i16) -> Result<DeviceConfig, PicoError> {
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
+        let ch_count = variant[1..2]
+            .parse::<usize>()
+            .expect("Could not parse device variant for number of channels");
+
+        let all_channels = enum_iterator::all::<PicoChannel>().collect::<Vec<_>>();
+
+        let channels = all_channels[..ch_count]
+            .iter()
+            .map(|ch| match self.get_channel_ranges(handle, *ch) {
+                Ok(ranges) => {
+                    let ranges = ranges.iter().map(|r| r.to_string()).collect::<Vec<_>>();
+
+                    Ok(ChannelConfig::new(
+                        [
+                            ("enabled", ConfigType::Boolean(false)),
+                            (
+                                "range",
+                                ConfigType::select(ranges, "\u{b1}5 V", Some(parse_pico_range_fuzzy)),
+                            ),
+                            ("coupling", ConfigType::select(["AC", "DC"], "AC", None)),
+                            ("offset", ConfigType::Float(0.0)),
+                        ]
+                        .iter(),
+                    ))
+                }
+                Err(_) => Ok(ChannelConfig::new([].iter())),
+            })
+            .collect::<Result<Vec<ChannelConfig>, PicoError>>()?;
+
+        let device_config = DeviceConfig::new(
+            [
+                ("samples_per_second", ConfigType::Int(1_000)),
+                (
+                    "resolution",
+                    ConfigType::select(["8", "10", "12"], "8", None),
+                ),
+            ]
+            .iter(),
+            &channels,
+        );
+
+        Ok(device_config)
     }
 
-    fn configure_device(&self, _handle: i16, _config: &DeviceConfig) -> Result<(), PicoError> {
-        todo!()
+    fn configure_device(&self, handle: i16, config: &DeviceConfig) -> Result<(), PicoError> {
+        for (channel_name, ch_config) in config.channels_iter() {
+            let channel =
+                PicoChannel::from_str(channel_name.as_ref()).expect("could not parse channel name");
+
+            if ch_config.get_enabled()? {
+                self.enable_channel(
+                    handle,
+                    channel,
+                    ch_config.get_coupling()?,
+                    ch_config.get_range()?,
+                    ch_config.get_offset()?,
+                )?;
+            } else {
+                self.disable_channel(handle, channel)?;
+            }
+        }
+
+        Ok(())
     }
 
     fn start_streaming(
         &self,
-        _handle: i16,
-        _config: &DeviceConfig,
+        handle: i16,
+        config: &DeviceConfig,
     ) -> Result<StreamingState, PicoError> {
-        todo!()
+        let samples_per_second = config.get_samples_per_second()?;
+        let sample_config = SampleConfig::from_samples_per_second(samples_per_second as u32);
+        let buffer_size = (samples_per_second * 5) as usize;
+
+        let resolution = config
+            .get_resolution()
+            .unwrap_or(PicoVerticalResolution::_8BIT);
+        self.set_vertical_resolution(handle, resolution)?;
+        let max_adc_value = self.maximum_adc_value(handle, resolution)?;
+
+        let state = InternalState {
+            channels: config
+                .channels_iter()
+                .filter(|(_, ch_config)| ch_config.get_enabled().unwrap_or(false))
+                .map(|(channel_name, ch_config)| {
+                    let channel = PicoChannel::from_str(channel_name.as_ref())
+                        .expect("could not parse channel name");
+                    let multiplier =
+                        ch_config.get_range()?.get_max_scaled_value() / max_adc_value as f64;
+
+                    let buffer = Arc::new(RwLock::new(vec![0i16; buffer_size]));
+                    self.set_data_buffer(handle, channel, buffer.clone(), buffer_size)?;
+
+                    Ok((channel, InternalChannelState { buffer, multiplier }))
+                })
+                .collect::<Result<HashMap<PicoChannel, InternalChannelState>, PicoError>>()?,
+            nano_seconds_interval: {
+                let actual = self.start_streaming(handle, &sample_config)?;
+                (actual.get_interval() * 1_000_000_000.0) as u32
+            },
+        };
+
+        Ok(Box::new(state))
     }
 
     fn update_streaming_buffers(
@@ -334,17 +463,47 @@ impl PicoDriver for PS6000ADriver {
 
     fn get_streaming_values(
         &self,
-        _handle: i16,
-        _state: &StreamingState,
+        handle: i16,
+        state: &StreamingState,
     ) -> Result<StreamingResult, PicoError> {
-        todo!()
+        let state = state
+            .downcast_ref::<InternalState>()
+            .expect("could not downcast to InternalState");
+
+        let mut output = StreamingResult {
+            channels: HashMap::new(),
+            nano_seconds_interval: state.nano_seconds_interval as u64,
+        };
+
+        let channels: Vec<PicoChannel> = state.channels.keys().cloned().collect();
+
+        self.get_latest_streaming_values(
+            handle,
+            &channels,
+            Box::new(|start_index, no_of_samples| {
+                for (ch, ch_state) in state.channels.iter() {
+                    let buffer = ch_state.buffer.read();
+                    output.channels.insert(
+                        ch.to_string(),
+                        StreamingChannelResult::Buffer {
+                            data: buffer[start_index..(start_index + no_of_samples)].to_vec(),
+                            multiplier: ch_state.multiplier,
+                        },
+                    );
+                }
+            }),
+        )?;
+
+        Ok(output)
     }
 
-    fn stop(&self, _handle: i16) -> Result<(), PicoError> {
-        todo!()
+    fn stop(&self, handle: i16) -> Result<(), PicoError> {
+        self.stop(handle)?;
+        Ok(())
     }
 
-    fn close_device(&self, _handle: i16) -> Result<(), PicoError> {
-        todo!()
+    fn close_device(&self, handle: i16) -> Result<(), PicoError> {
+        self.close(handle)?;
+        Ok(())
     }
 }

@@ -255,7 +255,7 @@ impl PS5000ADriver {
                 (false).into(),
                 1,
                 DownsampleMode::NONE.into(),
-                (5_000_000_000 as u64 / nano_seconds_interval as u64) as u32,
+                (5_000_000_000_u64 / nano_seconds_interval as u64) as u32,
             )
         })
         .to_result(sample_interval, "start_streaming")
@@ -364,7 +364,7 @@ impl PicoDriver for PS5000ADriver {
                                 "range",
                                 ConfigType::select(ranges, "±5 V", Some(parse_pico_range_fuzzy)),
                             ),
-                            ("coupling", ConfigType::select(&["AC", "DC"], "AC", None)),
+                            ("coupling", ConfigType::select(["AC", "DC"], "AC", None)),
                             ("offset", ConfigType::Float(0.0)),
                         ]
                         .iter(),

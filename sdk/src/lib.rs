@@ -138,19 +138,17 @@
 //! ```
 
 pub mod prelude {
-    pub use pico_common::{
-        Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoStatus,
-    };
+    pub use pico_common::{Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoStatus};
     pub use pico_config::{ChannelConfig, DeviceConfig, DeviceInfo};
     pub use pico_device::PicoDevice;
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
-        kernel_driver, DriverLoadError, EnumerationResult, LibraryResolution, PicoDriver,
+        kernel_driver, EnumerationResult, LibraryResolution, PicoDriver, PicoError,
     };
     pub use pico_enumeration::{
         DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,
     };
-    pub use pico_streaming::{NewDataHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
+    pub use pico_streaming::{EventHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
 }
 
 /// Common enums, structs and traits

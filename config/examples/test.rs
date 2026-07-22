@@ -4,11 +4,11 @@ fn normalize(input: &str) -> String {
     input.replace([' ', '±'], "").to_lowercase()
 }
 
-pub fn parse_ranges(input: &str, choices: &Vec<String>) -> Result<String, ConfigError> {
+pub fn parse_ranges(input: &str, choices: &[String]) -> Result<String, ConfigError> {
     let input = normalize(input);
 
     for range in choices {
-        let to_cmp = normalize(&format!("{}", range));
+        let to_cmp = normalize(&range.to_string());
 
         if input == to_cmp {
             return Ok(range.clone());
@@ -50,12 +50,11 @@ fn get_device() -> DeviceConfig {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut device_config = get_device();
-    device_config.set("resolution", "10 bit")?;
-
-    let channel_a = device_config.channel("a")?;
-
-    channel_a.set("range", "100mV")?;
-    channel_a.set("offset", 1.234)?;
+    device_config
+        .set("resolution", "10 bit")?
+        .channel("a")?
+        .set("range", "100mV")?
+        .set("offset", 1.234)?;
 
     let json: Result<String, serde_json::Error> = serde_json::to_string_pretty(&device_config);
 

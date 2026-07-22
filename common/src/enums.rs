@@ -91,8 +91,10 @@ mod channel_tests {
 
 /// Pico coupling options
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq)]
+#[derive(Default)]
 pub enum PicoCoupling {
     AC = 0,
+    #[default]
     DC = 1,
     FiftyOhm = 50,
 }
@@ -124,11 +126,6 @@ impl fmt::Display for PicoCoupling {
     }
 }
 
-impl Default for PicoCoupling {
-    fn default() -> Self {
-        PicoCoupling::DC
-    }
-}
 
 impl From<PicoCoupling> for u32 {
     fn from(value: PicoCoupling) -> Self {

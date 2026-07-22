@@ -934,7 +934,7 @@ impl PS6000Loader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
+        let __library = ::libloading::Library::new(path.as_ref())?;
         let ps6000ApplyFix = __library.get(b"ps6000ApplyFix\0").map(|sym| *sym);
         let ps6000OpenUnit = __library.get(b"ps6000OpenUnit\0").map(|sym| *sym);
         let ps6000OpenUnitAsync = __library.get(b"ps6000OpenUnitAsync\0").map(|sym| *sym);

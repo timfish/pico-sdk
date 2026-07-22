@@ -89,7 +89,7 @@ impl LockedTarget {
         *self.state.write() = target;
     }
 
-    pub fn read(&self) -> RwLockReadGuard<Target> {
+    pub fn read(&self) -> RwLockReadGuard<'_, Target> {
         self.state.read()
     }
 
@@ -144,7 +144,7 @@ impl LockedState {
         self.state.read().name()
     }
 
-    pub fn write(&self) -> parking_lot::RwLockWriteGuard<State> {
+    pub fn write(&self) -> parking_lot::RwLockWriteGuard<'_, State> {
         self.state.write()
     }
 }
@@ -275,10 +275,8 @@ impl PicoStreamingDevice {
                         wait_for_closed = true;
                     }
 
-                    if wait_for_closed {
-                        if device.current_state.is_closed() {
-                            return;
-                        }
+                    if wait_for_closed && device.current_state.is_closed() {
+                        return;
                     }
                 }
             })
@@ -292,7 +290,7 @@ impl PicoStreamingDevice {
         let target_state = self.target_state.read().clone();
         let mut current_state = self.current_state.write();
 
-        let result = match *current_state {
+        match *current_state {
             State::Closed => match target_state {
                 Target::Closed => Ok(Duration::from_millis(500)),
                 Target::Open | Target::Streaming { .. } => {
@@ -317,6 +315,8 @@ impl PicoStreamingDevice {
                     Ok(Duration::from_millis(500))
                 }
                 Target::Streaming(config) => {
+                    self.driver.configure_device(handle, &config)?;
+
                     self.driver
                         .start_streaming(handle, &config)
                         .map(|device_state| {
@@ -370,9 +370,7 @@ impl PicoStreamingDevice {
                     }
                 }
             },
-        };
-
-        result
+        }
     }
 }
 

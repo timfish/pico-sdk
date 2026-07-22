@@ -171,7 +171,7 @@ impl PicoRange {
         let valid_ranges = valid_ranges.unwrap_or(&all_ranges);
 
         for range in valid_ranges {
-            let to_cmp = format!("{}", range).replace([' ', '±'], "").to_uppercase();
+            let to_cmp: String = format!("{}", range).replace([' ', '±'], "").to_uppercase();
 
             if input == to_cmp {
                 return Some(*range);
@@ -627,7 +627,7 @@ mod range_tests {
         );
         assert_eq!(
             PicoRange::parse(
-                "200 mv",
+                "200 mv (x10)",
                 Some(&[
                     PicoRange::X10_PROBE_100MV,
                     PicoRange::X10_PROBE_200MV,

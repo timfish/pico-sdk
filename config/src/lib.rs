@@ -12,7 +12,7 @@ pub use error::ConfigError;
 pub use ext::{ChannelConfigExt, DeviceConfigExt};
 pub use fuzzy::{find_fuzzy, parse_pico_range_fuzzy};
 
-type ParseFn = fn(&str, &Vec<String>) -> Result<String, ConfigError>;
+type ParseFn = fn(&str, &[String]) -> Result<String, ConfigError>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Select {
@@ -175,11 +175,16 @@ impl ChannelConfig {
         }
     }
 
-    pub fn set<V: ConfigValue>(&mut self, key: &str, value: V) -> Result<(), ConfigError> {
+    pub fn set<V: ConfigValue>(
+        &mut self,
+        key: &str,
+        value: V,
+    ) -> Result<&mut ChannelConfig, ConfigError> {
         self.settings
             .get_mut(UncasedStr::new(key))
             .ok_or(ConfigError::UnknownSettingName(key.to_string()))?
-            .set(value)
+            .set(value)?;
+        Ok(self)
     }
 
     pub fn get(&self, key: &str) -> Result<&ConfigType, ConfigError> {
@@ -195,7 +200,7 @@ pub struct DeviceConfig {
     channels: HashMap<Uncased<'static>, ChannelConfig>,
 }
 
-static CHANNEL_NAMES: &'static [&str] = &["A", "B", "C", "D", "E", "F", "G", "H"];
+static CHANNEL_NAMES: &[&str] = &["A", "B", "C", "D", "E", "F", "G", "H"];
 
 impl DeviceConfig {
     pub fn new<'a, D: Iterator<Item = &'a (&'a str, ConfigType)>>(
@@ -234,23 +239,29 @@ impl DeviceConfig {
         }
     }
 
-    pub fn settings_iter(&self) -> impl Iterator<Item = (&Uncased, &ConfigType)> {
+    pub fn settings_iter(&self) -> impl Iterator<Item = (&Uncased<'_>, &ConfigType)> {
         self.settings.iter()
     }
 
-    pub fn settings_iter_mut(&mut self) -> impl Iterator<Item = (&Uncased, &mut ConfigType)> {
+    pub fn settings_iter_mut(&mut self) -> impl Iterator<Item = (&Uncased<'_>, &mut ConfigType)> {
         self.settings.iter_mut()
     }
 
-    pub fn channels_iter(&self) -> impl Iterator<Item = (&Uncased, &ChannelConfig)> {
+    pub fn channels_iter(&self) -> impl Iterator<Item = (&Uncased<'_>, &ChannelConfig)> {
         self.channels.iter()
     }
 
-    pub fn set<V: ConfigValue>(&mut self, key: &str, value: V) -> Result<(), ConfigError> {
+    pub fn set<V: ConfigValue>(
+        &mut self,
+        key: &str,
+        value: V,
+    ) -> Result<&mut DeviceConfig, ConfigError> {
         self.settings
             .get_mut(UncasedStr::new(key))
             .ok_or(ConfigError::UnknownSettingName(key.to_string()))?
-            .set(value)
+            .set(value)?;
+
+        Ok(self)
     }
 
     pub fn get(&self, key: &str) -> Result<&ConfigType, ConfigError> {

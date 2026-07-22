@@ -107,6 +107,8 @@ pub struct Range {
     pub range: i64,
 }
 
+type CallbackFn<'a> = dyn FnMut(HashMap<PicoChannel, (usize, usize)>) + 'a;
+
 pub struct PSOSPADriver {
     _dependencies: LoadedDependencies,
     bindings: PSOSPALoader,
@@ -270,7 +272,7 @@ impl PSOSPADriver {
                 handle,
                 channel.into(),
                 coupling.into(),
-                range.to_nano_volts() * -1,
+                -range.to_nano_volts(),
                 range.to_nano_volts(),
                 range.to_probe_range(),
                 offset,
@@ -291,7 +293,7 @@ impl PSOSPADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: &Vec<i16>,
+        buffer: &[i16],
     ) -> PicoDriverResult<()> {
         let buffer_len = buffer.len() as i32;
 
@@ -350,7 +352,7 @@ impl PSOSPADriver {
         &self,
         handle: i16,
         channels: &[PicoChannel],
-        mut callback: Box<dyn FnMut(HashMap<PicoChannel, (usize, usize)>) + 'a>,
+        mut callback: Box<CallbackFn<'a>>,
     ) -> PicoDriverResult<()> {
         let mut info: Vec<PICO_STREAMING_DATA_INFO> = channels
             .iter()

@@ -26,8 +26,8 @@ pub fn parse_enum_result(buffer: &[i8], len: usize) -> Vec<EnumerationResult> {
 
 pub fn parse_version_string(input: &str) -> String {
     input
-        .split(|s| s == ' ' || s == ',')
-        .last()
+        .split([' ', ','])
+        .next_back()
         .expect("Failed to parse driver version string")
         .to_string()
 }

@@ -22,12 +22,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut config = device.device_config()?.unwrap();
 
-    config.set("samples_per_second", 100)?;
-
-    let channel_a = config.channel("A")?;
-    channel_a.set("enabled", true)?;
-    channel_a.set("range", "5 V")?;
-    channel_a.set("coupling", "DC")?;
+    config
+        .set("samples_per_second", 100)?
+        .channel("A")?
+        .set("enabled", true)?
+        .set("range", "50 mV")?
+        .set("coupling", "DC")?;
 
     println!("Config: {:#?}", config);
 

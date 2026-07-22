@@ -48,7 +48,7 @@ impl EnumeratedDevice {
 
 #[derive(Error, Debug, Clone)]
 pub enum EnumerationError {
-    #[error("Pico driver error: {error}")]
+    #[error("Pico driver ({driver}) error: {error}")]
     PicoError {
         driver: Driver,
         #[source]

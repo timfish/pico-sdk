@@ -930,7 +930,7 @@ impl PS4000Loader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
+        let __library = ::libloading::Library::new(path.as_ref())?;
         let ps4000ApplyFix = __library.get(b"ps4000ApplyFix\0").map(|sym| *sym);
         let ps4000OpenUnit = __library.get(b"ps4000OpenUnit\0").map(|sym| *sym);
         let ps4000OpenUnitAsync = __library.get(b"ps4000OpenUnitAsync\0").map(|sym| *sym);

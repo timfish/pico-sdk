@@ -17,5 +17,5 @@ fn main() {
         .unwrap_or_else(|e| panic!("Failed to load {} driver: {}", driver_type, e));
 
     let serial = args.next();
-    let _handle = driver.open_unit(serial.as_deref()).unwrap();
+    let _handle = driver.open_device(serial.as_deref()).unwrap();
 }

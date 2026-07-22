@@ -287,7 +287,7 @@ impl PS2000Driver {
                 handle,
                 nano_seconds_interval,
                 TimeUnits::NS.into(),
-                1_000_000_000 / nano_seconds_interval as u32,
+                1_000_000_000 / nano_seconds_interval,
                 (false).into(),
                 1,
                 1_000_000,
@@ -384,7 +384,7 @@ impl PicoDriver for PS2000Driver {
                     "range",
                     ConfigType::select(ranges, "5 V", Some(parse_pico_range_fuzzy)),
                 ),
-                ("coupling", ConfigType::select(&["AC", "DC"], "AC", None)),
+                ("coupling", ConfigType::select(["AC", "DC"], "AC", None)),
             ]
             .iter(),
         );

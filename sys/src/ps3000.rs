@@ -438,7 +438,7 @@ impl PS3000Loader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
+        let __library = ::libloading::Library::new(path.as_ref())?;
         let ps3000_apply_fix = __library.get(b"ps3000_apply_fix\0").map(|sym| *sym);
         let ps3000_open_unit = __library.get(b"ps3000_open_unit\0").map(|sym| *sym);
         let ps3000_get_unit_info = __library.get(b"ps3000_get_unit_info\0").map(|sym| *sym);

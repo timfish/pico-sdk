@@ -1783,7 +1783,7 @@ impl PS2000ALoader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
+        let __library = ::libloading::Library::new(path.as_ref())?;
         let ps2000aApplyFix = __library.get(b"ps2000aApplyFix\0").map(|sym| *sym);
         let ps2000aOpenUnit = __library.get(b"ps2000aOpenUnit\0").map(|sym| *sym);
         let ps2000aOpenUnitAsync = __library.get(b"ps2000aOpenUnitAsync\0").map(|sym| *sym);
