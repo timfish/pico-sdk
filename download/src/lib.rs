@@ -37,9 +37,10 @@ use pico_common::Driver;
 use pico_driver::LibraryResolution;
 use ring::digest::{Context, SHA256};
 use std::{
+    convert::TryFrom,
     fmt::Write as _,
     fs,
-    io::{Read, Seek, SeekFrom},
+    io::Read,
     path::{Path, PathBuf},
 };
 use thiserror::Error;
@@ -49,9 +50,6 @@ mod paths;
 
 pub use manifest::{lookup as driver_binary, DriverBinary, BASE_URL, BINARIES, BUNDLE};
 pub use paths::get_cache_dir;
-
-/// Release assets are served from object storage behind a redirect
-const MAX_REDIRECTS: usize = 5;
 
 /// Overrides [`BASE_URL`], for mirroring the drivers somewhere else
 ///
@@ -67,14 +65,8 @@ pub enum DriverDownloadError {
     #[error("HTTP request Error: {0}")]
     HttpRequestError(#[from] http_req::error::Error),
 
-    #[error("Invalid URL: {0}")]
-    UrlParseError(#[from] http_req::error::ParseErr),
-
     #[error("HTTP response Error: {0}")]
     HttpResponseError(http_req::response::StatusCode),
-
-    #[error("Too many redirects while downloading {0}")]
-    TooManyRedirects(String),
 
     #[error("{driver} is not published for {os}-{arch} in driver bundle {bundle}")]
     Unavailable {
@@ -238,38 +230,17 @@ fn download_verified(binary: &DriverBinary, tmp_path: &Path) -> Result<(), Drive
     }
 }
 
-/// Fetches `url` into `file`, following redirects.
+/// Fetches `url` into `file`. `http_req` follows redirects itself (release assets are served
+/// from object storage behind one) and writes only the final response body.
 fn download_to(url: &str, file: &mut fs::File) -> Result<(), DriverDownloadError> {
-    let mut url = url.to_string();
+    let uri = Uri::try_from(url)?;
+    let status = Request::new(&uri).send(file)?.status_code();
 
-    for _ in 0..MAX_REDIRECTS {
-        // `http_req` writes the body of every response it gets, so rewind to keep a redirect
-        // page from being prepended to the driver
-        file.set_len(0)?;
-        file.seek(SeekFrom::Start(0))?;
-
-        let uri: Uri = url.parse()?;
-        let response = Request::new(&uri).send(file)?;
-        let status = response.status_code();
-
-        if status.is_redirect() {
-            match response.headers().get("Location") {
-                Some(location) => {
-                    url = location.to_string();
-                    continue;
-                }
-                None => return Err(DriverDownloadError::HttpResponseError(status)),
-            }
-        }
-
-        return if status.is_success() {
-            Ok(())
-        } else {
-            Err(DriverDownloadError::HttpResponseError(status))
-        };
+    if status.is_success() {
+        Ok(())
+    } else {
+        Err(DriverDownloadError::HttpResponseError(status))
     }
-
-    Err(DriverDownloadError::TooManyRedirects(url))
 }
 
 fn sha256_hex_for_file<P: AsRef<Path>>(path: P) -> Result<String, DriverDownloadError> {

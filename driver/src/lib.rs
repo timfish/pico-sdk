@@ -165,8 +165,8 @@ pub type ArcDriver = Arc<dyn PicoDriver>;
 
 pub(crate) fn get_version_string(input: &str) -> String {
     input
-        .split(|s| s == ' ' || s == ',')
-        .last()
+        .split([' ', ','])
+        .next_back()
         .expect("Invalid version string")
         .to_string()
 }

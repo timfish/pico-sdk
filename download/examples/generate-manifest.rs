@@ -29,7 +29,6 @@
 //! it's independent of the library's own version — many library releases can reference one
 //! driver release, and users only re-download when the drivers actually change.
 
-use enum_iterator::IntoEnumIterator;
 use pico_common::Driver;
 use ring::digest::{Context, SHA256};
 use std::{
@@ -522,33 +521,16 @@ fn tar_read_file(tar: &[u8], basename: &str) -> Result<Option<Vec<u8>>, String> 
 
 // ---- shared helpers -----------------------------------------------------------------------
 
-/// Downloads `url` into memory, following redirects (release/object-store URLs bounce).
+/// Downloads `url` into memory. `http_req` follows redirects itself (installer and repo URLs
+/// bounce through object storage).
 fn fetch(url: &str) -> Result<Vec<u8>, String> {
-    use http_req::{request::Request, uri::Uri};
-
-    let mut url = url.to_string();
-    for _ in 0..6 {
-        let uri: Uri = url.parse().map_err(|e| format!("bad url {url}: {e:?}"))?;
-        let mut body = Vec::new();
-        let response = Request::new(&uri)
-            .send(&mut body)
-            .map_err(|e| format!("{url}: {e}"))?;
-        let status = response.status_code();
-
-        if status.is_redirect() {
-            url = response
-                .headers()
-                .get("Location")
-                .ok_or_else(|| format!("redirect without Location from {url}"))?
-                .to_string();
-            continue;
-        }
-        if !status.is_success() {
-            return Err(format!("{url}: HTTP {}", status));
-        }
-        return Ok(body);
+    let mut body = Vec::new();
+    let response = http_req::request::get(url, &mut body).map_err(|e| format!("{url}: {e}"))?;
+    let status = response.status_code();
+    if !status.is_success() {
+        return Err(format!("{url}: HTTP {}", status));
     }
-    Err(format!("too many redirects for {url}"))
+    Ok(body)
 }
 
 fn last_signature(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -691,7 +673,7 @@ fn generate_manifest(bundle_id: &str, binaries: &[Binary]) -> String {
 }
 
 fn report(binaries: &[Binary], bundle_id: &str, manifest_path: &Path, release_dir: &Path) {
-    let missing: Vec<_> = Driver::into_enum_iter()
+    let missing: Vec<_> = enum_iterator::all::<Driver>()
         .filter(|driver| !binaries.iter().any(|b| b.driver == *driver))
         .collect();
 

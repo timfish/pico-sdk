@@ -14,15 +14,15 @@ crate-type = ["lib"]
 path = "src/lib.rs"
 
 [dependencies]
-directories = "3.0"
-http_req = "^0.7"
+directories = "6.0"
+http_req = "0.14"
 pico-common = {path = "../common", version = "0.4.0"}
 pico-driver = {path = "../driver", version = "0.4.0"}
-ring = "0.16"
-thiserror = "1"
+ring = "0.17"
+thiserror = "2"
 
 [dev-dependencies]
-enum-iterator = "0.6.0"
+enum-iterator = "2"
 # Only used by the `generate-manifest` example, which unpacks Pico's public installers
 # (Windows .exe/MSI, macOS .pkg, Linux .deb) at release time. None of this reaches consumers.
 apple-xar = {version = "0.20", default-features = false}

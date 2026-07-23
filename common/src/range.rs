@@ -1,4 +1,4 @@
-use enum_iterator::IntoEnumIterator;
+use enum_iterator::Sequence;
 use num_derive::*;
 use std::fmt;
 
@@ -6,7 +6,7 @@ use std::fmt;
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(
-    Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, PartialOrd, Ord, IntoEnumIterator,
+    Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, PartialOrd, Ord, Sequence,
 )]
 pub enum PicoRange {
     X1_PROBE_5MV = -1,
@@ -156,7 +156,7 @@ fn strip_probe_suffix(input: &str) -> &str {
 impl PicoRange {
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
         let input = normalize(input);
-        let all_ranges = PicoRange::into_enum_iter().collect::<Vec<Self>>();
+        let all_ranges = enum_iterator::all::<PicoRange>().collect::<Vec<Self>>();
         let valid_ranges = valid_ranges.unwrap_or(&all_ranges);
 
         // Prefer an exact match, including any probe attenuation suffix

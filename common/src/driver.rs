@@ -1,5 +1,5 @@
 use crate::ParseError;
-use enum_iterator::IntoEnumIterator;
+use enum_iterator::Sequence;
 use std::{fmt, str::FromStr};
 
 /// Supported Pico drivers
@@ -8,7 +8,7 @@ use std::{fmt, str::FromStr};
     derive(serde::Serialize, serde::Deserialize),
     serde(rename_all = "lowercase")
 )]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, IntoEnumIterator)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Sequence)]
 pub enum Driver {
     PS2000,
     PS2000A,

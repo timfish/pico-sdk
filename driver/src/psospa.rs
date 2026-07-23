@@ -17,20 +17,20 @@ use tinyjson::JsonValue;
 
 fn parse_device_json(json: &str) -> Vec<PicoRange> {
     let parsed_json: JsonValue = json.parse().expect("Failed to parse JSON from Pico driver");
-    let range_settings: &Vec<_> = &parsed_json["RangeSettings"]
+    let range_settings: &Vec<_> = parsed_json["RangeSettings"]
         .get()
         .expect("Failed to parse JSON from Pico driver");
 
     let mut ranges = range_settings
         .iter()
-        .map(|r| {
+        .flat_map(|r| {
             let probe_settings: &Vec<_> = r["ProbeSettings"]
                 .get()
                 .expect("Failed to parse JSON from Pico driver");
 
             probe_settings
                 .iter()
-                .map(|probe_settings| {
+                .filter_map(|probe_settings| {
                     let ty = probe_settings["Type"]
                         .get::<f64>()
                         .expect("Failed to parse JSON from Pico driver");
@@ -40,10 +40,8 @@ fn parse_device_json(json: &str) -> Vec<PicoRange> {
 
                     PicoRange::from_probe_and_nano_volts(*ty as u32, *max as i64)
                 })
-                .flatten()
                 .collect::<Vec<PicoRange>>()
         })
-        .flatten()
         .collect::<Vec<PicoRange>>();
 
     ranges.sort();
@@ -230,7 +228,7 @@ impl PicoDriver for PSOSPADriver {
                 handle,
                 channel.into(),
                 config.coupling.into(),
-                config.range.to_nano_volts() * -1,
+                -config.range.to_nano_volts(),
                 config.range.to_nano_volts(),
                 config.range.to_probe_range(),
                 config.offset,
