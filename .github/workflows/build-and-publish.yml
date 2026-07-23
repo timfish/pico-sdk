@@ -4,6 +4,8 @@ on:
       - master
     tags:
       - "*"
+      # Driver release tags carry only release assets, no code - don't run CI for them
+      - "!drivers-*"
   pull_request:
     branches:
       - master
@@ -45,7 +47,9 @@ jobs:
 
   publish:
     name: Publish
-    if: startsWith(github.ref, 'refs/tags/')
+    # Only crate-version tags publish to crates.io. `drivers-*` tags just carry driver release
+    # assets and must not trigger a crate publish.
+    if: startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref, 'refs/tags/drivers-')
     runs-on: windows-latest
     needs: test_and_build
     steps:
