@@ -14,7 +14,7 @@ crate-type = ["lib"]
 path = "src/lib.rs"
 
 [features]
-serde = ["pico-common/serde", "pico-device/serde", "pico-enumeration/serde", "pico-streaming/serde"]
+serde = ["pico-common/serde", "pico-device/serde", "pico-driver/serde", "pico-enumeration/serde", "pico-streaming/serde"]
 
 [dependencies]
 pico-common = {path = "../common", version = "0.4.0"}
@@ -27,9 +27,9 @@ pico-sys-dynamic = {path = "../sys", version = "0.4.0"}
 
 [dev-dependencies]
 anyhow = "1.0"
-console = "0.11"
+console = "0.15"
 crossbeam = "0.8"
-dialoguer = "0.6"
+dialoguer = "0.11"
 rayon = "1.3.0"
 signifix = "0.10"
 tracing = "0.1"

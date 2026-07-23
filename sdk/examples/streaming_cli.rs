@@ -120,7 +120,7 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<PicoDevice> {
             .collect::<Vec<String>>();
 
         let device_selection = Select::with_theme(&better_theme())
-            .with_prompt(&format!(
+            .with_prompt(format!(
                 "{}",
                 style("Select a device").blue().underlined().bold()
             ))
@@ -164,7 +164,7 @@ fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, Stri
             })
             .collect::<Vec<_>>();
 
-        channels.sort_by(|(a, _, _), (b, _, _)| a.cmp(b));
+        channels.sort_by_key(|(a, _, _)| *a);
 
         let mut channel_options = channels
             .iter()
@@ -200,7 +200,7 @@ fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, Stri
         }
 
         let ch_selection = Select::with_theme(&better_theme())
-            .with_prompt(&format!(
+            .with_prompt(format!(
                 "{}",
                 style("Configure channels").blue().underlined().bold()
             ))
@@ -287,7 +287,7 @@ impl NewDataHandler for CaptureStats {
             })
             .collect();
 
-        data.sort_by(|a, b| a.0.cmp(&b.0));
+        data.sort_by_key(|a| a.0);
 
         self.term.clear_last_lines(data.len() + 1).unwrap();
 
@@ -319,8 +319,8 @@ impl NewDataHandler for CaptureStats {
 
             println!(
                 "  {} - {}",
-                format!("{}", ch_col.apply_to(ch).bold()),
-                format!("{}", style(format!("{} {}", value, unit)).bold())
+                ch_col.apply_to(ch).bold(),
+                style(format!("{} {}", value, unit)).bold()
             );
         }
     }
@@ -351,7 +351,7 @@ fn get_capture_rate() -> u32 {
         .collect();
 
     let rate_selection = Select::with_theme(&better_theme())
-        .with_prompt(&format!(
+        .with_prompt(format!(
             "{}",
             style("Select capture rate").blue().underlined().bold()
         ))
@@ -368,7 +368,7 @@ fn select_range(ranges: &[PicoRange]) -> Option<PicoRange> {
     range_options.push("Disabled".to_string());
 
     let range_selection = Select::with_theme(&better_theme())
-        .with_prompt(&format!(
+        .with_prompt(format!(
             "{}",
             style("Select Range").blue().underlined().bold()
         ))
