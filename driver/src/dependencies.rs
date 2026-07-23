@@ -20,21 +20,21 @@ lazy_static! {
         Default::default();
 }
 
-/// Loads driver dependencies into memory so drivers can be loaded from
-/// non-standard paths
+/// Loads a driver's runtime dependencies into memory so it can be loaded from a non-standard
+/// path.
 ///
-/// Depending on which platform you're running on, most Pico drivers depend on one
-/// or more external libraries. If we're not loading drivers from the platforms
-/// default search paths, we can manually load the dependencies into memory so
-/// that they can be found.
-pub fn load_dependencies<P: AsRef<Path>>(path: P) -> LoadedDependencies {
+/// Some Pico drivers (ps4000 and ps6000) load an external library by bare name at runtime. When
+/// we're not loading from the platform's default search paths, we preload that library from the
+/// driver's own directory so the dynamic loader can find it. Drivers with no dependencies get an
+/// empty result and load nothing.
+pub fn load_dependencies<P: AsRef<Path>>(driver: Driver, path: P) -> LoadedDependencies {
     let parent = path.as_ref().parent().expect("Driver path has no parent");
-    let to_load = Driver::get_dependencies_for_platform();
+    let to_load = driver.dependencies();
     let resolution = LibraryResolution::Custom(parent.to_path_buf());
 
     let mut output = Vec::with_capacity(to_load.len());
 
-    for dependency in to_load {
+    for &dependency in to_load {
         let path = resolution.get_path(dependency);
         if let Some(dep) = load_dependency(&path, dependency) {
             output.push(dep);
@@ -49,7 +49,6 @@ fn load_dependency(path: &Path, dependency: Driver) -> Option<Arc<LoadedDependen
 
     let load = || {
         match dependency {
-            Driver::IOMP5 => load_iomp5(path),
             Driver::PicoIPP => load_ipp(path),
             _ => panic!("This method should only be used to load dependencies"),
         }
@@ -75,14 +74,6 @@ fn load_dependency(path: &Path, dependency: Driver) -> Option<Arc<LoadedDependen
             strong
         }),
     }
-}
-
-fn load_iomp5<P: AsRef<Path>>(path: P) -> Result<(LoadedFn, Library), Error> {
-    let path = path.as_ref().to_path_buf();
-    let iomp5 = unsafe { Library::new(path)? };
-    let sym = unsafe { iomp5.get(b"ompc_set_num_threads")? };
-
-    Ok((*sym, iomp5))
 }
 
 fn load_ipp<P: AsRef<Path>>(path: P) -> Result<(LoadedFn, Library), Error> {

@@ -28,7 +28,7 @@ impl PS4000Driver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(path.as_ref());
+        let dependencies = load_dependencies(Driver::PS4000, path.as_ref());
         let bindings = unsafe { PS4000Loader::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps4000ApplyFix(0x1ced9168, 0x11e6) };

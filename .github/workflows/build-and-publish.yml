@@ -40,6 +40,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: 🔎 Test
         run: cargo test
+      - name: 🔌 Download & load drivers
+        # Fetches every driver published for this platform from the release the manifest points
+        # at, then loads each and reads its version. Exercises the whole download path end to end.
+        run: cargo test -p pico-sdk --test load_drivers -- --ignored --nocapture
       - name: 🔨 Build
         run: cargo build --release --all-features
 

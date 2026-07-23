@@ -132,7 +132,7 @@ impl PS2000Driver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(path.as_ref());
+        let dependencies = load_dependencies(Driver::PS2000, path.as_ref());
         let bindings = unsafe { PS2000Loader::new(path)? };
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {

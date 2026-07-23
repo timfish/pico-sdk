@@ -66,7 +66,7 @@ impl PSOSPADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(path.as_ref());
+        let dependencies = load_dependencies(Driver::PSOSPA, path.as_ref());
         let bindings = unsafe { PSOSPALoader::new(path)? };
         Ok(PSOSPADriver {
             bindings,

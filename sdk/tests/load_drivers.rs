@@ -1,31 +1,32 @@
-// use pico_common::Driver;
-// use pico_download::{cache_resolution, download_drivers_to_cache};
+use pico_sdk::{
+    common::Driver,
+    download::{available_drivers, cache_resolution, download_drivers_to_cache},
+};
 
-// #[test]
-// fn load_all_drivers() {
-//     let drivers = [
-//         Driver::PS2000,
-//         Driver::PS2000A,
-//         Driver::PS3000A,
-//         Driver::PS4000,
-//         Driver::PS4000A,
-//         Driver::PS5000A,
-//         Driver::PS6000,
-//     ];
+/// Downloads every driver Pico publish for this platform from the release the crate was built
+/// against, then loads each one and asks it for its version. Needs network access and the
+/// matching driver release to have been published, so it's `#[ignore]`d like the hardware tests.
+///
+/// Run with: `cargo test -p pico-sdk --test load_drivers -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn download_and_load_drivers() {
+    let resolution = cache_resolution();
 
-//     let cache_resolution = cache_resolution();
+    for driver in available_drivers() {
+        // PicoIPP is a shared library ps4000/ps6000 load internally, not a driver we load directly
+        if driver == Driver::PicoIPP {
+            continue;
+        }
 
-//     drivers.into_iter().for_each(|d| {
-//         let mut loaded = cache_resolution.try_load(d);
+        if resolution.try_load(driver).is_err() {
+            download_drivers_to_cache(&[driver]).unwrap();
+        }
 
-//         if loaded.is_err() {
-//             download_drivers_to_cache(&[d]).unwrap();
-//             loaded = cache_resolution.try_load(d);
-//         }
-
-//         assert!(loaded.is_ok());
-//         let loaded = loaded.unwrap();
-
-//         assert!(loaded.get_version().is_ok());
-//     });
-// }
+        let loaded = resolution.try_load(driver).unwrap();
+        assert!(
+            loaded.get_version().is_ok(),
+            "{driver} loaded but has no version"
+        );
+    }
+}

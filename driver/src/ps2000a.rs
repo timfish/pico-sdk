@@ -28,7 +28,7 @@ impl PS2000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(path.as_ref());
+        let dependencies = load_dependencies(Driver::PS2000A, path.as_ref());
         let bindings = unsafe { PS2000ALoader::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps2000aApplyFix(0x1ced9168, 0x11e6) };

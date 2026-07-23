@@ -31,7 +31,7 @@ impl PS5000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(path.as_ref());
+        let dependencies = load_dependencies(Driver::PS5000A, path.as_ref());
         let bindings = unsafe { PS5000ALoader::new(path)? };
         // Disables the splash screen on Windows
         unsafe { bindings.ps5000aApplyFix(0x1ced9168, 0x11e6) };
