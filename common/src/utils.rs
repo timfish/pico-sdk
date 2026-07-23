@@ -7,7 +7,7 @@ pub trait ToPicoStr {
     fn into_pico_i8_string(self) -> Vec<i8>;
 }
 
-impl<'a> ToPicoStr for &'a str {
+impl ToPicoStr for &str {
     fn into_pico_i8_string(self) -> Vec<i8> {
         CString::new(self)
             .expect("invalid CString")
