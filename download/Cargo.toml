@@ -23,3 +23,17 @@ thiserror = "2"
 
 [dev-dependencies]
 enum-iterator = "2"
+# Only used by the `generate-manifest` example, which unpacks Pico's public installers
+# (Windows .exe/MSI, macOS .pkg, Linux .deb) at release time. None of this reaches consumers.
+apple-xar = {version = "0.20", default-features = false}
+ar = "0.9"
+cab = "0.6"
+cpio-archive = "0.10"
+flate2 = "1"
+msi = "0.10"
+tar = "0.4"
+xz2 = "0.1"
+
+[[example]]
+name = "generate-manifest"
+path = "examples/generate-manifest.rs"

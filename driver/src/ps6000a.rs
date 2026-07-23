@@ -28,7 +28,7 @@ impl PS6000ADriver {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(path.as_ref());
+        let dependencies = load_dependencies(Driver::PS6000A, path.as_ref());
         let bindings = unsafe { PS6000ALoader::new(path)? };
         Ok(PS6000ADriver {
             bindings,

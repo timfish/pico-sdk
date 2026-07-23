@@ -2,6 +2,10 @@
 Cargo.lock
 **/*.rs.bk
 .env
-# Host specific. On macOS this sets `build.target = "x86_64-apple-darwin"` as Pico
-# only distribute x86_64 drivers, but cargo can't apply that conditionally
+# Host specific
 /.cargo/config.toml
+# Written by the `generate-manifest` example: the full extracted driver tree, and the
+# subset of assets to upload to a release. The committed manifest (download/src/manifest.rs)
+# is the only output that belongs in git.
+/drivers/
+/release/

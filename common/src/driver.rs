@@ -19,10 +19,8 @@ pub enum Driver {
     PS6000,
     PS6000A,
     PSOSPA,
-    /// Only used to get the full dependency name on each platform
+    /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
     PicoIPP,
-    /// Only used to get the full dependency name on each platform
-    IOMP5,
 }
 
 impl FromStr for Driver {
@@ -95,19 +93,14 @@ impl Driver {
         }
     }
 
-    /// Gets the required driver dependencies for this platform
-    pub fn get_dependencies_for_platform() -> Vec<Driver> {
-        if cfg!(target_os = "windows") {
-            vec![Driver::PicoIPP]
-        } else if cfg!(target_os = "macos") {
-            vec![Driver::IOMP5, Driver::PicoIPP]
-        } else {
-            // There is no libiomp5 requirement for Pico ARM drivers
-            if cfg!(all(target_arch = "arm", target_os = "linux")) {
-                vec![Driver::PicoIPP]
-            } else {
-                vec![Driver::IOMP5, Driver::PicoIPP]
-            }
+    /// The shared libraries this driver loads at runtime, beyond the system ones.
+    ///
+    /// Only ps4000 and ps6000 have one - they load `picoipp` by bare name - so it needs to sit
+    /// alongside them in the cache. Every other driver is self-contained.
+    pub fn dependencies(self) -> &'static [Driver] {
+        match self {
+            Driver::PS4000 | Driver::PS6000 => &[Driver::PicoIPP],
+            _ => &[],
         }
     }
 }
