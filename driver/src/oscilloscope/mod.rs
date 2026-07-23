@@ -33,7 +33,7 @@ pub use psospa::PSOSPADriver;
 use crate::DriverLoadError;
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoInfo, PicoRange, PicoResult, SampleConfig,
+    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoInfo, PicoRange, PicoResult, OscilloscopeSampleConfig,
 };
 use std::{fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
@@ -73,7 +73,7 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()>;
     /// Disable a channel
     fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()>;
@@ -89,9 +89,9 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
-    ) -> PicoResult<SampleConfig>;
+    ) -> PicoResult<OscilloscopeSampleConfig>;
     /// Gets the latest streaming values
     fn get_latest_streaming_values<'a>(
         &self,

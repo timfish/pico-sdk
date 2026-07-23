@@ -53,7 +53,7 @@ use events::StreamingEvents;
 pub use events::{NewDataHandler, RawChannelDataBlock, StreamingEvent};
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, SampleConfig,
+    OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoRange, PicoResult, PicoStatus, OscilloscopeSampleConfig,
 };
 use pico_device::PicoDevice;
 use std::{
@@ -155,7 +155,7 @@ pub struct PicoStreamingDevice {
     device: PicoDevice,
     target_state: LockedTarget,
     current_state: Arc<RwLock<State>>,
-    enabled_channels: Arc<RwLock<HashMap<PicoChannel, ChannelConfig>>>,
+    enabled_channels: Arc<RwLock<HashMap<PicoChannel, OscilloscopeChannelConfig>>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     background_handle: Option<Arc<BackgroundThreadHandle>>,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -224,7 +224,7 @@ impl PicoStreamingDevice {
     pub fn enable_channel(&self, channel: PicoChannel, range: PicoRange, coupling: PicoCoupling) {
         self.enabled_channels.write().insert(
             channel,
-            ChannelConfig {
+            OscilloscopeChannelConfig {
                 range,
                 coupling,
                 offset: 0.0,
@@ -244,7 +244,7 @@ impl PicoStreamingDevice {
         self.device.channel_ranges.get(&channel).cloned()
     }
 
-    pub fn get_channel_config(&self, channel: PicoChannel) -> Option<ChannelConfig> {
+    pub fn get_channel_config(&self, channel: PicoChannel) -> Option<OscilloscopeChannelConfig> {
         self.enabled_channels.read().get(&channel).cloned()
     }
 
@@ -425,7 +425,7 @@ impl PicoStreamingDevice {
             }
         }
 
-        let target_config = SampleConfig::from_samples_per_second(samples_per_second);
+        let target_config = OscilloscopeSampleConfig::from_samples_per_second(samples_per_second);
         let actual_sample_rate = self
             .device
             .driver

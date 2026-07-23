@@ -6,8 +6,8 @@ use super::{
 };
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, SampleConfig, ToPicoStr,
+    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
+    PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::ps4000::PS4000Loader;
 use std::sync::Arc;
@@ -170,7 +170,7 @@ impl OscilloscopeDriverInternal for PS4000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps4000SetChannel(
@@ -218,9 +218,9 @@ impl OscilloscopeDriverInternal for PS4000Driver {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoResult<OscilloscopeSampleConfig> {
         let mut sample_interval = vec![sample_config.interval];
 
         PicoStatus::from(unsafe {

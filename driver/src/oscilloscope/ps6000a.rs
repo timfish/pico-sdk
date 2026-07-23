@@ -4,8 +4,8 @@ use super::{
 };
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, SampleConfig, ToPicoStr,
+    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
+    PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::ps6000a::{
     enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T, enPicoDeviceResolution_PICO_DR_10BIT, enPicoDeviceResolution_PICO_DR_12BIT, enPicoDeviceResolution_PICO_DR_8BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO
@@ -164,7 +164,7 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps6000aSetChannelOn(
@@ -214,9 +214,9 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoResult<OscilloscopeSampleConfig> {
         let resolution = match enabled_channels {
             1 | 2 => enPicoDeviceResolution_PICO_DR_12BIT,
             _ => enPicoDeviceResolution_PICO_DR_10BIT,
@@ -227,7 +227,7 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
         });
 
         if status != PicoStatus::OK {
-            return status.to_result(SampleConfig::default(), "ps6000aSetDeviceResolution");
+            return status.to_result(OscilloscopeSampleConfig::default(), "ps6000aSetDeviceResolution");
         }
 
         let mut sample_interval = sample_config.interval as f64;

@@ -4,8 +4,8 @@ use super::{
 };
 use parking_lot::RwLock;
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, SampleConfig, ToPicoStr,
+    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
+    PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
@@ -221,7 +221,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.psospaSetChannelOn(
@@ -273,16 +273,16 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoResult<OscilloscopeSampleConfig> {
         let status = PicoStatus::from(unsafe {
             self.bindings
                 .psospaSetDeviceResolution(handle, enPicoDeviceResolution_PICO_DR_10BIT)
         });
 
         if status != PicoStatus::OK {
-            return status.to_result(SampleConfig::default(), "psospaSetDeviceResolution");
+            return status.to_result(OscilloscopeSampleConfig::default(), "psospaSetDeviceResolution");
         }
 
         let mut sample_interval = sample_config.interval as f64;

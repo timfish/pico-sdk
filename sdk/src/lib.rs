@@ -139,7 +139,7 @@
 
 pub mod prelude {
     pub use pico_common::{
-        ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
+        OscilloscopeChannelConfig, Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
         PicoStatus,
     };
     pub use pico_device::PicoDevice;

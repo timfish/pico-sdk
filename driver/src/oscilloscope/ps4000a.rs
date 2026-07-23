@@ -8,8 +8,8 @@ use c_vec::CVec;
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
-    ChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
-    PicoRange, PicoResult, PicoStatus, SampleConfig, ToPicoStr,
+    OscilloscopeChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
+    PicoRange, PicoResult, PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::ps4000a::{PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS};
 use std::{collections::HashMap, matches, sync::Arc};
@@ -250,7 +250,7 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps4000aSetChannel(
@@ -301,9 +301,9 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoResult<OscilloscopeSampleConfig> {
         let mut sample_interval = sample_config.interval;
 
         PicoStatus::from(unsafe {

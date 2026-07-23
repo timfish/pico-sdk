@@ -3,8 +3,8 @@ mod streaming_tests {
     use mockall::{mock, predicate::*};
     use parking_lot::RwLock;
     use pico_common::{
-        ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResult,
-        SampleConfig,
+        OscilloscopeChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResult,
+        OscilloscopeSampleConfig,
     };
     use pico_device::PicoDevice;
     use pico_driver::{ArcDriver, DriverLoadError, EnumerationResult, PicoDriver};
@@ -28,7 +28,7 @@ mod streaming_tests {
                 &self,
                 handle: i16,
                 channel: PicoChannel,
-                config: &ChannelConfig,
+                config: &OscilloscopeChannelConfig,
             ) -> PicoResult<()>;
             fn disable_channel(
                 &self,
@@ -45,9 +45,9 @@ mod streaming_tests {
             fn start_streaming(
                 &self,
                 handle: i16,
-                sample_config: &SampleConfig,
+                sample_config: &OscilloscopeSampleConfig,
                 enabled_channels: u8
-            ) -> PicoResult<SampleConfig>;
+            ) -> PicoResult<OscilloscopeSampleConfig>;
             fn get_latest_streaming_values<'a>(
                 &self,
                 handle: i16,
@@ -90,7 +90,7 @@ mod streaming_tests {
             .times(3..25)
             .return_const(Ok(()));
         mock.expect_start_streaming()
-            .return_const(Ok(SampleConfig::default()));
+            .return_const(Ok(OscilloscopeSampleConfig::default()));
 
         let driver: ArcDriver = Arc::new(mock);
         let device = PicoDevice::try_open(&driver, None).unwrap();

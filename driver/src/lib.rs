@@ -16,7 +16,7 @@
 //! Using the raw safe bindings to open and configure the first available oscilloscope:
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
-//! use pico_common::{ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange};
+//! use pico_common::{OscilloscopeChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange};
 //! use pico_driver::{oscilloscope::PS2000Driver, DriverLoad, LibraryResolution};
 //!
 //! // Load the ps2000 driver library with the default resolution
@@ -26,7 +26,7 @@
 //! let handle = driver.open_unit(None)?;
 //! let variant = driver.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
 //!
-//! let ch_config = ChannelConfig {
+//! let ch_config = OscilloscopeChannelConfig {
 //!     coupling: PicoCoupling::DC,
 //!     range: PicoRange::X1_PROBE_2V,
 //!     offset: 0.0
