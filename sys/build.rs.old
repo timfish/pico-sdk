@@ -27,4 +27,5 @@ fn main() {
     build("ps6000Api", "PS6000Loader");
     build("ps6000aApi", "PS6000ALoader");
     build("psospaApi", "PSOSPALoader");
+    build("usbtc08", "TC08Loader");
 }

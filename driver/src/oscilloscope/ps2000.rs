@@ -1,6 +1,6 @@
-use crate::{
+use super::{
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, EnumerationResult, PicoDriver,
+    get_version_string, EnumerationResult, OscilloscopeDriverInternal,
 };
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
@@ -150,7 +150,7 @@ impl PS2000Driver {
     }
 }
 
-impl PicoDriver for PS2000Driver {
+impl OscilloscopeDriverInternal for PS2000Driver {
     fn get_driver(&self) -> Driver {
         Driver::PS2000
     }

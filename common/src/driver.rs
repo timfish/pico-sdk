@@ -19,6 +19,8 @@ pub enum Driver {
     PS6000,
     PS6000A,
     PSOSPA,
+    /// USB TC-08 thermocouple data logger
+    TC08,
     /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
     PicoIPP,
 }
@@ -27,7 +29,11 @@ impl FromStr for Driver {
     type Err = ParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.to_uppercase().replace("PS", "").replace(' ', "");
+        let input = input
+            .to_uppercase()
+            .replace("USB", "")
+            .replace("PS", "")
+            .replace([' ', '-'], "");
 
         match &input[..] {
             "2000" => Ok(Driver::PS2000),
@@ -38,6 +44,8 @@ impl FromStr for Driver {
             "5000A" => Ok(Driver::PS5000A),
             "6000" => Ok(Driver::PS6000),
             "6000A" => Ok(Driver::PS6000A),
+            "OSPA" => Ok(Driver::PSOSPA),
+            "TC08" => Ok(Driver::TC08),
             _ => Err(ParseError),
         }
     }
@@ -45,7 +53,13 @@ impl FromStr for Driver {
 
 impl fmt::Display for Driver {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", format!("{:?}", self).to_lowercase())
+        let name = format!("{:?}", self).to_lowercase();
+
+        match self {
+            // The TC-08 driver binary is `usbtc08`, not `tc08`
+            Driver::TC08 => write!(f, "usb{}", name),
+            _ => write!(f, "{}", name),
+        }
     }
 }
 
@@ -62,10 +76,30 @@ impl Driver {
             0x100E | 0x1204 => Some(Driver::PS6000),
             0x1215 | 0x1216 | 0x12A0 | 0x12A1 => Some(Driver::PS6000A),
             0x1020 => Some(Driver::PSOSPA),
+            0x1000 => Some(Driver::TC08),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None
             }
+        }
+    }
+
+    /// Whether this driver is for an oscilloscope, as opposed to a data logger
+    ///
+    /// Enumeration returns every instrument family in one list, so this is how a caller that
+    /// only cares about scopes narrows it down.
+    pub fn is_scope(self) -> bool {
+        match self {
+            Driver::PS2000
+            | Driver::PS2000A
+            | Driver::PS3000A
+            | Driver::PS4000
+            | Driver::PS4000A
+            | Driver::PS5000A
+            | Driver::PS6000
+            | Driver::PS6000A
+            | Driver::PSOSPA => true,
+            Driver::TC08 | Driver::PicoIPP => false,
         }
     }
 
@@ -102,5 +136,53 @@ impl Driver {
             Driver::PS4000 | Driver::PS6000 => &[Driver::PicoIPP],
             _ => &[],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every device driver must survive `Display` -> `FromStr`, since driver names are written
+    /// to config files and command lines and read back.
+    #[test]
+    fn display_from_str_round_trip() {
+        for driver in enum_iterator::all::<Driver>() {
+            // `PicoIPP` is a dependency rather than a device driver, so it has no `FromStr` arm
+            if driver == Driver::PicoIPP {
+                continue;
+            }
+
+            assert_eq!(
+                Driver::from_str(&driver.to_string()),
+                Ok(driver),
+                "{:?} did not round trip through '{}'",
+                driver,
+                driver
+            );
+        }
+    }
+
+    #[test]
+    fn parses_human_written_names() {
+        assert_eq!(Driver::from_str("ps2000a"), Ok(Driver::PS2000A));
+        assert_eq!(Driver::from_str("PS 5000A"), Ok(Driver::PS5000A));
+        assert_eq!(Driver::from_str("psospa"), Ok(Driver::PSOSPA));
+        assert_eq!(Driver::from_str("usbtc08"), Ok(Driver::TC08));
+        assert_eq!(Driver::from_str("TC-08"), Ok(Driver::TC08));
+        assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
+    }
+
+    #[test]
+    fn tc08_binary_is_named_usbtc08() {
+        assert!(Driver::TC08.get_binary_name().contains("usbtc08"));
+    }
+
+    #[test]
+    fn every_driver_is_classified_as_scope_or_not() {
+        // `is_scope` is an exhaustive match, so this is really a compile-time guarantee. The
+        // assertions pin the two families so a mis-sorted new variant shows up as a test failure.
+        assert!(Driver::PSOSPA.is_scope());
+        assert!(!Driver::TC08.is_scope());
     }
 }

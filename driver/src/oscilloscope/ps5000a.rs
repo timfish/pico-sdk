@@ -1,8 +1,8 @@
-use crate::{
+use super::{
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, PicoDriver,
+    EnumerationResult, OscilloscopeDriverInternal,
 };
 use parking_lot::RwLock;
 use pico_common::{
@@ -42,7 +42,7 @@ impl PS5000ADriver {
     }
 }
 
-impl PicoDriver for PS5000ADriver {
+impl OscilloscopeDriverInternal for PS5000ADriver {
     fn get_driver(&self) -> Driver {
         Driver::PS3000A
     }
