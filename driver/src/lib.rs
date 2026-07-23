@@ -16,11 +16,16 @@
 //! Using the raw safe bindings to open and configure the first available oscilloscope:
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
-//! use pico_common::{OscilloscopeChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange};
-//! use pico_driver::{oscilloscope::PS2000Driver, DriverLoad, LibraryResolution};
+//! use pico_common::{
+//!     Driver, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoInfo, PicoRange,
+//! };
+//! use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
 //!
 //! // Load the ps2000 driver library with the default resolution
-//! let driver = PS2000Driver::load(&LibraryResolution::Default)?;
+//! let driver = match Driver::PS2000.load(&LibraryResolution::Default)? {
+//!     PicoDriver::Oscilloscope(driver) => driver,
+//!     _ => unreachable!("ps2000 is an oscilloscope driver"),
+//! };
 //!
 //! // Open the first device
 //! let handle = driver.open_unit(None)?;

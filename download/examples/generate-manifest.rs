@@ -273,7 +273,7 @@ fn lib_of(file_name: &str) -> &str {
 }
 
 /// Maps a Pico library name onto the `Driver` it backs. Libraries this SDK has no bindings for
-/// (usbtc08, pl1000, the plain ps3000/ps5000, ...) return `None` and stay out of the manifest.
+/// (pl1000, the plain ps3000/ps5000, ...) return `None` and stay out of the manifest.
 ///
 /// `picoipp` maps to `Driver::PicoIPP`: it isn't a device driver, but ps4000/ps6000 load it at
 /// runtime, so it has to travel with them.
@@ -288,6 +288,7 @@ fn driver_for(lib: &str) -> Option<Driver> {
         "ps6000" => Driver::PS6000,
         "ps6000a" => Driver::PS6000A,
         "psospa" => Driver::PSOSPA,
+        "usbtc08" => Driver::TC08,
         "picoipp" => Driver::PicoIPP,
         _ => return None,
     })

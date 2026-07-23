@@ -1,6 +1,7 @@
 use pico_sdk::{
     common::Driver,
     download::{available_drivers, cache_resolution, download_drivers_to_cache},
+    driver::{DriverLoad, PicoDriver},
 };
 
 /// Downloads every driver Pico publish for this platform from the release the crate was built
@@ -19,14 +20,18 @@ fn download_and_load_drivers() {
             continue;
         }
 
-        if resolution.try_load(driver).is_err() {
+        if driver.load(&resolution).is_err() {
             download_drivers_to_cache(&[driver]).unwrap();
         }
 
-        let loaded = resolution.try_load(driver).unwrap();
-        assert!(
-            loaded.get_version().is_ok(),
-            "{driver} loaded but has no version"
-        );
+        match driver.load(&resolution).unwrap() {
+            PicoDriver::Oscilloscope(loaded) => assert!(
+                loaded.get_version().is_ok(),
+                "{driver} loaded but has no version"
+            ),
+            // The TC-08 reports a version per unit rather than per driver, so loading the
+            // library is all we can check without hardware attached.
+            PicoDriver::TC08(_) => {}
+        }
     }
 }

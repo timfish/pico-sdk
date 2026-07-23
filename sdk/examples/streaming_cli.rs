@@ -72,15 +72,29 @@ fn main() -> Result<()> {
 
     let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
     let device = select_device(&enumerator)?;
+
+    // The valid ranges for each channel are read from the device when it is opened, so build the
+    // config against those before handing the device to the streaming runner.
+    let valid_channel_ranges = device
+        .info
+        .as_ref()
+        .expect("Opened device always has info")
+        .valid_channel_ranges
+        .clone();
+
+    let mut config = OscilloscopeConfig::default();
+    let ch_units = configure_channels(&valid_channel_ranges, &mut config);
+    config.set_sample_rate(get_capture_rate());
+
     let streaming_device = device.into_streaming_device();
-    let ch_units = configure_channels(&streaming_device);
-    let samples_per_second = get_capture_rate();
-    let capture_stats: Arc<dyn NewDataHandler> = CaptureStats::new(ch_units);
-    streaming_device.new_data.subscribe(capture_stats.clone());
+
+    let capture_stats: Arc<dyn EventHandler<OscilloscopeStreamEvent>> =
+        CaptureStats::new(ch_units);
+    streaming_device.events.subscribe(&capture_stats);
 
     println!("Press Enter to stop streaming");
     streaming_device
-        .start(samples_per_second)
+        .start(config)
         .expect("Failed to start streaming");
 
     Term::stdout().read_line().unwrap();
@@ -90,11 +104,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn select_device(enumerator: &DeviceEnumerator) -> Result<PicoDevice> {
+fn select_device(enumerator: &DeviceEnumerator) -> Result<OscilloscopeDevice> {
     loop {
         println!("Searching for devices...",);
 
-        let devices = enumerator.enumerate();
+        let devices = enumerator.enumerate_oscilloscopes();
 
         if devices.is_empty() {
             return Err(anyhow!("{}", style("No Pico devices found").red()));
@@ -132,7 +146,11 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<PicoDevice> {
         println!();
 
         match &devices[device_selection] {
-            Ok(d) => return Ok(d.open().unwrap()),
+            Ok(d) => {
+                let mut device = d.clone();
+                device.ensure_open()?;
+                return Ok(device);
+            }
             Err(error) => match error {
                 EnumerationError::DriverLoadError { driver, .. }
                 | EnumerationError::VersionError {
@@ -150,52 +168,40 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<PicoDevice> {
     }
 }
 
-fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, String> {
+/// Builds the channel configuration interactively from the ranges the device reports.
+///
+/// Returns the display unit for each enabled channel, so the capture display can label values.
+fn configure_channels(
+    valid_channel_ranges: &HashMap<PicoChannel, Vec<PicoRange>>,
+    config: &mut OscilloscopeConfig,
+) -> HashMap<PicoChannel, String> {
     loop {
-        let mut channels = device
-            .get_channels()
-            .iter()
-            .map(|c| {
-                (
-                    *c,
-                    device.get_valid_ranges(*c),
-                    device.get_channel_config(*c),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        channels.sort_by_key(|(a, _, _)| *a);
+        let mut channels = valid_channel_ranges.iter().collect::<Vec<_>>();
+        channels.sort_by_key(|(ch, _)| **ch);
 
         let mut channel_options = channels
             .iter()
-            .map(|(ch, ranges, config)| {
-                if let Some(ranges) = ranges {
-                    if let Some(config) = config {
-                        format!(
-                            "Channel {} - {}",
-                            ch,
-                            style(format!("{} / {:?}", config.range, config.coupling)).green()
-                        )
-                    } else if ranges.is_empty() {
-                        format!(
-                            "Channel {} - {}",
-                            ch,
-                            style("No Probe connected").red().bold()
-                        )
-                    } else {
-                        format!("Channel {} - {}", ch, style("Disabled"))
-                    }
-                } else {
+            .map(|(ch, ranges)| {
+                if let Some(ch_config) = config.channels.get(ch) {
                     format!(
                         "Channel {} - {}",
                         ch,
-                        style("Disabled due to power constraints").red().bold()
+                        style(format!("{} / {:?}", ch_config.range, ch_config.coupling)).green()
                     )
+                } else if ranges.is_empty() {
+                    // A channel with no valid ranges has nothing plugged into it
+                    format!(
+                        "Channel {} - {}",
+                        ch,
+                        style("No Probe connected").red().bold()
+                    )
+                } else {
+                    format!("Channel {} - {}", ch, style("Disabled"))
                 }
             })
             .collect::<Vec<String>>();
 
-        if channels.iter().any(|(_, _, config)| config.is_some()) {
+        if !config.channels.is_empty() {
             channel_options.push("Channel configuration complete".to_string());
         }
 
@@ -210,34 +216,27 @@ fn configure_channels(device: &PicoStreamingDevice) -> HashMap<PicoChannel, Stri
             .unwrap();
 
         if ch_selection >= channels.len() {
-            return channels
+            return config
+                .channels
                 .iter()
-                .filter_map(|(ch, _, config)| config.map(|c| (*ch, c.range.get_units().short)))
+                .map(|(ch, ch_config)| (*ch, ch_config.range.get_units().short))
                 .collect();
         }
 
-        let (edit_channel, ranges, _) = channels[ch_selection].clone();
+        let (edit_channel, ranges) = channels[ch_selection];
 
-        if let Some(ranges) = ranges {
-            if ranges.is_empty() {
-                println!(
-                    "{} cannot be configured with no probe connected",
-                    edit_channel
-                );
-
-                continue;
-            }
-
-            if let Some(range) = select_range(&ranges) {
-                device.enable_channel(edit_channel, range, PicoCoupling::DC);
-            } else {
-                device.disable_channel(edit_channel);
-            }
-        } else {
+        if ranges.is_empty() {
             println!(
-                "{} cannot be configured as it's disabled due to power constraints",
+                "{} cannot be configured with no probe connected",
                 edit_channel
             );
+
+            continue;
+        }
+
+        match select_range(ranges) {
+            Some(range) => config.enable_channel(*edit_channel, range, PicoCoupling::DC),
+            None => config.disable_channel(*edit_channel),
         }
     }
 }
@@ -271,9 +270,9 @@ impl CaptureStats {
     }
 }
 
-impl NewDataHandler for CaptureStats {
+impl EventHandler<OscilloscopeStreamEvent> for CaptureStats {
     #[tracing::instrument(level = "trace", skip(self, event))]
-    fn handle_event(&self, event: &StreamingEvent) {
+    fn new_data(&self, event: &OscilloscopeStreamEvent) {
         let mut data: Vec<(PicoChannel, usize, f64, String)> = event
             .channels
             .iter()

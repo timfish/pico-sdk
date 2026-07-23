@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn channels_order_cold_junction_first() {
-        let mut channels = vec![TC08Channel::CHANNEL_3, TC08Channel::CHANNEL_CJC];
+        let mut channels = [TC08Channel::CHANNEL_3, TC08Channel::CHANNEL_CJC];
         channels.sort();
         assert_eq!(channels[0], TC08Channel::CHANNEL_CJC);
     }

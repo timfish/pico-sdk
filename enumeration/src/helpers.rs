@@ -1,12 +1,16 @@
-use crate::{EnumeratedDevice, EnumerationError};
+use crate::EnumerationError;
 use pico_common::Driver;
+use pico_device::{oscilloscope::OscilloscopeDevice, tc08::TC08Device, PicoDevice};
 
-pub trait EnumResultHelpers {
+/// Generic over the device type so it works for both the mixed
+/// [`crate::DeviceEnumerator::enumerate`] and the family specific
+/// [`crate::DeviceEnumerator::enumerate_oscilloscopes`].
+pub trait EnumResultHelpers<D> {
     fn missing_drivers(&self) -> Vec<Driver>;
-    fn devices_and_errors(self) -> (Vec<EnumeratedDevice>, Vec<EnumerationError>);
+    fn devices_and_errors(self) -> (Vec<D>, Vec<EnumerationError>);
 }
 
-impl EnumResultHelpers for Vec<Result<EnumeratedDevice, EnumerationError>> {
+impl<D> EnumResultHelpers<D> for Vec<Result<D, EnumerationError>> {
     fn missing_drivers(&self) -> Vec<Driver> {
         let mut failed_results = self
             .iter()
@@ -22,12 +26,44 @@ impl EnumResultHelpers for Vec<Result<EnumeratedDevice, EnumerationError>> {
         failed_results
     }
 
-    fn devices_and_errors(self) -> (Vec<EnumeratedDevice>, Vec<EnumerationError>) {
-        let (devices, errors): (Vec<_>, Vec<_>) = self.into_iter().partition(|e| e.is_ok());
+    fn devices_and_errors(self) -> (Vec<D>, Vec<EnumerationError>) {
+        // Split by matching rather than `partition` + `unwrap`, so `D` needs no `Debug` bound
+        let mut devices = Vec::new();
+        let mut errors = Vec::new();
 
-        (
-            devices.into_iter().map(|r| r.unwrap()).collect(),
-            errors.into_iter().map(|r| r.unwrap_err()).collect(),
-        )
+        for result in self {
+            match result {
+                Ok(device) => devices.push(device),
+                Err(error) => errors.push(error),
+            }
+        }
+
+        (devices, errors)
+    }
+}
+
+/// Splits a mixed enumeration result by instrument family
+pub trait PicoDeviceHelpers {
+    fn oscilloscopes(self) -> Vec<OscilloscopeDevice>;
+    fn tc08s(self) -> Vec<TC08Device>;
+}
+
+impl PicoDeviceHelpers for Vec<PicoDevice> {
+    fn oscilloscopes(self) -> Vec<OscilloscopeDevice> {
+        self.into_iter()
+            .filter_map(|d| match d {
+                PicoDevice::Oscilloscope(scope) => Some(scope),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn tc08s(self) -> Vec<TC08Device> {
+        self.into_iter()
+            .filter_map(|d| match d {
+                PicoDevice::TC08(tc08) => Some(tc08),
+                _ => None,
+            })
+            .collect()
     }
 }
