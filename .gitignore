@@ -9,3 +9,6 @@ Cargo.lock
 # is the only output that belongs in git.
 /drivers/
 /release/
+# Per-branch worktrees used for parallel agent work; each is its own git checkout,
+# never content that belongs in this repo's tree.
+/.claude/worktrees/
