@@ -21,6 +21,8 @@ pub enum Driver {
     PSOSPA,
     /// USB TC-08 thermocouple data logger
     TC08,
+    /// USB DrDAQ educational data logger
+    DrDAQ,
     /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
     PicoIPP,
 }
@@ -46,6 +48,7 @@ impl FromStr for Driver {
             "6000A" => Ok(Driver::PS6000A),
             "OSPA" => Ok(Driver::PSOSPA),
             "TC08" => Ok(Driver::TC08),
+            "DRDAQ" => Ok(Driver::DrDAQ),
             _ => Err(ParseError),
         }
     }
@@ -58,6 +61,8 @@ impl fmt::Display for Driver {
         match self {
             // The TC-08 driver binary is `usbtc08`, not `tc08`
             Driver::TC08 => write!(f, "usb{}", name),
+            // The DrDAQ driver binary is `usbdrdaq`, not `drdaq`
+            Driver::DrDAQ => write!(f, "usb{}", name),
             _ => write!(f, "{}", name),
         }
     }
@@ -99,7 +104,7 @@ impl Driver {
             | Driver::PS6000
             | Driver::PS6000A
             | Driver::PSOSPA => true,
-            Driver::TC08 | Driver::PicoIPP => false,
+            Driver::TC08 | Driver::DrDAQ | Driver::PicoIPP => false,
         }
     }
 
@@ -170,6 +175,8 @@ mod tests {
         assert_eq!(Driver::from_str("psospa"), Ok(Driver::PSOSPA));
         assert_eq!(Driver::from_str("usbtc08"), Ok(Driver::TC08));
         assert_eq!(Driver::from_str("TC-08"), Ok(Driver::TC08));
+        assert_eq!(Driver::from_str("drdaq"), Ok(Driver::DrDAQ));
+        assert_eq!(Driver::from_str("usbdrdaq"), Ok(Driver::DrDAQ));
         assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
     }
 
@@ -179,10 +186,16 @@ mod tests {
     }
 
     #[test]
+    fn drdaq_binary_is_named_usbdrdaq() {
+        assert!(Driver::DrDAQ.get_binary_name().contains("usbdrdaq"));
+    }
+
+    #[test]
     fn every_driver_is_classified_as_scope_or_not() {
         // `is_scope` is an exhaustive match, so this is really a compile-time guarantee. The
         // assertions pin the two families so a mis-sorted new variant shows up as a test failure.
         assert!(Driver::PSOSPA.is_scope());
         assert!(!Driver::TC08.is_scope());
+        assert!(!Driver::DrDAQ.is_scope());
     }
 }
