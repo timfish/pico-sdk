@@ -9,8 +9,17 @@ it free of anything that isn't about this crate.
 
 - **Bind only to Pico's published SDK surface** (public headers, published
   programming guides). Never incorporate protocol internals, calibration
-  logic, or any non-public knowledge. Drivers are dynamically loaded at
-  runtime, never redistributed.
+  logic, or any non-public knowledge. The bindings themselves are written only
+  against the published headers.
+- **Driver binaries: dynamically loaded, and redistributed.** The crate loads
+  the vendor `.dll`/`.dylib`/`.so` at runtime via `libloading` (never
+  statically linked). It also *redistributes* them: the `generate-manifest`
+  example extracts each driver from Pico's public installers and republishes it
+  as a GitHub release asset (`download/src/manifest.rs` `BASE_URL`), which the
+  `pico-download` crate fetches at runtime (overridable via
+  `PICO_DRIVERS_BASE_URL`). The redistribution's licensing basis is the
+  maintainer's arrangement with Pico — see the private project's decision
+  records; do not change the redistribution model without it.
 - **No async API.** The drivers are a poll loop on a dedicated thread; async
   would add ergonomics, not throughput. Consumers who want a `Stream`/async
   surface wrap the sync event subscription themselves.
