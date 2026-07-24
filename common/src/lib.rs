@@ -10,20 +10,28 @@
 //! common beyond driver loading and error reporting, so each family gets its own channel,
 //! configuration and capability types rather than a union of every setting any device might have.
 
+mod cm3;
 mod config;
+mod drdaq;
 mod driver;
 mod enums;
 mod error;
+mod hrdl;
+mod pl1000;
 mod pt104;
 mod range;
 mod status;
 mod tc08;
 mod utils;
 
+pub use cm3::*;
 pub use config::*;
+pub use drdaq::*;
 pub use driver::*;
 pub use enums::*;
 pub use error::*;
+pub use hrdl::*;
+pub use pl1000::*;
 pub use pt104::*;
 pub use range::*;
 pub use status::*;
