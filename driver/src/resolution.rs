@@ -77,6 +77,9 @@ impl DriverLoad for Driver {
             Driver::PicoIPP => {
                 panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
             }
+            Driver::PL1000 => {
+                panic!("{self} does not yet have a safe wrapper in the pico-driver crate")
+            }
         })
     }
 }
