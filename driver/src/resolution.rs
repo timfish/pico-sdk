@@ -1,4 +1,4 @@
-use crate::{oscilloscope, tc08::TC08Driver, DriverLoadError, PicoDriver};
+use crate::{oscilloscope, pt104::PT104Driver, tc08::TC08Driver, DriverLoadError, PicoDriver};
 use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf};
 
@@ -74,6 +74,7 @@ impl DriverLoad for Driver {
                 PicoDriver::Oscilloscope(Scope::new(oscilloscope::PSOSPADriver::new(path)?))
             }
             Driver::TC08 => PicoDriver::TC08(TC08Driver::new(path)?),
+            Driver::PT104 => PicoDriver::PT104(PT104Driver::new(path)?),
             Driver::PicoHRDL => {
                 panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
             }
@@ -81,9 +82,6 @@ impl DriverLoad for Driver {
                 panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
             }
             Driver::DrDAQ => {
-                panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
-            }
-            Driver::PT104 => {
                 panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
             }
             Driver::PicoIPP => {
