@@ -10,6 +10,7 @@
 //! common beyond driver loading and error reporting, so each family gets its own channel,
 //! configuration and capability types rather than a union of every setting any device might have.
 
+mod cm3;
 mod config;
 mod driver;
 mod enums;
@@ -21,6 +22,7 @@ mod status;
 mod tc08;
 mod utils;
 
+pub use cm3::*;
 pub use config::*;
 pub use driver::*;
 pub use enums::*;
