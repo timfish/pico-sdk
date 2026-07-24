@@ -44,8 +44,13 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
+pub mod cm3;
+pub mod drdaq;
+pub mod hrdl;
 pub mod kernel_driver;
 pub mod oscilloscope;
+pub mod pl1000;
+pub mod pt104;
 mod resolution;
 pub mod tc08;
 
@@ -74,14 +79,24 @@ pub enum DriverLoadError {
 /// data logger plugged in at once. Match to get to the family specific driver.
 #[derive(Clone)]
 pub enum PicoDriver {
+    DrDAQ(drdaq::DrDAQDriver),
     Oscilloscope(oscilloscope::OscilloscopeDriver),
+    PicoHRDL(hrdl::HRDLDriver),
+    PL1000(pl1000::PL1000Driver),
+    PLCM3(cm3::PLCM3Driver),
+    PT104(pt104::PT104Driver),
     TC08(tc08::TC08Driver),
 }
 
 impl fmt::Debug for PicoDriver {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::DrDAQ(driver) => driver.fmt(f),
             Self::Oscilloscope(driver) => driver.fmt(f),
+            Self::PicoHRDL(driver) => driver.fmt(f),
+            Self::PL1000(driver) => driver.fmt(f),
+            Self::PLCM3(driver) => driver.fmt(f),
+            Self::PT104(driver) => driver.fmt(f),
             Self::TC08(driver) => driver.fmt(f),
         }
     }

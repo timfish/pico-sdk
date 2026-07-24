@@ -166,7 +166,12 @@ pub mod prelude {
         PicoInfo, PicoRange, PicoStatus, TC08Channel, TCType,
     };
     pub use pico_device::{
+        cm3::{PLCM3Config, PLCM3Device},
+        drdaq::{DrDAQConfig, DrDAQDevice},
+        hrdl::{HRDLConfig, HRDLDevice},
         oscilloscope::{OscilloscopeConfig, OscilloscopeDevice},
+        pl1000::{PL1000Config, PL1000Device},
+        pt104::{PT104Config, PT104Device},
         tc08::{TC08Config, TC08Device},
         DeviceOpen, PicoDevice,
     };
@@ -179,7 +184,9 @@ pub mod prelude {
         DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
     };
     pub use pico_streaming::{
-        EventHandler, IntoStreamingDevice, OscilloscopeStreamEvent, TC08StreamingEvent,
+        DrDAQStreamingEvent, EventHandler, HRDLStreamingEvent, IntoStreamingDevice,
+        OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
+        TC08StreamingEvent,
     };
 }
 

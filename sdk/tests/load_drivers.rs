@@ -29,9 +29,14 @@ fn download_and_load_drivers() {
                 loaded.get_version().is_ok(),
                 "{driver} loaded but has no version"
             ),
-            // The TC-08 reports a version per unit rather than per driver, so loading the
-            // library is all we can check without hardware attached.
-            PicoDriver::TC08(_) => {}
+            // The data loggers report a version per unit rather than per driver (like the
+            // TC-08), so loading the library is all we can check without hardware attached.
+            PicoDriver::DrDAQ(_)
+            | PicoDriver::PicoHRDL(_)
+            | PicoDriver::PL1000(_)
+            | PicoDriver::PLCM3(_)
+            | PicoDriver::PT104(_)
+            | PicoDriver::TC08(_) => {}
         }
     }
 }
