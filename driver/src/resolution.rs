@@ -74,6 +74,9 @@ impl DriverLoad for Driver {
                 PicoDriver::Oscilloscope(Scope::new(oscilloscope::PSOSPADriver::new(path)?))
             }
             Driver::TC08 => PicoDriver::TC08(TC08Driver::new(path)?),
+            Driver::PT104 => {
+                panic!("{self} has dynamically-loaded bindings in pico-sys-dynamic but no high-level driver wrapper yet")
+            }
             Driver::PicoIPP => {
                 panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
             }

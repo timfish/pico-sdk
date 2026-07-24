@@ -19,6 +19,8 @@ pub enum Driver {
     PS6000,
     PS6000A,
     PSOSPA,
+    /// USB PT-104 platinum resistance temperature data logger
+    PT104,
     /// USB TC-08 thermocouple data logger
     TC08,
     /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
@@ -45,6 +47,7 @@ impl FromStr for Driver {
             "6000" => Ok(Driver::PS6000),
             "6000A" => Ok(Driver::PS6000A),
             "OSPA" => Ok(Driver::PSOSPA),
+            "PT104" => Ok(Driver::PT104),
             "TC08" => Ok(Driver::TC08),
             _ => Err(ParseError),
         }
@@ -58,6 +61,8 @@ impl fmt::Display for Driver {
         match self {
             // The TC-08 driver binary is `usbtc08`, not `tc08`
             Driver::TC08 => write!(f, "usb{}", name),
+            // The PT-104 driver binary is `usbpt104`, not `pt104`
+            Driver::PT104 => write!(f, "usb{}", name),
             _ => write!(f, "{}", name),
         }
     }
@@ -99,7 +104,7 @@ impl Driver {
             | Driver::PS6000
             | Driver::PS6000A
             | Driver::PSOSPA => true,
-            Driver::TC08 | Driver::PicoIPP => false,
+            Driver::TC08 | Driver::PT104 | Driver::PicoIPP => false,
         }
     }
 
@@ -170,6 +175,9 @@ mod tests {
         assert_eq!(Driver::from_str("psospa"), Ok(Driver::PSOSPA));
         assert_eq!(Driver::from_str("usbtc08"), Ok(Driver::TC08));
         assert_eq!(Driver::from_str("TC-08"), Ok(Driver::TC08));
+        assert_eq!(Driver::from_str("pt104"), Ok(Driver::PT104));
+        assert_eq!(Driver::from_str("usbpt104"), Ok(Driver::PT104));
+        assert_eq!(Driver::from_str("PT-104"), Ok(Driver::PT104));
         assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
     }
 
@@ -179,10 +187,16 @@ mod tests {
     }
 
     #[test]
+    fn pt104_binary_is_named_usbpt104() {
+        assert!(Driver::PT104.get_binary_name().contains("usbpt104"));
+    }
+
+    #[test]
     fn every_driver_is_classified_as_scope_or_not() {
         // `is_scope` is an exhaustive match, so this is really a compile-time guarantee. The
         // assertions pin the two families so a mis-sorted new variant shows up as a test failure.
         assert!(Driver::PSOSPA.is_scope());
         assert!(!Driver::TC08.is_scope());
+        assert!(!Driver::PT104.is_scope());
     }
 }
