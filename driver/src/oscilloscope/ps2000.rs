@@ -1,12 +1,12 @@
-use crate::{
+use super::{
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, EnumerationResult, PicoDriver,
+    get_version_string, EnumerationResult, OscilloscopeDriverInternal,
 };
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
-    ChannelConfig, Driver, FromPicoStr, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-    PicoResult, PicoStatus, SampleConfig,
+    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
+    PicoResult, PicoStatus, OscilloscopeSampleConfig,
 };
 use pico_sys_dynamic::ps2000::PS2000Loader;
 use std::{collections::HashMap, sync::Arc};
@@ -150,7 +150,7 @@ impl PS2000Driver {
     }
 }
 
-impl PicoDriver for PS2000Driver {
+impl OscilloscopeDriverInternal for PS2000Driver {
     fn get_driver(&self) -> Driver {
         Driver::PS2000
     }
@@ -289,7 +289,7 @@ impl PicoDriver for PS2000Driver {
         Ok((1..=10)
             .flat_map(|r| -> PicoResult<PicoRange> {
                 let range = PicoRange::from(r);
-                let config = ChannelConfig {
+                let config = OscilloscopeChannelConfig {
                     coupling: PicoCoupling::DC,
                     range,
                     offset: 0.0,
@@ -306,7 +306,7 @@ impl PicoDriver for PS2000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        config: &ChannelConfig,
+        config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
         PicoStatus::from(unsafe {
             self.bindings.ps2000_set_channel(
@@ -359,9 +359,9 @@ impl PicoDriver for PS2000Driver {
     fn start_streaming(
         &self,
         handle: i16,
-        sample_config: &SampleConfig,
+        sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
-    ) -> PicoResult<SampleConfig> {
+    ) -> PicoResult<OscilloscopeSampleConfig> {
         let status = PicoStatus::from(unsafe {
             self.bindings.ps2000_run_streaming_ns(
                 handle,

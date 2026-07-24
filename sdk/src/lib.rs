@@ -56,13 +56,13 @@
 //!
 //!
 //! # Usage Examples
-//! Opening and configuring a specific ps2000 device as a `PicoDevice`:
+//! Opening a specific ps2000 device:
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! use pico_sdk::prelude::*;
 //!
-//! let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
-//! let device = PicoDevice::try_open(&driver, Some("ABC/123"))?;
+//! let driver = Driver::PS2000.load(&LibraryResolution::Default)?;
+//! let device = driver.open_device(Some("ABC/123"))?;
 //! # Ok(())
 //! # }
 //! ```
@@ -75,39 +75,62 @@
 //! use pico_sdk::prelude::*;
 //!
 //! let enumerator = DeviceEnumerator::new();
-//! // Enumerate, ignore all failures and get the first device
-//! let enum_device = enumerator
-//!                 .enumerate()
+//! // Enumerate scopes only, ignore all failures and get the first device
+//! let mut device = enumerator
+//!                 .enumerate_oscilloscopes()
 //!                 .into_iter()
 //!                 .flatten()
 //!                 .next()
 //!                 .expect("No device found");
 //!
-//! let device = enum_device.open()?;
+//! // Devices enumerate closed, so the valid ranges are only known once it is open
+//! device.ensure_open()?;
 //!
 //! // Get a streaming device
 //! let stream_device = device.into_streaming_device();
 //!
-//! // Enable and configure 2 channels
-//! stream_device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-//! stream_device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
-//!
 //! struct StdoutHandler;
 //!
-//! impl NewDataHandler for StdoutHandler {
-//!     fn handle_event(&self, event: &StreamingEvent) {
+//! impl EventHandler<OscilloscopeStreamEvent> for StdoutHandler {
+//!     fn new_data(&self, event: &OscilloscopeStreamEvent) {
 //!         println!("Sample count: {}", event.length);
 //!     }
 //! }
 //!
 //! // When handler goes out of scope, the subscription is dropped
-//! let handler = Arc::new(StdoutHandler);
+//! let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = Arc::new(StdoutHandler);
 //!
 //! // Subscribe to streaming events
-//! stream_device.new_data.subscribe(handler.clone());
+//! stream_device.events.subscribe(&handler);
 //!
-//! // Start streaming with 1k sample rate
-//! stream_device.start(1_000)?;
+//! // Enable and configure 2 channels, then start streaming at 1k
+//! let mut config = OscilloscopeConfig::default();
+//! config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+//! config.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
+//! config.set_sample_rate(1_000);
+//!
+//! stream_device.start(config)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Log temperatures from a USB TC-08:
+//! ```no_run
+//! # fn run() -> Result<(),Box<dyn std::error::Error>> {
+//! use pico_sdk::prelude::*;
+//!
+//! let driver = Driver::TC08.load(&cache_resolution())?;
+//! let device = match driver.open_device(None)? {
+//!     PicoDevice::TC08(device) => device,
+//!     _ => unreachable!("the TC-08 driver only returns TC-08 devices"),
+//! };
+//!
+//! let stream_device = device.into_streaming_device();
+//!
+//! let mut config = TC08Config { interval_ms: 100, ..Default::default() };
+//! config.enable_channel(TC08Channel::CHANNEL_1, TCType::K);
+//!
+//! stream_device.start(config)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -139,18 +162,32 @@
 
 pub mod prelude {
     pub use pico_common::{
-        ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-        PicoStatus,
+        Driver, MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError,
+        PicoInfo, PicoRange, PicoStatus, TC08Channel, TCType,
     };
-    pub use pico_device::PicoDevice;
+    pub use pico_device::{
+        cm3::{PLCM3Config, PLCM3Device},
+        drdaq::{DrDAQConfig, DrDAQDevice},
+        hrdl::{HRDLConfig, HRDLDevice},
+        oscilloscope::{OscilloscopeConfig, OscilloscopeDevice},
+        pl1000::{PL1000Config, PL1000Device},
+        pt104::{PT104Config, PT104Device},
+        tc08::{TC08Config, TC08Device},
+        DeviceOpen, PicoDevice,
+    };
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
-        kernel_driver, DriverLoadError, EnumerationResult, LibraryResolution, PicoDriver,
+        kernel_driver, oscilloscope::EnumerationResult, DriverLoad, DriverLoadError,
+        LibraryResolution, PicoDriver,
     };
     pub use pico_enumeration::{
-        DeviceEnumerator, EnumResultHelpers, EnumeratedDevice, EnumerationError,
+        DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
     };
-    pub use pico_streaming::{NewDataHandler, PicoStreamingDevice, StreamingEvent, ToStreamDevice};
+    pub use pico_streaming::{
+        DrDAQStreamingEvent, EventHandler, HRDLStreamingEvent, IntoStreamingDevice,
+        OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
+        TC08StreamingEvent,
+    };
 }
 
 /// Common enums, structs and traits

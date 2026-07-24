@@ -3,17 +3,20 @@ mod streaming_tests {
     use mockall::{mock, predicate::*};
     use parking_lot::RwLock;
     use pico_common::{
-        ChannelConfig, Driver, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResult,
-        SampleConfig,
+        Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel, PicoCoupling,
+        PicoInfo, PicoRange, PicoResult,
     };
-    use pico_device::PicoDevice;
-    use pico_driver::{ArcDriver, DriverLoadError, EnumerationResult, PicoDriver};
-    use pico_streaming::ToStreamDevice;
+    use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
+    use pico_driver::{
+        oscilloscope::{EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal},
+        DriverLoadError,
+    };
+    use pico_streaming::IntoStreamingDevice;
     use std::{sync::Arc, thread, time::Duration};
 
     mock! {
         MockDriver {}
-        impl PicoDriver for MockDriver{
+        impl OscilloscopeDriverInternal for MockDriver{
             fn get_driver(&self) -> Driver;
             fn get_version(&self) -> PicoResult<String>;
             fn get_path(&self) -> PicoResult<Option<String>>;
@@ -28,7 +31,7 @@ mod streaming_tests {
                 &self,
                 handle: i16,
                 channel: PicoChannel,
-                config: &ChannelConfig,
+                config: &OscilloscopeChannelConfig,
             ) -> PicoResult<()>;
             fn disable_channel(
                 &self,
@@ -45,9 +48,9 @@ mod streaming_tests {
             fn start_streaming(
                 &self,
                 handle: i16,
-                sample_config: &SampleConfig,
+                sample_config: &OscilloscopeSampleConfig,
                 enabled_channels: u8
-            ) -> PicoResult<SampleConfig>;
+            ) -> PicoResult<OscilloscopeSampleConfig>;
             fn get_latest_streaming_values<'a>(
                 &self,
                 handle: i16,
@@ -61,7 +64,7 @@ mod streaming_tests {
 
     impl std::fmt::Debug for MockMockDriver {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("MockPicoDriver")
+            f.write_str("MockOscilloscopeDriver")
         }
     }
 
@@ -85,20 +88,21 @@ mod streaming_tests {
         mock.expect_ping_unit().return_const(Ok(()));
         mock.expect_set_data_buffer().return_const(Ok(()));
         mock.expect_stop().return_const(Ok(()));
-        mock.expect_stop().return_const(Ok(()));
         mock.expect_get_latest_streaming_values()
             .times(3..25)
             .return_const(Ok(()));
         mock.expect_start_streaming()
-            .return_const(Ok(SampleConfig::default()));
+            .return_const(Ok(OscilloscopeSampleConfig::default()));
 
-        let driver: ArcDriver = Arc::new(mock);
-        let device = PicoDevice::try_open(&driver, None).unwrap();
+        let driver = OscilloscopeDriver::new(mock);
+        let device = driver.open_device(None).unwrap();
         let streaming = device.into_streaming_device();
 
-        streaming.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        let mut config = OscilloscopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000);
 
-        streaming.start(100_000).unwrap();
+        streaming.start(config).unwrap();
 
         // Ensure that clone + drop doesn't cause any unexpected behaviour
         {

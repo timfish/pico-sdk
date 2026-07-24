@@ -1,8 +1,9 @@
 use crate::{
-    ps2000, ps2000a, ps3000a, ps4000, ps4000a, ps5000a, ps6000, ps6000a, psospa, ArcDriver, DriverLoadError
+    cm3::PLCM3Driver, drdaq::DrDAQDriver, hrdl::HRDLDriver, oscilloscope, pl1000::PL1000Driver,
+    pt104::PT104Driver, tc08::TC08Driver, DriverLoadError, PicoDriver,
 };
 use pico_common::Driver;
-use std::{env::current_exe, path::PathBuf, sync::Arc};
+use std::{env::current_exe, path::PathBuf};
 
 /// Instructs the loader where to load drivers from
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
@@ -31,23 +32,59 @@ impl LibraryResolution {
             LibraryResolution::Custom(path) => path.join(binary_name),
         }
     }
+}
 
-    pub fn try_load(&self, driver: Driver) -> Result<ArcDriver, DriverLoadError> {
-        let path = self.get_path(driver);
-        Ok(match driver {
-            Driver::PS2000 => Arc::new(ps2000::PS2000Driver::new(path)?),
-            Driver::PS2000A => Arc::new(ps2000a::PS2000ADriver::new(path)?),
-            Driver::PS3000A => Arc::new(ps3000a::PS3000ADriver::new(path)?),
-            Driver::PS4000 => Arc::new(ps4000::PS4000Driver::new(path)?),
-            Driver::PS4000A => Arc::new(ps4000a::PS4000ADriver::new(path)?),
-            Driver::PS5000A => Arc::new(ps5000a::PS5000ADriver::new(path)?),
-            Driver::PS6000 => Arc::new(ps6000::PS6000Driver::new(path)?),
-            Driver::PS6000A => Arc::new(ps6000a::PS6000ADriver::new(path)?),
-            Driver::PSOSPA => Arc::new(psospa::PSOSPADriver::new(path)?),
-            Driver::PicoIPP => {
-                panic!("{driver} is a library used by Pico drivers and cannot be loaded directly",)
+/// Loads the driver binary for a [`Driver`], returning whichever instrument family it belongs to
+///
+/// This is where the two families meet. Callers that already know which family they want can
+/// construct the concrete driver directly instead.
+pub trait DriverLoad {
+    fn load(&self, resolution: &LibraryResolution) -> Result<PicoDriver, DriverLoadError>;
+}
+
+impl DriverLoad for Driver {
+    fn load(&self, resolution: &LibraryResolution) -> Result<PicoDriver, DriverLoadError> {
+        use oscilloscope::OscilloscopeDriver as Scope;
+
+        let path = resolution.get_path(*self);
+
+        Ok(match self {
+            Driver::PS2000 => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS2000Driver::new(path)?))
             }
+            Driver::PS2000A => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS2000ADriver::new(path)?))
+            }
+            Driver::PS3000A => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS3000ADriver::new(path)?))
+            }
+            Driver::PS4000 => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS4000Driver::new(path)?))
+            }
+            Driver::PS4000A => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS4000ADriver::new(path)?))
+            }
+            Driver::PS5000A => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS5000ADriver::new(path)?))
+            }
+            Driver::PS6000 => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS6000Driver::new(path)?))
+            }
+            Driver::PS6000A => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS6000ADriver::new(path)?))
+            }
+            Driver::PSOSPA => {
+                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PSOSPADriver::new(path)?))
+            }
+            Driver::TC08 => PicoDriver::TC08(TC08Driver::new(path)?),
+            Driver::PT104 => PicoDriver::PT104(PT104Driver::new(path)?),
+            Driver::PicoHRDL => PicoDriver::PicoHRDL(HRDLDriver::new(path)?),
+            Driver::PLCM3 => PicoDriver::PLCM3(PLCM3Driver::new(path)?),
+            Driver::DrDAQ => PicoDriver::DrDAQ(DrDAQDriver::new(path)?),
+            Driver::PicoIPP => {
+                panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
+            }
+            Driver::PL1000 => PicoDriver::PL1000(PL1000Driver::new(path)?),
         })
     }
 }
-

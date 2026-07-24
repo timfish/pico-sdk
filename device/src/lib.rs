@@ -1,139 +1,109 @@
 #![forbid(unsafe_code)]
 
-//! `PicoDevice` implementation for Pico Technology oscilloscope drivers.
+//! Device abstractions over the Pico driver wrappers.
 //!
 //! This is a sub crate that you probably don't want to use directly. Try the top level
 //! [`pico-sdk`](https://crates.io/crates/pico-sdk) crate which exposes everything from here.
 //!
-//! When a `PicoDevice` is created, it is opened, its channels and capabilities are
-//! automatically detected and then it is closed.
+//! - [`oscilloscope::OscilloscopeDevice`] for Pico Technology oscilloscopes. When one is opened,
+//!   its channels and valid ranges are detected automatically.
+//! - [`tc08::TC08Device`] for the USB TC-08 thermocouple data logger.
+//!
+//! [`PicoDevice`] is the only place the families meet, for callers that enumerate everything at
+//! once. Match on it to get to the family specific device.
 //!
 //! # Example
 //! ```no_run
 //! # fn run() -> Result<(),Box<dyn std::error::Error>> {
 //! use pico_common::Driver;
-//! use pico_driver::LibraryResolution;
-//! use pico_device::PicoDevice;
+//! use pico_device::DeviceOpen;
+//! use pico_driver::{DriverLoad, LibraryResolution};
 //!
 //! // Load the required driver
-//! let driver = LibraryResolution::Default.try_load(Driver::PS2000)?;
+//! let driver = Driver::PS2000.load(&LibraryResolution::Default)?;
 //!
 //! // Try and open the first available ps2000 device
-//! let device1 = PicoDevice::try_open(&driver, None)?;
+//! let device1 = driver.open_device(None)?;
 //!
 //! // Try and open devices by serial
-//! let device2 = PicoDevice::try_open(&driver, Some("ABC/123"))?;
-//! let device3 = PicoDevice::try_open(&driver, Some("ABC/987"))?;
+//! let device2 = driver.open_device(Some("ABC/123"))?;
+//! let device3 = driver.open_device(Some("ABC/987"))?;
 //! # Ok(())
 //! # }
 //! ```
 
-use parking_lot::Mutex;
-use pico_common::{PicoChannel, PicoInfo, PicoRange, PicoResult};
-use pico_driver::{ArcDriver, PicoDriver};
-use std::{
-    collections::HashMap,
-    fmt,
-    fmt::{Debug, Display},
-    sync::Arc,
-};
+use pico_common::PicoResult;
+use pico_driver::PicoDriver;
 
-pub type HandleMutex = Arc<Mutex<Option<i16>>>;
+pub mod cm3;
+pub mod drdaq;
+pub mod hrdl;
+pub mod oscilloscope;
+pub mod pl1000;
+pub mod pt104;
+pub mod tc08;
 
-/// Base Pico device
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Clone)]
-pub struct PicoDevice {
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub handle: HandleMutex,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub driver: ArcDriver,
-    pub variant: String,
-    pub serial: String,
-    pub usb_version: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub max_adc_value: i16,
-    pub channel_ranges: HashMap<PicoChannel, Vec<PicoRange>>,
-}
-
-impl Debug for PicoDevice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.debug_struct("PicoDevice")
-            .field("variant", &self.variant)
-            .field("serial", &self.serial)
-            .finish()
-    }
-}
-
-impl Display for PicoDevice {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.variant, self.serial)
-    }
+/// An open device from any supported instrument family
+#[derive(Clone, Debug)]
+pub enum PicoDevice {
+    DrDAQ(drdaq::DrDAQDevice),
+    Oscilloscope(oscilloscope::OscilloscopeDevice),
+    PicoHRDL(hrdl::HRDLDevice),
+    PL1000(pl1000::PL1000Device),
+    PLCM3(cm3::PLCM3Device),
+    PT104(pt104::PT104Device),
+    TC08(tc08::TC08Device),
 }
 
 impl PicoDevice {
-    /// Creates a PicoDevice with the supplied `PicoDriver` and serial string.
-    /// If `None` is passed for the serial, the first discovered device will be
-    /// opened.
-    /// ```no_run
-    /// use pico_common::Driver;
-    /// use pico_driver::LibraryResolution;
-    /// use pico_device::PicoDevice;
-    ///
-    /// // Load the required driver with a specific resolution
-    /// let driver = LibraryResolution::Default.try_load(Driver::PS2000).unwrap();
-    /// let device1 = PicoDevice::try_open(&driver, Some("ABC/123")).unwrap();
-    /// let device2 = PicoDevice::try_open(&driver, Some("ABC/987")).unwrap();
-    ///
-    /// assert_eq!(device1.variant, "2204A");
-    /// assert_eq!(device2.variant, "2205A");
-    /// ```
-    pub fn try_open(driver: &Arc<dyn PicoDriver>, serial: Option<&str>) -> PicoResult<PicoDevice> {
-        let handle = driver.open_unit(serial)?;
-
-        let serial = match serial {
-            Some(s) => s.to_string(),
-            None => driver.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?,
-        };
-
-        let variant = driver.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-        let usb_version = driver.get_unit_info(handle, PicoInfo::USB_VERSION)?;
-
-        // Get the second letter of the device variant to get the number of channels
-        let ch_count = variant[1..2]
-            .parse::<i32>()
-            .expect("Could not parse device variant for number of channels");
-
-        let channel_ranges = (0..ch_count)
-            .flat_map(|ch| -> PicoResult<(PicoChannel, Vec<_>)> {
-                let ch: PicoChannel = ch.into();
-                Ok((ch, driver.get_channel_ranges(handle, ch)?))
-            })
-            .collect();
-
-        let max_adc_value = driver.maximum_value(handle)?;
-
-        Ok(PicoDevice {
-            handle: Arc::new(Mutex::new(Some(handle))),
-            driver: driver.clone(),
-            serial,
-            variant,
-            usb_version,
-            max_adc_value,
-            channel_ranges,
-        })
+    pub fn get_serial(&self) -> &str {
+        match self {
+            PicoDevice::DrDAQ(device) => &device.serial,
+            PicoDevice::Oscilloscope(device) => &device.serial,
+            PicoDevice::PicoHRDL(device) => &device.serial,
+            PicoDevice::PL1000(device) => &device.serial,
+            PicoDevice::PLCM3(device) => &device.serial,
+            PicoDevice::PT104(device) => &device.serial,
+            PicoDevice::TC08(device) => &device.serial,
+        }
     }
 
-    pub fn get_channels(&self) -> Vec<PicoChannel> {
-        self.channel_ranges.keys().copied().collect()
+    /// The model string, for families that report one
+    ///
+    /// Oscilloscopes report a variant like `5244D`. The data loggers have no equivalent, so this
+    /// is `None` for all of them (matches the TC-08).
+    pub fn get_variant(&self) -> Option<&str> {
+        match self {
+            PicoDevice::Oscilloscope(device) => Some(&device.variant),
+            PicoDevice::DrDAQ(_)
+            | PicoDevice::PicoHRDL(_)
+            | PicoDevice::PL1000(_)
+            | PicoDevice::PLCM3(_)
+            | PicoDevice::PT104(_)
+            | PicoDevice::TC08(_) => None,
+        }
     }
 }
 
-impl Drop for PicoDevice {
-    #[tracing::instrument(level = "trace", skip(self))]
-    fn drop(&mut self) {
-        if let Some(handle) = self.handle.lock().take() {
-            let _ = self.driver.close(handle);
+/// Opens a device from a loaded driver
+///
+/// Implemented for each family's driver, and for [`PicoDriver`] to dispatch to the right one.
+pub trait DeviceOpen<D> {
+    fn open_device(&self, serial: Option<&str>) -> PicoResult<D>;
+}
+
+impl DeviceOpen<PicoDevice> for PicoDriver {
+    fn open_device(&self, serial: Option<&str>) -> PicoResult<PicoDevice> {
+        match self {
+            PicoDriver::DrDAQ(driver) => driver.open_device(serial).map(PicoDevice::DrDAQ),
+            PicoDriver::Oscilloscope(driver) => {
+                driver.open_device(serial).map(PicoDevice::Oscilloscope)
+            }
+            PicoDriver::PicoHRDL(driver) => driver.open_device(serial).map(PicoDevice::PicoHRDL),
+            PicoDriver::PL1000(driver) => driver.open_device(serial).map(PicoDevice::PL1000),
+            PicoDriver::PLCM3(driver) => driver.open_device(serial).map(PicoDevice::PLCM3),
+            PicoDriver::PT104(driver) => driver.open_device(serial).map(PicoDevice::PT104),
+            PicoDriver::TC08(driver) => driver.open_device(serial).map(PicoDevice::TC08),
         }
     }
 }
