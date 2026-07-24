@@ -88,8 +88,7 @@ fn main() -> Result<()> {
 
     let streaming_device = device.into_streaming_device();
 
-    let capture_stats: Arc<dyn EventHandler<OscilloscopeStreamEvent>> =
-        CaptureStats::new(ch_units);
+    let capture_stats: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = CaptureStats::new(ch_units);
     streaming_device.events.subscribe(&capture_stats);
 
     println!("Press Enter to stop streaming");

@@ -23,6 +23,8 @@ pub enum Driver {
     PL1000,
     /// USB TC-08 thermocouple data logger
     TC08,
+    /// ADC-20/ADC-24 high-resolution data logger
+    PicoHRDL,
     /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
     PicoIPP,
 }
@@ -49,6 +51,7 @@ impl FromStr for Driver {
             "OSPA" => Ok(Driver::PSOSPA),
             "PL1000" => Ok(Driver::PL1000),
             "TC08" => Ok(Driver::TC08),
+            "HRDL" | "PICOHRDL" => Ok(Driver::PicoHRDL),
             _ => Err(ParseError),
         }
     }
@@ -81,6 +84,7 @@ impl Driver {
             0x1020 => Some(Driver::PSOSPA),
             0x1000 => Some(Driver::TC08),
             0x100C => Some(Driver::PL1000),
+            0x1003 => Some(Driver::PicoHRDL),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None
@@ -103,7 +107,7 @@ impl Driver {
             | Driver::PS6000
             | Driver::PS6000A
             | Driver::PSOSPA => true,
-            Driver::PL1000 | Driver::TC08 | Driver::PicoIPP => false,
+            Driver::PL1000 | Driver::TC08 | Driver::PicoHRDL | Driver::PicoIPP => false,
         }
     }
 
@@ -176,6 +180,9 @@ mod tests {
         assert_eq!(Driver::from_str("PL1000"), Ok(Driver::PL1000));
         assert_eq!(Driver::from_str("usbtc08"), Ok(Driver::TC08));
         assert_eq!(Driver::from_str("TC-08"), Ok(Driver::TC08));
+        assert_eq!(Driver::from_str("hrdl"), Ok(Driver::PicoHRDL));
+        assert_eq!(Driver::from_str("picohrdl"), Ok(Driver::PicoHRDL));
+        assert_eq!(Driver::from_str("PicoHRDL"), Ok(Driver::PicoHRDL));
         assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
     }
 
@@ -190,11 +197,19 @@ mod tests {
     }
 
     #[test]
+    fn picohrdl_binary_is_named_picohrdl() {
+        // Unlike TC08, PicoHRDL's on-disk lib base has no `usb` prefix.
+        assert!(Driver::PicoHRDL.get_binary_name().contains("picohrdl"));
+        assert!(!Driver::PicoHRDL.get_binary_name().contains("usbpicohrdl"));
+    }
+
+    #[test]
     fn every_driver_is_classified_as_scope_or_not() {
         // `is_scope` is an exhaustive match, so this is really a compile-time guarantee. The
         // assertions pin the two families so a mis-sorted new variant shows up as a test failure.
         assert!(Driver::PSOSPA.is_scope());
         assert!(!Driver::TC08.is_scope());
         assert!(!Driver::PL1000.is_scope());
+        assert!(!Driver::PicoHRDL.is_scope());
     }
 }

@@ -74,11 +74,14 @@ impl DriverLoad for Driver {
                 PicoDriver::Oscilloscope(Scope::new(oscilloscope::PSOSPADriver::new(path)?))
             }
             Driver::TC08 => PicoDriver::TC08(TC08Driver::new(path)?),
+            Driver::PicoHRDL => {
+                panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
+            }
             Driver::PicoIPP => {
                 panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
             }
             Driver::PL1000 => {
-                panic!("{self} does not yet have a safe wrapper in the pico-driver crate")
+                panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
             }
         })
     }
