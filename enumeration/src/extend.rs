@@ -17,9 +17,17 @@ pub trait EnumerateDriver<D> {
 }
 
 impl EnumerateDriver<DrDAQDevice> for DrDAQDriver {
-    /// Stub: real enumeration/open behavior lands with the DrDAQ driver implementation.
+    /// Like the TC-08, the DrDAQ has no enumerate call and reports no serial until a unit is open,
+    /// so discovery means opening every connected unit in turn.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<DrDAQDevice>>> {
-        todo!("DrDAQDriver::enumerate_devices")
+        Ok(self
+            .open_unit_iter()
+            .map(|result| {
+                let handle = result?;
+                let info = self.get_unit_info(handle)?;
+                Ok(DrDAQDevice::new_closed(self, info.serial.clone(), Some(info)))
+            })
+            .collect())
     }
 }
 
@@ -40,30 +48,64 @@ impl EnumerateDriver<OscilloscopeDevice> for OscilloscopeDriver {
 }
 
 impl EnumerateDriver<HRDLDevice> for HRDLDriver {
-    /// Stub: real enumeration/open behavior lands with the PicoHRDL driver implementation.
+    /// Like the TC-08, the HRDL has no enumerate call and reports no serial until a unit is open,
+    /// so discovery means opening every connected unit in turn.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<HRDLDevice>>> {
-        todo!("HRDLDriver::enumerate_devices")
+        Ok(self
+            .open_unit_iter()
+            .map(|result| {
+                let handle = result?;
+                let info = self.get_unit_info(handle)?;
+                Ok(HRDLDevice::new_closed(self, info.serial.clone(), Some(info)))
+            })
+            .collect())
     }
 }
 
 impl EnumerateDriver<PL1000Device> for PL1000Driver {
-    /// Stub: real enumeration/open behavior lands with the PL1000 driver implementation.
+    /// Like the TC-08, the PL1000 has no enumerate call and reports no serial until a unit is
+    /// open, so discovery means opening every connected unit in turn.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<PL1000Device>>> {
-        todo!("PL1000Driver::enumerate_devices")
+        Ok(self
+            .open_unit_iter()
+            .map(|result| {
+                let handle = result?;
+                let info = self.get_unit_info(handle)?;
+                Ok(PL1000Device::new_closed(self, info.serial.clone(), Some(info)))
+            })
+            .collect())
     }
 }
 
 impl EnumerateDriver<PLCM3Device> for PLCM3Driver {
-    /// Stub: real enumeration/open behavior lands with the PLCM3 driver implementation.
+    /// The CM3 opens by serial filter directly, but a null-serial open still opens the next
+    /// unopened unit, so discovery uses the same open-every-unit loop as the other loggers.
+    /// (See [`pico_driver::cm3::PLCM3DriverInternal::open_unit_iter`]'s note on the assumed
+    /// repeated-null-open semantics -- to confirm on hardware.)
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<PLCM3Device>>> {
-        todo!("PLCM3Driver::enumerate_devices")
+        Ok(self
+            .open_unit_iter()
+            .map(|result| {
+                let handle = result?;
+                let info = self.get_unit_info(handle)?;
+                Ok(PLCM3Device::new_closed(self, info.serial.clone(), Some(info)))
+            })
+            .collect())
     }
 }
 
 impl EnumerateDriver<PT104Device> for PT104Driver {
-    /// Stub: real enumeration/open behavior lands with the PT-104 driver implementation.
+    /// Like the TC-08, the PT-104 (over USB) has no enumerate call and reports no serial until a
+    /// unit is open, so discovery means opening every connected unit in turn.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<PT104Device>>> {
-        todo!("PT104Driver::enumerate_devices")
+        Ok(self
+            .open_unit_iter()
+            .map(|result| {
+                let handle = result?;
+                let info = self.get_unit_info(handle)?;
+                Ok(PT104Device::new_closed(self, info.serial.clone(), Some(info)))
+            })
+            .collect())
     }
 }
 

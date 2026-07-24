@@ -21,7 +21,7 @@ use pico_common::{
     PLCM3Channel, PLCM3DataType, PLCM3Info, ToPicoStr,
 };
 use pico_sys_dynamic::plcm3::PLCM3Loader;
-use std::{fmt, ops::Deref, path::Path, sync::Arc};
+use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
 
 pub struct PLCM3DriverInternal {
     bindings: PLCM3Loader,
@@ -73,6 +73,38 @@ impl PLCM3DriverInternal {
             }
             status => Err(PicoError::from_status(status, "open_unit")),
         }
+    }
+
+    /// Opens the next connected unit that is not already open, for enumeration.
+    ///
+    /// `PLCM3OpenUnit` with a null serial opens the next unopened unit, reporting a non-positive
+    /// handle / `NOT_FOUND` once none remain -- the same open-next convention the other USB
+    /// loggers use (TC-08, PT-104). NB: assumed consistent with the family (the PicoLog 6
+    /// reference only ever opens one CM3); confirm on hardware that a repeated null open does not
+    /// re-return an already-open unit, which would make [`Self::open_unit_iter`] loop.
+    fn open_next_unit(&self) -> Result<i16, PicoStatus> {
+        let mut handle: i16 = 0;
+        let status =
+            unsafe { self.bindings.PLCM3OpenUnit(&mut handle as *mut i16, std::ptr::null_mut()) };
+
+        match PicoStatus::from(status) {
+            PicoStatus::OK if handle > 0 => Ok(handle),
+            PicoStatus::OK | PicoStatus::NOT_FOUND | PicoStatus::NOT_RESPONDING => {
+                Err(PicoStatus::NOT_FOUND)
+            }
+            other => Err(other),
+        }
+    }
+
+    /// Iterates every connected unit, opening each one.
+    ///
+    /// The caller owns every handle this yields and must close the ones it does not keep.
+    pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
+        iter::from_fn(|| match self.open_next_unit() {
+            Ok(handle) => Some(Ok(handle)),
+            Err(PicoStatus::NOT_FOUND) => None,
+            Err(status) => Some(Err(PicoError::from_status(status, "open_next_unit"))),
+        })
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
