@@ -12,6 +12,7 @@ use crate::ParseError;
 /// `Ord` follows the driver's channel numbering, so iterating an ordered collection keyed by this
 /// gives cold junction first and then channels 1 to 8.
 #[allow(non_camel_case_types)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum TC08Channel {
     CHANNEL_CJC = 0,
@@ -62,6 +63,7 @@ impl FromStr for TC08Channel {
 }
 
 /// Thermocouple types supported by the TC-08
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum TCType {
     B,
@@ -119,6 +121,7 @@ impl FromStr for TCType {
 }
 
 /// Mains frequency to reject when filtering samples
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum MainsRejectionFreq {
     #[default]
@@ -150,6 +153,11 @@ impl FromStr for MainsRejectionFreq {
 }
 
 /// What was discovered about a TC-08 once it was opened
+///
+/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
+/// unit handle), not configuration or a capability. Every other field is already trivially
+/// serializable (`String`/`i16`), so a consumer that wants to ship the capability data over the
+/// wire can do so from those fields directly without this type needing to derive serde itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TC08Info {
     pub handle: Arc<i16>,
