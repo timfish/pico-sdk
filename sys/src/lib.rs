@@ -13,6 +13,7 @@
 //! let handle = unsafe { ps2000.ps2000_open_unit() };
 //! ```
 
+pub mod picohrdl;
 pub mod ps2000;
 pub mod ps2000a;
 pub mod ps3000;
@@ -25,3 +26,20 @@ pub mod ps6000;
 pub mod ps6000a;
 pub mod psospa;
 pub mod tc08;
+
+#[cfg(test)]
+mod tests {
+    /// Proves the generated `picohrdl` module compiles and exports its constants/loader type. No
+    /// library is loaded - there's no hardware/driver binary on the test machine - this just
+    /// checks the bindings themselves are well-formed.
+    #[test]
+    fn picohrdl_module_exports_expected_items() {
+        use crate::picohrdl::{HRDLLoader, HRDL_MAX_PICO_UNITS, HRDL_MAX_UNITS};
+
+        assert_eq!(HRDL_MAX_PICO_UNITS, 64);
+        assert_eq!(HRDL_MAX_UNITS, 20);
+
+        // Referencing the loader type proves it's exported with the expected shape.
+        assert!(std::mem::size_of::<HRDLLoader>() > 0);
+    }
+}
