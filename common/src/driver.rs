@@ -80,6 +80,7 @@ impl Driver {
             0x1215 | 0x1216 | 0x12A0 | 0x12A1 => Some(Driver::PS6000A),
             0x1020 => Some(Driver::PSOSPA),
             0x1000 => Some(Driver::TC08),
+            0x1015 => Some(Driver::PLCM3),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None
@@ -181,6 +182,13 @@ mod tests {
     #[test]
     fn tc08_binary_is_named_usbtc08() {
         assert!(Driver::TC08.get_binary_name().contains("usbtc08"));
+    }
+
+    #[test]
+    fn resolves_logger_usb_pids() {
+        assert_eq!(Driver::from_pid(0x1000), Some(Driver::TC08));
+        assert_eq!(Driver::from_pid(0x1015), Some(Driver::PLCM3));
+        assert_eq!(Driver::from_pid(0xDEAD), None);
     }
 
     #[test]
