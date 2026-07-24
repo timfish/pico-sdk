@@ -14,6 +14,7 @@ use crate::ParseError;
 /// `Ord` follows the driver's channel numbering so iterating an ordered collection keyed by this
 /// enum gives channels in numeric order.
 #[allow(non_camel_case_types)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum PL1000Channel {
     CHANNEL_1 = 1,
@@ -89,6 +90,11 @@ impl FromStr for PL1000Channel {
 /// varies by variant (e.g. PL1012 is 0-2.5V), and the variant is not enumerable from published
 /// docs alone. Rather than hard code voltage scaling per variant, callers scale `max_value`
 /// against whatever full-scale voltage they know for the reported `variant`.
+///
+/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
+/// unit handle), not configuration or a capability. Every other field is already trivially
+/// serializable (`String`/`u16`), so a consumer that wants to ship the capability data over the
+/// wire can do so from those fields directly without this type needing to derive serde itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PL1000Info {
     pub handle: Arc<i16>,
