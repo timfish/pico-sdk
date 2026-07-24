@@ -12,6 +12,7 @@
 
 mod cm3;
 mod config;
+mod drdaq;
 mod driver;
 mod enums;
 mod error;
@@ -24,6 +25,7 @@ mod utils;
 
 pub use cm3::*;
 pub use config::*;
+pub use drdaq::*;
 pub use driver::*;
 pub use enums::*;
 pub use error::*;
