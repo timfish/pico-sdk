@@ -27,6 +27,8 @@ pub enum Driver {
     TC08,
     /// ADC-20/ADC-24 high-resolution data logger
     PicoHRDL,
+    /// USB DrDAQ educational data logger
+    DrDAQ,
     /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
     PicoIPP,
 }
@@ -55,6 +57,7 @@ impl FromStr for Driver {
             "PLCM3" => Ok(Driver::PLCM3),
             "TC08" => Ok(Driver::TC08),
             "HRDL" | "PICOHRDL" => Ok(Driver::PicoHRDL),
+            "DRDAQ" => Ok(Driver::DrDAQ),
             _ => Err(ParseError),
         }
     }
@@ -67,6 +70,8 @@ impl fmt::Display for Driver {
         match self {
             // The TC-08 driver binary is `usbtc08`, not `tc08`
             Driver::TC08 => write!(f, "usb{}", name),
+            // The DrDAQ driver binary is `usbdrdaq`, not `drdaq`
+            Driver::DrDAQ => write!(f, "usb{}", name),
             _ => write!(f, "{}", name),
         }
     }
@@ -89,6 +94,7 @@ impl Driver {
             0x100C => Some(Driver::PL1000),
             0x1003 => Some(Driver::PicoHRDL),
             0x1015 => Some(Driver::PLCM3),
+            0x1014 => Some(Driver::DrDAQ),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None
@@ -111,7 +117,7 @@ impl Driver {
             | Driver::PS6000
             | Driver::PS6000A
             | Driver::PSOSPA => true,
-            Driver::PL1000 | Driver::PLCM3 | Driver::TC08 | Driver::PicoHRDL | Driver::PicoIPP => false,
+            Driver::PL1000 | Driver::PLCM3 | Driver::TC08 | Driver::PicoHRDL | Driver::DrDAQ | Driver::PicoIPP => false,
         }
     }
 
@@ -189,6 +195,8 @@ mod tests {
         assert_eq!(Driver::from_str("PicoHRDL"), Ok(Driver::PicoHRDL));
         assert_eq!(Driver::from_str("plcm3"), Ok(Driver::PLCM3));
         assert_eq!(Driver::from_str("PLCM3"), Ok(Driver::PLCM3));
+        assert_eq!(Driver::from_str("drdaq"), Ok(Driver::DrDAQ));
+        assert_eq!(Driver::from_str("usbdrdaq"), Ok(Driver::DrDAQ));
         assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
     }
 
@@ -210,11 +218,17 @@ mod tests {
     }
 
     #[test]
+    fn drdaq_binary_is_named_usbdrdaq() {
+        assert!(Driver::DrDAQ.get_binary_name().contains("usbdrdaq"));
+    }
+
+    #[test]
     fn resolves_logger_usb_pids() {
         assert_eq!(Driver::from_pid(0x1000), Some(Driver::TC08));
         assert_eq!(Driver::from_pid(0x100C), Some(Driver::PL1000));
         assert_eq!(Driver::from_pid(0x1003), Some(Driver::PicoHRDL));
         assert_eq!(Driver::from_pid(0x1015), Some(Driver::PLCM3));
+        assert_eq!(Driver::from_pid(0x1014), Some(Driver::DrDAQ));
         assert_eq!(Driver::from_pid(0xDEAD), None);
     }
 
@@ -227,5 +241,6 @@ mod tests {
         assert!(!Driver::PL1000.is_scope());
         assert!(!Driver::PicoHRDL.is_scope());
         assert!(!Driver::PLCM3.is_scope());
+        assert!(!Driver::DrDAQ.is_scope());
     }
 }

@@ -291,6 +291,7 @@ fn driver_for(lib: &str) -> Option<Driver> {
         "ps6000" => Driver::PS6000,
         "ps6000a" => Driver::PS6000A,
         "psospa" => Driver::PSOSPA,
+        "usbdrdaq" => Driver::DrDAQ,
         "usbtc08" => Driver::TC08,
         "picoipp" => Driver::PicoIPP,
         _ => return None,

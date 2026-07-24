@@ -13,6 +13,7 @@
 //! let handle = unsafe { ps2000.ps2000_open_unit() };
 //! ```
 
+pub mod drdaq;
 pub mod picohrdl;
 pub mod pl1000;
 pub mod plcm3;
@@ -58,5 +59,18 @@ mod tests {
         // load a real driver here since none is guaranteed to be present in CI.
         fn _type_check(_: fn(::libloading::Library) -> Result<PL1000Loader, ::libloading::Error>) {}
         _type_check(|lib| unsafe { PL1000Loader::from_library(lib) });
+    }
+
+    /// Proves the generated `drdaq` module compiles and exports both constants and the loader
+    /// type, without needing hardware or a loadable driver binary.
+    #[test]
+    fn drdaq_module_exports_constants_and_loader() {
+        use crate::drdaq::{
+            enUsbDrDaqInputs_USB_DRDAQ_MAX_CHANNELS, DrDAQLoader, USB_DRDAQ_MAX_AWG_VALUE,
+        };
+
+        assert_eq!(USB_DRDAQ_MAX_AWG_VALUE, 1000);
+        assert_eq!(enUsbDrDaqInputs_USB_DRDAQ_MAX_CHANNELS, 10);
+        assert!(std::mem::size_of::<DrDAQLoader>() > 0);
     }
 }
