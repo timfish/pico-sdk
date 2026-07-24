@@ -1,6 +1,6 @@
 use crate::{
-    cm3::PLCM3Driver, drdaq::DrDAQDriver, oscilloscope, pl1000::PL1000Driver, pt104::PT104Driver,
-    tc08::TC08Driver, DriverLoadError, PicoDriver,
+    cm3::PLCM3Driver, drdaq::DrDAQDriver, hrdl::HRDLDriver, oscilloscope, pl1000::PL1000Driver,
+    pt104::PT104Driver, tc08::TC08Driver, DriverLoadError, PicoDriver,
 };
 use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf};
@@ -78,9 +78,7 @@ impl DriverLoad for Driver {
             }
             Driver::TC08 => PicoDriver::TC08(TC08Driver::new(path)?),
             Driver::PT104 => PicoDriver::PT104(PT104Driver::new(path)?),
-            Driver::PicoHRDL => {
-                panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
-            }
+            Driver::PicoHRDL => PicoDriver::PicoHRDL(HRDLDriver::new(path)?),
             Driver::PLCM3 => PicoDriver::PLCM3(PLCM3Driver::new(path)?),
             Driver::DrDAQ => PicoDriver::DrDAQ(DrDAQDriver::new(path)?),
             Driver::PicoIPP => {
