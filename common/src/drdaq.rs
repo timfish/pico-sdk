@@ -10,6 +10,7 @@ use crate::ParseError;
 /// one is a specific onboard (or external probe) sensor. `Ord` follows the driver's channel
 /// numbering.
 #[allow(non_camel_case_types)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum DrDAQChannel {
     /// External probe input 1
@@ -93,6 +94,11 @@ pub struct DrDAQChannelInfo {
 }
 
 /// What was discovered about a USB DrDAQ unit once it was opened
+///
+/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
+/// unit handle), not configuration or a capability. Every other field is already trivially
+/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
+/// can do so from those fields directly without this type needing to derive serde itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DrDAQInfo {
     pub handle: Arc<i16>,

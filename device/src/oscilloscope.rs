@@ -6,6 +6,7 @@ use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
 
 /// Everything an oscilloscope needs to start streaming
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct OscilloscopeConfig {
     pub samples_per_second: u32,
@@ -36,6 +37,13 @@ impl OscilloscopeConfig {
 /// What was discovered about a device once it was opened
 ///
 /// Only available while the device is open, since every field has to be read from the driver.
+///
+/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
+/// unit handle), not a capability. The other fields (`usb_version`, `max_adc_value`,
+/// `valid_channel_ranges`) are already trivially serializable on their own (`String`, `i16`, and
+/// a map of `PicoChannel` to `Vec<PicoRange>`, both of which derive serde) — a consumer wanting
+/// to ship capability data over the wire can build that from these fields without this type
+/// needing to derive serde itself.
 #[derive(Debug, Clone)]
 pub struct OscilloscopeInfo {
     pub handle: Arc<i16>,
@@ -139,5 +147,68 @@ impl DeviceOpen<OscilloscopeDevice> for OscilloscopeDriver {
             variant,
             info: Some(info),
         })
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use super::*;
+
+    /// One channel enabled (`A`, present in the map with real settings), one implicitly disabled
+    /// (`B`, simply absent) — `OscilloscopeConfig` has no explicit `enabled` flag, so presence in
+    /// the map *is* the enabled/disabled signal.
+    fn sample_config() -> OscilloscopeConfig {
+        let mut channels = HashMap::new();
+        channels.insert(
+            PicoChannel::A,
+            OscilloscopeChannelConfig {
+                coupling: PicoCoupling::DC,
+                range: PicoRange::X1_PROBE_5V,
+                offset: 0.25,
+            },
+        );
+
+        OscilloscopeConfig {
+            samples_per_second: 1_000_000,
+            channels,
+        }
+    }
+
+    /// Pins the wire field names / enum tag spellings for `OscilloscopeConfig` and everything it
+    /// embeds (`PicoChannel`, `OscilloscopeChannelConfig`, `PicoCoupling`, `PicoRange`). A rename
+    /// anywhere in that chain should fail this test loudly rather than silently break consumers.
+    const GOLDEN: &str = r#"{"samples_per_second":1000000,"channels":{"A":{"coupling":"DC","range":"X1_PROBE_5V","offset":0.25}}}"#;
+
+    #[test]
+    fn oscilloscope_config_round_trips_and_pins_field_names() {
+        let config = sample_config();
+
+        let serialized = serde_json::to_string(&config).expect("serialize");
+        assert_eq!(serialized, GOLDEN, "OscilloscopeConfig wire shape changed");
+
+        let deserialized: OscilloscopeConfig =
+            serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
+
+        assert_eq!(deserialized.samples_per_second, config.samples_per_second);
+        assert_eq!(deserialized.channels.len(), config.channels.len());
+
+        let original = &config.channels[&PicoChannel::A];
+        let round_tripped = &deserialized.channels[&PicoChannel::A];
+        assert_eq!(round_tripped.coupling, original.coupling);
+        assert_eq!(round_tripped.range, original.range);
+        assert_eq!(round_tripped.offset, original.offset);
+
+        // Channel B was never inserted, so it must not appear on either side.
+        assert!(!deserialized.channels.contains_key(&PicoChannel::B));
+    }
+
+    /// An unknown field in an incoming snapshot must not break deserialization — forward
+    /// compatibility for additive changes made on newer writers.
+    #[test]
+    fn oscilloscope_config_tolerates_unknown_fields() {
+        let json = r#"{"samples_per_second":5000,"channels":{},"future_field":"ignored"}"#;
+        let config: OscilloscopeConfig = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(config.samples_per_second, 5000);
+        assert!(config.channels.is_empty());
     }
 }

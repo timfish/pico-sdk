@@ -11,6 +11,7 @@ use crate::ParseError;
 /// `Ord` follows the driver's channel numbering so iterating an ordered
 /// collection keyed by this enum gives channels in numeric order.
 #[allow(non_camel_case_types)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum PT104Channel {
     CHANNEL_1 = 1,
@@ -56,6 +57,7 @@ impl FromStr for PT104Channel {
 }
 
 /// Sensor types that can be connected to PT-104 channels
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum PT104DataType {
     /// Channel disabled
@@ -138,6 +140,7 @@ impl FromStr for PT104DataType {
 /// The PT-104 supports both 2-wire, 3-wire, and 4-wire configurations
 /// for platinum resistance thermometers. 2-wire is the least accurate,
 /// 4-wire is the most accurate.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum PT104Wires {
     TwoWire = 2,
@@ -164,6 +167,11 @@ impl fmt::Display for PT104Wires {
 
 
 /// What was discovered about a PT-104 once it was opened
+///
+/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
+/// unit handle), not configuration or a capability. Every other field is already trivially
+/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
+/// can do so from those fields directly without this type needing to derive serde itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PT104Info {
     pub handle: Arc<i16>,
