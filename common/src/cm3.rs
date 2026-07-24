@@ -11,6 +11,7 @@ use crate::ParseError;
 /// `Ord` follows the driver's channel numbering so iterating an ordered collection keyed by this
 /// enum gives channels in numeric order.
 #[allow(non_camel_case_types)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum PLCM3Channel {
     CHANNEL_1 = 1,
@@ -50,6 +51,7 @@ impl FromStr for PLCM3Channel {
 /// The CM3 reads current clamps that output a proportional millivolt signal, or a channel can be
 /// set to read voltage directly. There is no separate "wires" setting like the PT-104 - a channel
 /// is off, one of the three clamp scalings, or a raw voltage input.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum PLCM3DataType {
     /// Channel disabled
@@ -108,6 +110,11 @@ impl FromStr for PLCM3DataType {
 }
 
 /// What was discovered about a PicoLog CM3 unit once it was opened
+///
+/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
+/// unit handle), not configuration or a capability. Every other field is already trivially
+/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
+/// can do so from those fields directly without this type needing to derive serde itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PLCM3Info {
     pub handle: Arc<i16>,
