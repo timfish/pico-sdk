@@ -80,6 +80,7 @@ impl Driver {
             0x1215 | 0x1216 | 0x12A0 | 0x12A1 => Some(Driver::PS6000A),
             0x1020 => Some(Driver::PSOSPA),
             0x1000 => Some(Driver::TC08),
+            0x1003 => Some(Driver::PicoHRDL),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None
