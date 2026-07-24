@@ -1,4 +1,7 @@
-use crate::{oscilloscope, pt104::PT104Driver, tc08::TC08Driver, DriverLoadError, PicoDriver};
+use crate::{
+    oscilloscope, pl1000::PL1000Driver, pt104::PT104Driver, tc08::TC08Driver, DriverLoadError,
+    PicoDriver,
+};
 use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf};
 
@@ -87,9 +90,7 @@ impl DriverLoad for Driver {
             Driver::PicoIPP => {
                 panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
             }
-            Driver::PL1000 => {
-                panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
-            }
+            Driver::PL1000 => PicoDriver::PL1000(PL1000Driver::new(path)?),
         })
     }
 }
