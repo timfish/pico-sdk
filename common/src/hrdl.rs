@@ -13,6 +13,7 @@ use crate::{PicoError, PicoResult, PicoStatus};
 /// `Ord` follows the driver's channel numbering so iterating an ordered collection keyed by this
 /// enum gives channels in numeric order.
 #[allow(non_camel_case_types)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum HRDLChannel {
     CHANNEL_1 = 1,
@@ -74,6 +75,7 @@ impl FromStr for HRDLChannel {
 }
 
 /// Input voltage range for a [`HRDLChannel`]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum HRDLRange {
     #[default]
@@ -138,6 +140,7 @@ impl FromStr for HRDLRange {
 ///
 /// Slower conversion times reject more noise but limit how many channels can be sampled within a
 /// given sample interval - `HRDLSetInterval` takes one of these for the whole unit.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum HRDLConversionTime {
     #[default]
@@ -174,6 +177,11 @@ impl fmt::Display for HRDLConversionTime {
 }
 
 /// What was discovered about a PicoHRDL unit once it was opened
+///
+/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
+/// unit handle), not configuration or a capability. Every other field is already trivially
+/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
+/// can do so from those fields directly without this type needing to derive serde itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HRDLInfo {
     pub handle: Arc<i16>,
