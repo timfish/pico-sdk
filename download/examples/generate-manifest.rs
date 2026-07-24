@@ -281,6 +281,7 @@ fn driver_for(lib: &str) -> Option<Driver> {
     Some(match lib {
         "pl1000" => Driver::PL1000,
         "picohrdl" => Driver::PicoHRDL,
+        "plcm3" => Driver::PLCM3,
         "ps2000" => Driver::PS2000,
         "ps2000a" => Driver::PS2000A,
         "ps3000a" => Driver::PS3000A,

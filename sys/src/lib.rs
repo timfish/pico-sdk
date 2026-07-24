@@ -15,6 +15,7 @@
 
 pub mod picohrdl;
 pub mod pl1000;
+pub mod plcm3;
 pub mod ps2000;
 pub mod ps2000a;
 pub mod ps3000;

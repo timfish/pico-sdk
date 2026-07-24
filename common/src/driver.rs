@@ -21,6 +21,8 @@ pub enum Driver {
     PSOSPA,
     /// PicoLog 1000 series data logger
     PL1000,
+    /// PicoLog CM3 current data logger
+    PLCM3,
     /// USB TC-08 thermocouple data logger
     TC08,
     /// ADC-20/ADC-24 high-resolution data logger
@@ -50,6 +52,7 @@ impl FromStr for Driver {
             "6000A" => Ok(Driver::PS6000A),
             "OSPA" => Ok(Driver::PSOSPA),
             "PL1000" => Ok(Driver::PL1000),
+            "PLCM3" => Ok(Driver::PLCM3),
             "TC08" => Ok(Driver::TC08),
             "HRDL" | "PICOHRDL" => Ok(Driver::PicoHRDL),
             _ => Err(ParseError),
@@ -85,6 +88,7 @@ impl Driver {
             0x1000 => Some(Driver::TC08),
             0x100C => Some(Driver::PL1000),
             0x1003 => Some(Driver::PicoHRDL),
+            0x1015 => Some(Driver::PLCM3),
             u => {
                 tracing::warn!("Unsupported Pico Product ID found: {:#X}", u);
                 None
@@ -107,7 +111,7 @@ impl Driver {
             | Driver::PS6000
             | Driver::PS6000A
             | Driver::PSOSPA => true,
-            Driver::PL1000 | Driver::TC08 | Driver::PicoHRDL | Driver::PicoIPP => false,
+            Driver::PL1000 | Driver::PLCM3 | Driver::TC08 | Driver::PicoHRDL | Driver::PicoIPP => false,
         }
     }
 
@@ -183,6 +187,8 @@ mod tests {
         assert_eq!(Driver::from_str("hrdl"), Ok(Driver::PicoHRDL));
         assert_eq!(Driver::from_str("picohrdl"), Ok(Driver::PicoHRDL));
         assert_eq!(Driver::from_str("PicoHRDL"), Ok(Driver::PicoHRDL));
+        assert_eq!(Driver::from_str("plcm3"), Ok(Driver::PLCM3));
+        assert_eq!(Driver::from_str("PLCM3"), Ok(Driver::PLCM3));
         assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
     }
 
@@ -204,6 +210,15 @@ mod tests {
     }
 
     #[test]
+    fn resolves_logger_usb_pids() {
+        assert_eq!(Driver::from_pid(0x1000), Some(Driver::TC08));
+        assert_eq!(Driver::from_pid(0x100C), Some(Driver::PL1000));
+        assert_eq!(Driver::from_pid(0x1003), Some(Driver::PicoHRDL));
+        assert_eq!(Driver::from_pid(0x1015), Some(Driver::PLCM3));
+        assert_eq!(Driver::from_pid(0xDEAD), None);
+    }
+
+    #[test]
     fn every_driver_is_classified_as_scope_or_not() {
         // `is_scope` is an exhaustive match, so this is really a compile-time guarantee. The
         // assertions pin the two families so a mis-sorted new variant shows up as a test failure.
@@ -211,5 +226,6 @@ mod tests {
         assert!(!Driver::TC08.is_scope());
         assert!(!Driver::PL1000.is_scope());
         assert!(!Driver::PicoHRDL.is_scope());
+        assert!(!Driver::PLCM3.is_scope());
     }
 }
