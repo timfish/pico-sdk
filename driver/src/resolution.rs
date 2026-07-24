@@ -83,6 +83,9 @@ impl DriverLoad for Driver {
             Driver::DrDAQ => {
                 panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
             }
+            Driver::PT104 => {
+                panic!("{self} has sys-level bindings but no high-level PicoDriver wrapper yet")
+            }
             Driver::PicoIPP => {
                 panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
             }

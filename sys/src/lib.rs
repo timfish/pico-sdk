@@ -28,6 +28,7 @@ pub mod ps5000a;
 pub mod ps6000;
 pub mod ps6000a;
 pub mod psospa;
+pub mod pt104;
 pub mod tc08;
 
 #[cfg(test)]
@@ -72,5 +73,19 @@ mod tests {
         assert_eq!(USB_DRDAQ_MAX_AWG_VALUE, 1000);
         assert_eq!(enUsbDrDaqInputs_USB_DRDAQ_MAX_CHANNELS, 10);
         assert!(std::mem::size_of::<DrDAQLoader>() > 0);
+    }
+
+    /// Proves the generated `pt104` module compiles and exports its constants and loader type.
+    #[test]
+    fn pt104_module_exports_expected_items() {
+        use crate::pt104::{PT104Loader, USBPT104_MAX_WIRES, USBPT104_MIN_WIRES};
+
+        assert_eq!(USBPT104_MIN_WIRES, 2);
+        assert_eq!(USBPT104_MAX_WIRES, 4);
+
+        // The loader can be constructed with a bogus path; it only touches the filesystem when
+        // asked to actually load a library, which needs real hardware/driver binaries.
+        let result = unsafe { PT104Loader::new("./does-not-exist") };
+        assert!(result.is_err());
     }
 }
