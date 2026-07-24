@@ -19,6 +19,8 @@ pub enum Driver {
     PS6000,
     PS6000A,
     PSOSPA,
+    /// PicoLog CM3 current data logger
+    PLCM3,
     /// USB TC-08 thermocouple data logger
     TC08,
     /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
@@ -45,6 +47,7 @@ impl FromStr for Driver {
             "6000" => Ok(Driver::PS6000),
             "6000A" => Ok(Driver::PS6000A),
             "OSPA" => Ok(Driver::PSOSPA),
+            "PLCM3" => Ok(Driver::PLCM3),
             "TC08" => Ok(Driver::TC08),
             _ => Err(ParseError),
         }
@@ -99,7 +102,7 @@ impl Driver {
             | Driver::PS6000
             | Driver::PS6000A
             | Driver::PSOSPA => true,
-            Driver::TC08 | Driver::PicoIPP => false,
+            Driver::PLCM3 | Driver::TC08 | Driver::PicoIPP => false,
         }
     }
 
@@ -170,6 +173,8 @@ mod tests {
         assert_eq!(Driver::from_str("psospa"), Ok(Driver::PSOSPA));
         assert_eq!(Driver::from_str("usbtc08"), Ok(Driver::TC08));
         assert_eq!(Driver::from_str("TC-08"), Ok(Driver::TC08));
+        assert_eq!(Driver::from_str("plcm3"), Ok(Driver::PLCM3));
+        assert_eq!(Driver::from_str("PLCM3"), Ok(Driver::PLCM3));
         assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
     }
 
@@ -184,5 +189,6 @@ mod tests {
         // assertions pin the two families so a mis-sorted new variant shows up as a test failure.
         assert!(Driver::PSOSPA.is_scope());
         assert!(!Driver::TC08.is_scope());
+        assert!(!Driver::PLCM3.is_scope());
     }
 }

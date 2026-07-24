@@ -13,6 +13,7 @@
 //! let handle = unsafe { ps2000.ps2000_open_unit() };
 //! ```
 
+pub mod plcm3;
 pub mod ps2000;
 pub mod ps2000a;
 pub mod ps3000;

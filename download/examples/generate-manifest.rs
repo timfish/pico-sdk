@@ -279,6 +279,7 @@ fn lib_of(file_name: &str) -> &str {
 /// runtime, so it has to travel with them.
 fn driver_for(lib: &str) -> Option<Driver> {
     Some(match lib {
+        "plcm3" => Driver::PLCM3,
         "ps2000" => Driver::PS2000,
         "ps2000a" => Driver::PS2000A,
         "ps3000a" => Driver::PS3000A,

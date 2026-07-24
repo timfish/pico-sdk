@@ -74,6 +74,12 @@ impl DriverLoad for Driver {
                 PicoDriver::Oscilloscope(Scope::new(oscilloscope::PSOSPADriver::new(path)?))
             }
             Driver::TC08 => PicoDriver::TC08(TC08Driver::new(path)?),
+            Driver::PLCM3 => {
+                // Sys-level bindings only for now (see `pico-sys-dynamic::plcm3`); a safe
+                // high-level `PicoDriver` wrapper for the PLCM3 data logger is not yet
+                // implemented.
+                panic!("{self} does not yet have a high-level driver implementation")
+            }
             Driver::PicoIPP => {
                 panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
             }
