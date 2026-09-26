@@ -466,6 +466,7 @@ impl PicoRange {
     /// Get the maximum scaled value for this range
     pub fn get_max_scaled_value(self) -> f64 {
         match self {
+            PicoRange::X1_PROBE_5MV => 0.005,
             PicoRange::X1_PROBE_10MV => 0.01,
             PicoRange::X1_PROBE_20MV => 0.02,
             PicoRange::X1_PROBE_50MV => 0.05,
@@ -480,6 +481,7 @@ impl PicoRange {
             PicoRange::X1_PROBE_50V => 50.0,
             PicoRange::X1_PROBE_100V => 100.0,
             PicoRange::X1_PROBE_200V => 200.0,
+            PicoRange::X10_PROBE_50MV => 0.05,
             PicoRange::X10_PROBE_100MV => 0.1,
             PicoRange::X10_PROBE_200MV => 0.2,
             PicoRange::X10_PROBE_500MV => 0.5,
