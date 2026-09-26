@@ -1,6 +1,9 @@
 pub type PICO_POINTER = *mut ::std::os::raw::c_void;
 pub type PICO_INFO = u32;
 pub type PICO_STATUS = u32;
+/// Output format for `psospaGetVariantDetails`: 0 is JSON data, 1 its schema.
+pub type PICO_TEXT_FORMAT = u32;
+pub const PICO_TEXT_FORMAT_JSON: PICO_TEXT_FORMAT = 0;
 pub const enPicoStringValue_PICO_SV_MEMORY: enPicoStringValue = 0;
 pub const enPicoStringValue_PICO_SV_MEMORY_NO_OF_SEGMENTS: enPicoStringValue = 1;
 pub const enPicoStringValue_PICO_SV_MEMORY_MAX_SAMPLES: enPicoStringValue = 2;
@@ -864,6 +867,7 @@ pub struct PSOSPALoader {
             variantNameLength: i16,
             outputString: *mut i8,
             outputStringLength: *mut i32,
+            textFormat: PICO_TEXT_FORMAT,
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
@@ -1729,6 +1733,7 @@ impl PSOSPALoader {
         variantNameLength: i16,
         outputString: *mut i8,
         outputStringLength: *mut i32,
+        textFormat: PICO_TEXT_FORMAT,
     ) -> PICO_STATUS {
         (self
             .psospaGetVariantDetails
@@ -1738,6 +1743,7 @@ impl PSOSPALoader {
             variantNameLength,
             outputString,
             outputStringLength,
+            textFormat,
         )
     }
     pub unsafe fn psospaGetAccessoryInfo(

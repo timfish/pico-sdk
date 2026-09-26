@@ -4,19 +4,19 @@ use super::{
 };
 use parking_lot::RwLock;
 use pico_common::{
-    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
+    Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
+    PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
-    enPicoDeviceResolution_PICO_DR_10BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PSOSPALoader,
-    PICO_POINTER, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
+    enPicoDeviceResolution, enPicoDeviceResolution_PICO_DR_8BIT,
+    enPicoRatioMode_PICO_RATIO_MODE_RAW, PSOSPALoader, PICO_POINTER, PICO_STREAMING_DATA_INFO,
+    PICO_STREAMING_DATA_TRIGGER_INFO, PICO_TEXT_FORMAT_JSON,
 };
-use std::{mem::MaybeUninit, sync::Arc};
+use std::{collections::HashMap, mem::MaybeUninit, sync::Arc};
 use tinyjson::JsonValue;
 
-fn parse_device_json(json: &str) -> Vec<PicoRange> {
-    let parsed_json: JsonValue = json.parse().expect("Failed to parse JSON from Pico driver");
+fn parse_device_json(parsed_json: &JsonValue) -> Vec<PicoRange> {
     let range_settings: &Vec<_> = parsed_json["RangeSettings"]
         .get()
         .expect("Failed to parse JSON from Pico driver");
@@ -48,9 +48,33 @@ fn parse_device_json(json: &str) -> Vec<PicoRange> {
     ranges
 }
 
+/// The resolution a variant opens at: its default, else the first it
+/// lists. Models differ, and open fails on one the model lacks.
+fn default_resolution(details: &JsonValue) -> Option<enPicoDeviceResolution> {
+    type Object = HashMap<String, JsonValue>;
+    let details: &Object = details.get()?;
+    let from_defaults = || {
+        let defaults: &Object = details.get("Defaults")?.get()?;
+        defaults.get("VerticalResolution")?.get::<f64>()
+    };
+    let first_listed = || {
+        let listed: &Vec<JsonValue> = details.get("VerticalResolutions")?.get()?;
+        let first: &Object = listed.first()?.get()?;
+        first.get("Resolution")?.get::<f64>()
+    };
+    from_defaults()
+        .or_else(first_listed)
+        .map(|r| *r as enPicoDeviceResolution)
+}
+
 pub struct PSOSPADriver {
     _dependencies: LoadedDependencies,
     bindings: PSOSPALoader,
+    /// The resolution each open handle was opened at. One driver serves
+    /// every unit of the family, and units differ in what they support.
+    resolutions: RwLock<HashMap<i16, enPicoDeviceResolution>>,
+    /// Parsed `psospaGetVariantDetails` output, by variant name.
+    variant_details: RwLock<HashMap<String, Arc<JsonValue>>>,
 }
 
 impl std::fmt::Debug for PSOSPADriver {
@@ -69,7 +93,56 @@ impl PSOSPADriver {
         Ok(PSOSPADriver {
             bindings,
             _dependencies: dependencies,
+            resolutions: RwLock::new(HashMap::new()),
+            variant_details: RwLock::new(HashMap::new()),
         })
+    }
+
+    fn resolution(&self, handle: i16) -> enPicoDeviceResolution {
+        self.resolutions
+            .read()
+            .get(&handle)
+            .copied()
+            .unwrap_or(enPicoDeviceResolution_PICO_DR_8BIT)
+    }
+
+    fn variant_details(&self, variant: &str) -> PicoResult<Arc<JsonValue>> {
+        if let Some(details) = self.variant_details.read().get(variant) {
+            return Ok(details.clone());
+        }
+
+        let variant_buf = variant.into_pico_i8_string();
+        let mut json_buf = vec![0i8; 64 * 1024];
+        loop {
+            let mut json_buf_len = json_buf.len() as i32;
+            let status = PicoStatus::from(unsafe {
+                self.bindings.psospaGetVariantDetails(
+                    variant_buf.as_ptr(),
+                    variant_buf.len() as i16,
+                    json_buf.as_mut_ptr(),
+                    &mut json_buf_len,
+                    PICO_TEXT_FORMAT_JSON,
+                )
+            });
+            match status {
+                PicoStatus::OK => {
+                    let json = json_buf.from_pico_i8_string(json_buf.len());
+                    let details: JsonValue = json.parse().map_err(|_| {
+                        PicoError::from_status(PicoStatus::INVALID_PARAMETER, "get_variant_details")
+                    })?;
+                    let details = Arc::new(details);
+                    self.variant_details
+                        .write()
+                        .insert(variant.to_string(), details.clone());
+                    return Ok(details);
+                }
+                PicoStatus::STRING_BUFFER_TO_SMALL if json_buf.len() < 16 * 1024 * 1024 => {
+                    let wanted = (json_buf_len as usize + 1).max(json_buf.len() * 2);
+                    json_buf = vec![0i8; wanted];
+                }
+                x => return Err(PicoError::from_status(x, "get_variant_details")),
+            }
+        }
     }
 }
 
@@ -116,28 +189,33 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
-        let serial = serial.map(|s| s.into_pico_i8_string());
+        // Open needs a resolution the variant supports, and only the
+        // variant details say which, so find the unit's variant first.
+        let unit = self
+            .enumerate_units()?
+            .into_iter()
+            .find(|u| serial.is_none_or(|s| u.serial == s))
+            .ok_or_else(|| PicoError::from_status(PicoStatus::NOT_FOUND, "open_unit"))?;
+        let details = self.variant_details(&unit.variant)?;
+        let resolution =
+            default_resolution(&details).unwrap_or(enPicoDeviceResolution_PICO_DR_8BIT);
 
+        let mut serial = unit.serial.as_str().into_pico_i8_string();
         let mut handle = -1i16;
         let status = PicoStatus::from(unsafe {
-            match serial {
-                Some(mut serial) => self.bindings.psospaOpenUnit(
-                    &mut handle,
-                    serial.as_mut_ptr(),
-                    enPicoDeviceResolution_PICO_DR_10BIT,
-                    std::ptr::null_mut(),
-                ),
-                None => self.bindings.psospaOpenUnit(
-                    &mut handle,
-                    std::ptr::null_mut(),
-                    enPicoDeviceResolution_PICO_DR_10BIT,
-                    std::ptr::null_mut(),
-                ),
-            }
+            self.bindings.psospaOpenUnit(
+                &mut handle,
+                serial.as_mut_ptr(),
+                resolution,
+                std::ptr::null_mut(),
+            )
         });
 
         match status {
-            PicoStatus::OK => Ok(handle),
+            PicoStatus::OK => {
+                self.resolutions.write().insert(handle, resolution);
+                Ok(handle)
+            }
             x => Err(PicoError::from_status(x, "open_unit")),
         }
     }
@@ -154,7 +232,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         PicoStatus::from(unsafe {
             self.bindings.psospaGetAdcLimits(
                 handle,
-                enPicoDeviceResolution_PICO_DR_10BIT,
+                self.resolution(handle),
                 &mut min_value,
                 &mut max_value,
             )
@@ -164,6 +242,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn close(&self, handle: i16) -> PicoResult<()> {
+        self.resolutions.write().remove(&handle);
         PicoStatus::from(unsafe { self.bindings.psospaCloseUnit(handle) })
             .to_result((), "close_unit")
     }
@@ -192,28 +271,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>> {
         let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-
-        let mut variant_buf = variant.into_pico_i8_string();
-        let mut json_buf = vec![0i8; 20_000];
-        let mut json_buf_len = json_buf.len() as i32;
-
-        let status = PicoStatus::from(unsafe {
-            self.bindings.psospaGetVariantDetails(
-                variant_buf.as_mut_ptr(),
-                variant_buf.len() as i16,
-                json_buf.as_mut_ptr(),
-                &mut json_buf_len,
-            )
-        });
-
-        if status != PicoStatus::OK {
-            return Err(PicoError::from_status(status, "get_channel_ranges"));
-        }
-
-        let json_str = json_buf.from_pico_i8_string((json_buf_len + 1) as usize);
-        let ranges = parse_device_json(&json_str);
-
-        Ok(ranges)
+        Ok(parse_device_json(&*self.variant_details(&variant)?))
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -278,11 +336,14 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     ) -> PicoResult<OscilloscopeSampleConfig> {
         let status = PicoStatus::from(unsafe {
             self.bindings
-                .psospaSetDeviceResolution(handle, enPicoDeviceResolution_PICO_DR_10BIT)
+                .psospaSetDeviceResolution(handle, self.resolution(handle))
         });
 
         if status != PicoStatus::OK {
-            return status.to_result(OscilloscopeSampleConfig::default(), "psospaSetDeviceResolution");
+            return status.to_result(
+                OscilloscopeSampleConfig::default(),
+                "psospaSetDeviceResolution",
+            );
         }
 
         let mut sample_interval = sample_config.interval as f64;
