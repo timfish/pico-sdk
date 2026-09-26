@@ -33,7 +33,8 @@ pub use psospa::PSOSPADriver;
 use crate::DriverLoadError;
 use parking_lot::RwLock;
 use pico_common::{
-    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoInfo, PicoRange, PicoResult, OscilloscopeSampleConfig,
+    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult,
+    PicoStatus, OscilloscopeSampleConfig,
 };
 use std::{fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
@@ -68,6 +69,22 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String>;
     /// Get valid ranges for the specified channel
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>>;
+    /// The resolutions the unit supports, each with its maximum ADC value.
+    /// Empty for a unit whose resolution is fixed.
+    fn get_resolutions(&self, _handle: i16) -> PicoResult<Vec<(PicoResolution, i16)>> {
+        Ok(Vec::new())
+    }
+    /// The resolution the unit is set to, or `None` if it is fixed
+    fn get_resolution(&self, _handle: i16) -> Option<PicoResolution> {
+        None
+    }
+    /// Set the unit's resolution. Takes effect from the next stream start.
+    fn set_resolution(&self, _handle: i16, _resolution: PicoResolution) -> PicoResult<()> {
+        Err(PicoError::from_status(
+            PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT,
+            "set_resolution",
+        ))
+    }
     /// Set up a channel with the supplied config
     fn enable_channel(
         &self,

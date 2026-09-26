@@ -87,6 +87,49 @@ mod channel_tests {
     }
 }
 
+/// Vertical resolution of a flexible-resolution oscilloscope. The values
+/// are the driver's `PICO_DEVICE_RESOLUTION` codes.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, Ord, PartialOrd, Hash, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub enum PicoResolution {
+    DR_8BIT = 0,
+    DR_12BIT = 1,
+    DR_14BIT = 2,
+    DR_15BIT = 3,
+    DR_16BIT = 4,
+    DR_10BIT = 10,
+}
+
+impl PicoResolution {
+    pub fn bits(self) -> u8 {
+        match self {
+            PicoResolution::DR_8BIT => 8,
+            PicoResolution::DR_10BIT => 10,
+            PicoResolution::DR_12BIT => 12,
+            PicoResolution::DR_14BIT => 14,
+            PicoResolution::DR_15BIT => 15,
+            PicoResolution::DR_16BIT => 16,
+        }
+    }
+
+    /// The resolution for a driver code, or `None` for one this crate
+    /// doesn't know.
+    pub fn from_driver_value(value: u32) -> Option<Self> {
+        num_traits::FromPrimitive::from_u32(value)
+    }
+
+    pub fn to_driver_value(self) -> u32 {
+        num_traits::ToPrimitive::to_u32(&self).expect("resolution fits u32")
+    }
+}
+
+impl fmt::Display for PicoResolution {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-bit", self.bits())
+    }
+}
+
 /// Pico coupling options
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, Default)]

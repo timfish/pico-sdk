@@ -5,7 +5,7 @@ use super::{
 use parking_lot::RwLock;
 use pico_common::{
     Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
-    PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
+    PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, ToPicoStr,
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
@@ -65,6 +65,27 @@ fn default_resolution(details: &JsonValue) -> Option<enPicoDeviceResolution> {
     from_defaults()
         .or_else(first_listed)
         .map(|r| *r as enPicoDeviceResolution)
+}
+
+/// Every resolution the variant lists, in the listed order.
+fn listed_resolutions(details: &JsonValue) -> Vec<enPicoDeviceResolution> {
+    type Object = HashMap<String, JsonValue>;
+    let listed = || -> Option<Vec<enPicoDeviceResolution>> {
+        let details: &Object = details.get()?;
+        let listed: &Vec<JsonValue> = details.get("VerticalResolutions")?.get()?;
+        Some(
+            listed
+                .iter()
+                .filter_map(|r| {
+                    let r: &Object = r.get()?;
+                    r.get("Resolution")?
+                        .get::<f64>()
+                        .map(|v| *v as enPicoDeviceResolution)
+                })
+                .collect(),
+        )
+    };
+    listed().unwrap_or_default()
 }
 
 pub struct PSOSPADriver {
@@ -272,6 +293,39 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>> {
         let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
         Ok(parse_device_json(&*self.variant_details(&variant)?))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn get_resolutions(&self, handle: i16) -> PicoResult<Vec<(PicoResolution, i16)>> {
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
+        let details = self.variant_details(&variant)?;
+
+        listed_resolutions(&details)
+            .into_iter()
+            .filter_map(|value| Some((value, PicoResolution::from_driver_value(value)?)))
+            .map(|(value, resolution)| {
+                let mut min_value = 0;
+                let mut max_value = 0;
+                PicoStatus::from(unsafe {
+                    self.bindings
+                        .psospaGetAdcLimits(handle, value, &mut min_value, &mut max_value)
+                })
+                .to_result((resolution, max_value), "get_resolutions")
+            })
+            .collect()
+    }
+
+    fn get_resolution(&self, handle: i16) -> Option<PicoResolution> {
+        PicoResolution::from_driver_value(self.resolution(handle))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_resolution(&self, handle: i16, resolution: PicoResolution) -> PicoResult<()> {
+        let value = resolution.to_driver_value();
+        PicoStatus::from(unsafe { self.bindings.psospaSetDeviceResolution(handle, value) })
+            .to_result((), "set_resolution")?;
+        self.resolutions.write().insert(handle, value);
+        Ok(())
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

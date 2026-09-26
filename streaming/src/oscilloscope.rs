@@ -147,6 +147,10 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
             }
         }
 
+        if let Some(resolution) = info.effective_resolution(config) {
+            self.driver.set_resolution(*info.handle, resolution)?;
+        }
+
         let target_config =
             OscilloscopeSampleConfig::from_samples_per_second(config.samples_per_second);
 
@@ -166,6 +170,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         state: &ScopeStreamState,
         events: &EventEmitter<OscilloscopeStreamEvent>,
     ) -> Current<OscilloscopeInfo, ScopeStreamState> {
+        let max_adc_value = info.max_adc_value_for(config);
         let callback = |start_index, sample_count| {
             let channels = config
                 .channels
@@ -180,8 +185,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                     (
                         *ch,
                         RawChannelDataBlock {
-                            multiplier: config.range.get_max_scaled_value()
-                                / info.max_adc_value as f64,
+                            multiplier: config.range.get_max_scaled_value() / max_adc_value as f64,
                             samples: ch_buf[start_index..(start_index + sample_count)].to_vec(),
                         },
                     )
