@@ -172,21 +172,57 @@ pub(crate) fn get_version_string(input: &str) -> String {
         .to_string()
 }
 
+/// Parses `serial[variant],serial[variant]`. Some drivers answer OK with
+/// an empty list, so an empty or malformed entry yields nothing.
 pub(crate) fn parse_enum_result(buffer: &[i8], len: usize) -> Vec<EnumerationResult> {
-    let serials_list = buffer.from_pico_i8_string(len);
+    if len == 0 {
+        return Vec::new();
+    }
 
-    serials_list
+    buffer
+        .from_pico_i8_string(len)
         .split(',')
-        .map(String::from)
-        .map(|device| {
-            let parts = device.split('[').collect::<Vec<_>>();
+        .filter_map(|device| {
+            let (serial, variant) = device.split_once('[')?;
 
-            EnumerationResult {
-                serial: parts[0].to_string(),
-                variant: parts[1].trim_end_matches(']').to_string(),
-            }
+            Some(EnumerationResult {
+                serial: serial.to_string(),
+                variant: variant.trim_end_matches(']').to_string(),
+            })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pico_common::ToPicoStr;
+
+    fn parse(list: &str) -> Vec<(String, String)> {
+        let buffer = list.into_pico_i8_string();
+        parse_enum_result(&buffer, buffer.len())
+            .into_iter()
+            .map(|r| (r.serial, r.variant))
+            .collect()
+    }
+
+    #[test]
+    fn parse_enum_result_reads_each_unit() {
+        assert_eq!(
+            parse("CW356/055[2208A],13474/0004[5464E+MSO]"),
+            vec![
+                ("CW356/055".to_string(), "2208A".to_string()),
+                ("13474/0004".to_string(), "5464E+MSO".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_enum_result_tolerates_an_empty_or_malformed_list() {
+        assert!(parse_enum_result(&[], 0).is_empty());
+        assert!(parse("").is_empty());
+        assert!(parse("garbage").is_empty());
+    }
 }
 
 /// Gets the minimum supported driver version
