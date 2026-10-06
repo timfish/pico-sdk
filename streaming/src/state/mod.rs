@@ -230,6 +230,15 @@ where
         self.state.read().current.get_info()
     }
 
+    /// The state of the stream, such as the rate the driver set, while
+    /// the device streams.
+    pub fn get_stream(&self) -> Option<Stream> {
+        match &self.state.read().current {
+            Current::Streaming(_, stream) => Some(stream.clone()),
+            Current::Closed | Current::Open(_) => None,
+        }
+    }
+
     fn start_background_thread(&mut self) {
         let (tx_terminate, rx_terminate) = bounded::<()>(0);
 

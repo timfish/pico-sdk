@@ -73,6 +73,37 @@ impl OscilloscopeSampleConfig {
         (1f64 / self.get_interval()) as u32
     }
 
+    /// The sample rate this interval gives, not rounded.
+    pub fn rate_hz(self) -> f64 {
+        1f64 / self.get_interval()
+    }
+
+    /// An interval a driver returns as a decimal number of `units`, held
+    /// in the coarsest unit that keeps it whole and fits a `u32`.
+    pub fn from_interval(interval: f64, units: TimeUnits) -> OscilloscopeSampleConfig {
+        let finer = [
+            TimeUnits::S,
+            TimeUnits::MS,
+            TimeUnits::US,
+            TimeUnits::NS,
+            TimeUnits::PS,
+            TimeUnits::FS,
+        ];
+        let seconds = interval * units.get_multiplier();
+        let mut best = OscilloscopeSampleConfig::new(interval.round() as u32, units);
+        for unit in finer.into_iter().skip_while(|u| *u != units) {
+            let count = seconds / unit.get_multiplier();
+            if count > u32::MAX as f64 {
+                break;
+            }
+            best = OscilloscopeSampleConfig::new(count.round() as u32, unit);
+            if (count - count.round()).abs() < 1e-6 {
+                break;
+            }
+        }
+        best
+    }
+
     pub fn with_interval(self, interval: u32) -> OscilloscopeSampleConfig {
         OscilloscopeSampleConfig { interval, ..self }
     }
@@ -105,6 +136,20 @@ mod tests {
         assert_eq!(sc.interval, 63_869);
         assert_eq!(sc.units, TimeUnits::NS);
         assert_eq!(sc.samples_per_second(), 15657);
+    }
+
+    #[test]
+    fn a_decimal_interval_moves_to_a_finer_unit() {
+        let sc = OscilloscopeSampleConfig::from_interval(1000.0, TimeUnits::NS);
+        assert_eq!((sc.interval, sc.units), (1000, TimeUnits::NS));
+
+        let sc = OscilloscopeSampleConfig::from_interval(333.333, TimeUnits::NS);
+        assert_eq!((sc.interval, sc.units), (333_333, TimeUnits::PS));
+        assert!((sc.rate_hz() - 3_000_003.0).abs() < 1.0);
+
+        // Too long for picoseconds in a u32: stays in nanoseconds.
+        let sc = OscilloscopeSampleConfig::from_interval(15_000_000.4, TimeUnits::NS);
+        assert_eq!((sc.interval, sc.units), (15_000_000, TimeUnits::NS));
     }
 
     #[test]

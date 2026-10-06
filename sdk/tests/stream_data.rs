@@ -41,7 +41,7 @@ fn stream_data() {
         impl EventHandler<OscilloscopeStreamEvent> for SenderEvent {
             fn new_data(&self, event: &OscilloscopeStreamEvent) {
                 assert!(event.channels.keys().len() == 2);
-                assert!(event.samples_per_second == 1000);
+                assert!(event.samples_per_second == 1000.0);
 
                 if event.length > 0 {
                     self.done_tx.send(()).unwrap();

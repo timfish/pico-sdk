@@ -415,7 +415,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
             )
         })
         .to_result(
-            sample_config.with_interval(sample_interval as u32),
+            OscilloscopeSampleConfig::from_interval(sample_interval, sample_config.units),
             "start_streaming",
         )
     }

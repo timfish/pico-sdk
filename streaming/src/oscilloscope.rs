@@ -36,20 +36,33 @@ impl RawChannelDataBlock {
 #[derive(Clone)]
 pub struct OscilloscopeStreamEvent {
     pub length: usize,
-    pub samples_per_second: u32,
+    /// The rate the driver set, which can differ from the rate asked for.
+    pub samples_per_second: f64,
     pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
 }
 
 #[derive(Clone, Default)]
 pub struct ScopeStreamState {
-    samples_per_second: u32,
+    sample_config: OscilloscopeSampleConfig,
     buffers: BufferMap,
+}
+
+impl ScopeStreamState {
+    /// The rate the driver set, which can differ from the rate asked for.
+    pub fn samples_per_second(&self) -> f64 {
+        self.sample_config.rate_hz()
+    }
+
+    /// The sample interval the driver set.
+    pub fn sample_config(&self) -> OscilloscopeSampleConfig {
+        self.sample_config
+    }
 }
 
 impl fmt::Debug for ScopeStreamState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ScopeStreamState")
-            .field("samples_per_second", &self.samples_per_second)
+            .field("sample_config", &self.sample_config)
             .finish()
     }
 }
@@ -154,10 +167,16 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         let target_config =
             OscilloscopeSampleConfig::from_samples_per_second(config.samples_per_second);
 
-        state.samples_per_second = self
-            .driver
-            .start_streaming(*info.handle, &target_config, enabled_channel_count)
-            .map(|sc| sc.samples_per_second())?;
+        state.sample_config =
+            self.driver
+                .start_streaming(*info.handle, &target_config, enabled_channel_count)?;
+        tracing::debug!(
+            asked_hz = config.samples_per_second,
+            set_hz = state.samples_per_second(),
+            interval = state.sample_config.interval,
+            units = ?state.sample_config.units,
+            "streaming started"
+        );
 
         Ok(Current::Streaming(info.clone(), state))
     }
@@ -193,7 +212,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 .collect::<HashMap<_, _>>();
 
             events.new_data(OscilloscopeStreamEvent {
-                samples_per_second: config.samples_per_second,
+                samples_per_second: state.samples_per_second(),
                 length: sample_count,
                 channels,
             });
