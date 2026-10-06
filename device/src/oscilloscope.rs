@@ -1,6 +1,7 @@
 use crate::DeviceOpen;
 use pico_common::{
-    OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResult,
+    OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResolution,
+    PicoResult,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -11,6 +12,13 @@ use std::{collections::HashMap, sync::Arc};
 pub struct OscilloscopeConfig {
     pub samples_per_second: u32,
     pub channels: HashMap<PicoChannel, OscilloscopeChannelConfig>,
+    /// `None` keeps the resolution the unit opened at. Ignored by units
+    /// with a fixed resolution.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub resolution: Option<PicoResolution>,
 }
 
 impl OscilloscopeConfig {
@@ -48,13 +56,34 @@ impl OscilloscopeConfig {
 pub struct OscilloscopeInfo {
     pub handle: Arc<i16>,
     pub usb_version: String,
+    /// The maximum ADC value at the resolution the unit opened at
     pub max_adc_value: i16,
     pub valid_channel_ranges: HashMap<PicoChannel, Vec<PicoRange>>,
+    /// The resolution the unit opened at, or `None` if it is fixed
+    pub resolution: Option<PicoResolution>,
+    /// Supported resolutions, each with its maximum ADC value. Empty if
+    /// the resolution is fixed.
+    pub resolutions: Vec<(PicoResolution, i16)>,
 }
 
 impl OscilloscopeInfo {
     pub fn get_channels(&self) -> Vec<PicoChannel> {
         self.valid_channel_ranges.keys().copied().collect()
+    }
+
+    /// The resolution a stream with `config` runs at
+    pub fn effective_resolution(&self, config: &OscilloscopeConfig) -> Option<PicoResolution> {
+        config
+            .resolution
+            .filter(|r| self.resolutions.iter().any(|(s, _)| s == r))
+            .or(self.resolution)
+    }
+
+    /// The maximum ADC value of a stream with `config`
+    pub fn max_adc_value_for(&self, config: &OscilloscopeConfig) -> i16 {
+        self.effective_resolution(config)
+            .and_then(|r| self.resolutions.iter().find(|(s, _)| *s == r))
+            .map_or(self.max_adc_value, |(_, max)| *max)
     }
 }
 
@@ -106,12 +135,20 @@ impl OscilloscopeDevice {
             .collect();
 
         let max_adc_value = driver.maximum_value(handle)?;
+        let resolutions = driver.get_resolutions(handle)?;
+        let resolution = if resolutions.is_empty() {
+            None
+        } else {
+            driver.get_resolution(handle)
+        };
 
         Ok(OscilloscopeInfo {
             handle: Arc::new(handle),
             usb_version,
             max_adc_value,
             valid_channel_ranges,
+            resolution,
+            resolutions,
         })
     }
 }
@@ -171,6 +208,7 @@ mod serde_tests {
         OscilloscopeConfig {
             samples_per_second: 1_000_000,
             channels,
+            resolution: None,
         }
     }
 
