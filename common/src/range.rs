@@ -459,6 +459,15 @@ impl PicoRange {
             | PicoRange::CURRENT_CLAMP_60A_20A
             | PicoRange::CURRENT_CLAMP_60A_50A
             | PicoRange::CURRENT_CLAMP_60A_60A => UnitStrings::new("Amps", "A"),
+            PicoRange::TEMPERATURE_NEG50_TO_150DEGC => UnitStrings::new("Degrees Celsius", "°C"),
+            PicoRange::PRESSURE_SENSOR_NEG100000_TO_150000_PASCALS
+            | PicoRange::PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS
+            | PicoRange::PRESSURE_SENSOR_NEG200000_TO_800000_PASCALS
+            | PicoRange::PRESSURE_SENSOR_NEG400000_TO_1600000_PASCALS
+            | PicoRange::PRESSURE_SENSOR_NEG400000_TO_3400000_PASCALS
+            | PicoRange::PRESSURE_SENSOR_NEG150000_TO_1350000_PASCALS => {
+                UnitStrings::new("Pascals", "Pa")
+            }
             _ => UnitStrings::new("Volts", "V"),
         }
     }
@@ -579,6 +588,22 @@ impl PicoRange {
 #[cfg(test)]
 mod range_tests {
     use super::*;
+
+    #[test]
+    fn probes_give_their_units() {
+        assert_eq!(PicoRange::X10_PROBE_1V.get_units().short, "V");
+        assert_eq!(PicoRange::CURRENT_CLAMP_60A_20A.get_units().short, "A");
+        assert_eq!(
+            PicoRange::TEMPERATURE_NEG50_TO_150DEGC.get_units().short,
+            "°C"
+        );
+        assert_eq!(
+            PicoRange::PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS
+                .get_units()
+                .short,
+            "Pa"
+        );
+    }
 
     const X10_RANGES: &[PicoRange] = &[
         PicoRange::X10_PROBE_100MV,
