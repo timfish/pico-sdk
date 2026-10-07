@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !missing_drivers.is_empty() {
             println!(
                 "Downloading drivers that failed to load {:?}",
-                &missing_drivers
+                missing_drivers
             );
             download_drivers_to_cache(&missing_drivers)?;
             println!("Downloads complete");
