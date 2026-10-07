@@ -271,7 +271,7 @@ impl CaptureStats {
 
 impl EventHandler<OscilloscopeStreamEvent> for CaptureStats {
     #[tracing::instrument(level = "trace", skip(self, event))]
-    fn new_data(&self, event: &OscilloscopeStreamEvent) {
+    fn new_data(&self, event: Arc<OscilloscopeStreamEvent>) {
         let mut data: Vec<(PicoChannel, usize, f64, String)> = event
             .channels
             .iter()

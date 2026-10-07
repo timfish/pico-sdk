@@ -35,7 +35,7 @@
 //! struct StdoutHandler;
 //!
 //! impl EventHandler<OscilloscopeStreamEvent> for StdoutHandler {
-//!     fn new_data(&self, event: &OscilloscopeStreamEvent) {
+//!     fn new_data(&self, event: Arc<OscilloscopeStreamEvent>) {
 //!         println!("Sample count: {}", event.length);
 //!     }
 //! }

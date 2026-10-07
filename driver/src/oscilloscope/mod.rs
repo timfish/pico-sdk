@@ -193,6 +193,24 @@ pub(crate) fn parse_enum_result(buffer: &[i8], len: usize) -> Vec<EnumerationRes
         .collect()
 }
 
+/// Gets the minimum supported driver version
+fn get_min_required_version(driver: Driver) -> &'static str {
+    match driver {
+        Driver::PS2000 => "3.0.30.1878",
+        Driver::PS2000A
+        | Driver::PS3000A
+        | Driver::PS4000
+        | Driver::PS4000A
+        | Driver::PS5000A
+        | Driver::PS6000 => "2.1.30.1878",
+        Driver::PS6000A => "1.0.54.2438",
+        _ => panic!(
+            "We don't know the minimum required version for the {:?} driver!",
+            driver,
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,23 +240,5 @@ mod tests {
         assert!(parse_enum_result(&[], 0).is_empty());
         assert!(parse("").is_empty());
         assert!(parse("garbage").is_empty());
-    }
-}
-
-/// Gets the minimum supported driver version
-fn get_min_required_version(driver: Driver) -> &'static str {
-    match driver {
-        Driver::PS2000 => "3.0.30.1878",
-        Driver::PS2000A
-        | Driver::PS3000A
-        | Driver::PS4000
-        | Driver::PS4000A
-        | Driver::PS5000A
-        | Driver::PS6000 => "2.1.30.1878",
-        Driver::PS6000A => "1.0.54.2438",
-        _ => panic!(
-            "We don't know the minimum required version for the {:?} driver!",
-            driver,
-        ),
     }
 }
