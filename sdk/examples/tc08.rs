@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     struct PrintData;
 
     impl EventHandler<TC08StreamingEvent> for PrintData {
-        fn new_data(&self, event: &TC08StreamingEvent) {
+        fn new_data(&self, event: Arc<TC08StreamingEvent>) {
             for (channel, values) in &event.channels {
                 if let Some(latest) = values.last() {
                     println!("Channel {channel}: {latest:.2} °C");

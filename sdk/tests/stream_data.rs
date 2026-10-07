@@ -39,7 +39,7 @@ fn stream_data() {
         }
 
         impl EventHandler<OscilloscopeStreamEvent> for SenderEvent {
-            fn new_data(&self, event: &OscilloscopeStreamEvent) {
+            fn new_data(&self, event: Arc<OscilloscopeStreamEvent>) {
                 assert!(event.channels.keys().len() == 2);
                 assert!(event.samples_per_second == 1000.0);
 
