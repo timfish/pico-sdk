@@ -8,7 +8,7 @@ use std::{
     fmt,
     sync::Arc,
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::Instant,
 };
 use tracing::{debug, info};
 
@@ -291,7 +291,10 @@ where
                 sleep_ms(500);
             }
 
-            if !wait_for_closed && rx_terminate.recv_timeout(Duration::from_millis(1)).is_ok() {
+            // Each step waits on its own when it has nothing to do. A
+            // wait here would slow a scope's backlog drain: Windows
+            // rounds even 1 ms up to about 15 ms.
+            if !wait_for_closed && rx_terminate.try_recv().is_ok() {
                 this.state.write().target = Target::Closed;
                 wait_for_closed = true;
             }
