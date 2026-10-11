@@ -18,7 +18,7 @@ mod streaming_tests {
             Arc,
         },
         thread,
-        time::Duration,
+        time::{Duration, Instant},
     };
 
     mock! {
@@ -177,6 +177,57 @@ mod streaming_tests {
         let on_time = polls_in_300ms(10);
         assert!(behind > 30, "{behind} polls with a backlog");
         assert!(on_time <= 8, "{on_time} polls on time");
+    }
+
+    /// A driver stop that takes 1 s holds up neither `stop` nor the
+    /// state getters; a start after it waits for it.
+    #[test]
+    fn a_slow_driver_stop_does_not_block_the_runner() {
+        let mut mock = MockMockDriver::new();
+        mock.expect_open_unit().return_const(Ok(1));
+        mock.expect_get_unit_info().returning(|_, t| match t {
+            PicoInfo::BATCH_AND_SERIAL => Ok("ABC/1234".to_string()),
+            PicoInfo::VARIANT_INFO => Ok("2222".to_string()),
+            _ => Ok("".to_string()),
+        });
+        mock.expect_get_channel_ranges()
+            .returning(|_, _| Ok(vec![PicoRange::X1_PROBE_2V]));
+        mock.expect_maximum_value().returning(|_| Ok(32_000));
+        mock.expect_close().return_const(Ok(()));
+        mock.expect_enable_channel().return_const(Ok(()));
+        mock.expect_disable_channel().return_const(Ok(()));
+        mock.expect_ping_unit().return_const(Ok(()));
+        mock.expect_clear_data_buffers().return_const(Ok(()));
+        mock.expect_set_data_buffer().return_const(Ok(()));
+        mock.expect_stop().returning(|_| {
+            thread::sleep(Duration::from_secs(1));
+            Ok(())
+        });
+        mock.expect_get_latest_streaming_values()
+            .return_const(Ok(()));
+        mock.expect_start_streaming()
+            .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));
+
+        let driver = OscilloscopeDriver::new(mock);
+        let device = driver.open_device(None).unwrap();
+        let streaming = device.into_streaming_device();
+        let mut config = OscilloscopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000);
+        streaming.start(config.clone()).unwrap();
+
+        let started = Instant::now();
+        streaming.stop();
+        // The background thread is in the driver's stop.
+        while started.elapsed() < Duration::from_millis(300) {
+            assert!(streaming.get_info().is_some());
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(started.elapsed() < Duration::from_millis(500));
+
+        streaming.start(config).unwrap();
+        assert!(started.elapsed() >= Duration::from_secs(1));
+        assert!(streaming.get_stream().is_some());
     }
 
     /// Drivers that add buffers keep the last stream's buffers, and refuse
