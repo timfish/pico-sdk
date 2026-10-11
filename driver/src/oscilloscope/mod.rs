@@ -94,6 +94,12 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     ) -> PicoResult<()>;
     /// Disable a channel
     fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()>;
+    /// Remove every data buffer given to the driver. Drivers that add
+    /// buffers, rather than replace them per channel, keep them across
+    /// streams and refuse a buffer of another length.
+    fn clear_data_buffers(&self, _handle: i16) -> PicoResult<()> {
+        Ok(())
+    }
     /// Give the driver a buffer to write data into
     fn set_data_buffer(
         &self,

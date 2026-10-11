@@ -8,8 +8,8 @@ use pico_common::{
     PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, ToPicoStr,
 };
 use pico_sys_dynamic::psospa::{
-    enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T,
-    enPicoDeviceResolution, enPicoDeviceResolution_PICO_DR_8BIT,
+    enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL,
+    enPicoDataType_PICO_INT16_T, enPicoDeviceResolution, enPicoDeviceResolution_PICO_DR_8BIT,
     enPicoRatioMode_PICO_RATIO_MODE_RAW, PSOSPALoader, PICO_POINTER, PICO_STREAMING_DATA_INFO,
     PICO_STREAMING_DATA_TRIGGER_INFO, PICO_TEXT_FORMAT_JSON,
 };
@@ -354,6 +354,23 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.psospaSetChannelOff(handle, channel.into()) })
             .to_result((), "disable_channel")
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn clear_data_buffers(&self, handle: i16) -> PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings.psospaSetDataBuffer(
+                handle,
+                PicoChannel::A.into(),
+                std::ptr::null_mut() as PICO_POINTER,
+                0,
+                enPicoDataType_PICO_INT16_T,
+                0,
+                enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                enPicoAction_PICO_CLEAR_ALL,
+            )
+        })
+        .to_result((), "clear_data_buffers")
     }
 
     #[tracing::instrument(level = "trace", skip(self, buffer))]
