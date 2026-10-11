@@ -7,8 +7,18 @@ use pico_device::{
     oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
     DeviceOpen,
 };
-use std::{collections::HashMap, fmt, sync::Arc};
-use tracing::warn;
+use std::{
+    collections::HashMap,
+    fmt,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tracing::{debug, warn};
+
+/// How long the stream waits between polls when it is not behind.
+const POLL: Duration = Duration::from_millis(50);
+/// A poll slower than this is logged.
+const SLOW_CALL: Duration = Duration::from_millis(100);
 
 type BufferMap = HashMap<PicoChannel, Arc<RwLock<Vec<i16>>>>;
 
@@ -192,7 +202,9 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         events: &EventEmitter<OscilloscopeStreamEvent>,
     ) -> Current<OscilloscopeInfo, ScopeStreamState> {
         let max_adc_value = info.max_adc_value_for(config);
+        let mut returned = 0usize;
         let callback = |start_index, sample_count| {
+            returned = sample_count;
             let channels = config
                 .channels
                 .iter()
@@ -222,10 +234,24 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
         let channels = state.buffers.keys().copied().collect::<Vec<_>>();
 
-        if let Err(error) =
+        let called = Instant::now();
+        let result =
             self.driver
-                .get_latest_streaming_values(*info.handle, &channels, Box::new(callback))
-        {
+                .get_latest_streaming_values(*info.handle, &channels, Box::new(callback));
+        let elapsed = called.elapsed();
+        if elapsed > SLOW_CALL {
+            debug!(
+                elapsed_ms = elapsed.as_secs_f64() * 1e3,
+                samples = returned,
+                "slow get_latest_streaming_values"
+            );
+        }
+        // A call that returned more than one poll's worth of samples
+        // shows a backlog in the scope: poll again at once, or it grows.
+        let behind =
+            returned > 0 && returned as f64 >= state.samples_per_second() * POLL.as_secs_f64();
+
+        if let Err(error) = result {
             if error.status == PicoStatus::WAITING_FOR_DATA_BUFFERS {
                 for (channel, buffer) in &state.buffers {
                     let len = { buffer.read().len() };
@@ -233,8 +259,6 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                         .set_data_buffer(*info.handle, *channel, buffer.clone(), len)
                         .expect("could not set buffers");
                 }
-
-                sleep_ms(50);
 
                 Current::Streaming(info.clone(), state.clone())
             } else {
@@ -247,7 +271,9 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 Current::Closed
             }
         } else {
-            sleep_ms(50);
+            if !behind {
+                sleep_ms(POLL.as_millis() as u64);
+            }
 
             Current::Streaming(info.clone(), state.clone())
         }
@@ -255,7 +281,13 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
     #[tracing::instrument(level = "debug", skip_all)]
     fn stop(&self, info: &OscilloscopeInfo) -> Current<OscilloscopeInfo, ScopeStreamState> {
-        let _ = self.driver.stop(*info.handle);
+        let called = Instant::now();
+        let result = self.driver.stop(*info.handle);
+        let elapsed_ms = called.elapsed().as_secs_f64() * 1e3;
+        match result {
+            Ok(()) => debug!(elapsed_ms, "driver stopped the stream"),
+            Err(error) => warn!(elapsed_ms, ?error, "driver stop failed"),
+        }
         Current::Open(info.clone())
     }
 

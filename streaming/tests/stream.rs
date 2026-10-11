@@ -12,7 +12,14 @@ mod streaming_tests {
         DriverLoadError,
     };
     use pico_streaming::IntoStreamingDevice;
-    use std::{sync::Arc, thread, time::Duration};
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        thread,
+        time::Duration,
+    };
 
     mock! {
         MockDriver {}
@@ -113,6 +120,63 @@ mod streaming_tests {
         }
 
         thread::sleep(Duration::from_secs(1));
+    }
+
+    /// Polls of a 1 kS/s stream in 300 ms when each poll returns
+    /// `per_poll` samples.
+    fn polls_in_300ms(per_poll: usize) -> usize {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut mock = MockMockDriver::new();
+        mock.expect_open_unit().return_const(Ok(1));
+        mock.expect_get_unit_info().returning(|_, t| match t {
+            PicoInfo::BATCH_AND_SERIAL => Ok("ABC/1234".to_string()),
+            PicoInfo::VARIANT_INFO => Ok("2222".to_string()),
+            _ => Ok("".to_string()),
+        });
+        mock.expect_get_channel_ranges()
+            .returning(|_, _| Ok(vec![PicoRange::X1_PROBE_2V]));
+        mock.expect_maximum_value().returning(|_| Ok(32_000));
+        mock.expect_close().return_const(Ok(()));
+        mock.expect_enable_channel().return_const(Ok(()));
+        mock.expect_disable_channel().return_const(Ok(()));
+        mock.expect_ping_unit().return_const(Ok(()));
+        mock.expect_clear_data_buffers().return_const(Ok(()));
+        mock.expect_set_data_buffer().return_const(Ok(()));
+        mock.expect_stop().return_const(Ok(()));
+        mock.expect_get_latest_streaming_values().returning({
+            let calls = calls.clone();
+            move |_, _, mut callback| {
+                calls.fetch_add(1, Ordering::Relaxed);
+                callback(0, per_poll);
+                Ok(())
+            }
+        });
+        mock.expect_start_streaming()
+            .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));
+
+        let driver = OscilloscopeDriver::new(mock);
+        let device = driver.open_device(None).unwrap();
+        let streaming = device.into_streaming_device();
+        let mut config = OscilloscopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000);
+        streaming.start(config).unwrap();
+        let before = calls.load(Ordering::Relaxed);
+        // The poll interval is the behaviour under test.
+        thread::sleep(Duration::from_millis(300));
+        let polls = calls.load(Ordering::Relaxed) - before;
+        streaming.close();
+        polls
+    }
+
+    /// A scope with a backlog is polled again at once; one that keeps
+    /// up is polled every 50 ms.
+    #[test]
+    fn a_backlog_is_drained_without_waiting() {
+        let behind = polls_in_300ms(100);
+        let on_time = polls_in_300ms(10);
+        assert!(behind > 30, "{behind} polls with a backlog");
+        assert!(on_time <= 8, "{on_time} polls on time");
     }
 
     /// Drivers that add buffers keep the last stream's buffers, and refuse
