@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod streaming_tests {
-    use mockall::{mock, predicate::*};
+    use mockall::{mock, predicate::*, Sequence};
     use parking_lot::RwLock;
     use pico_common::{
         Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel, PicoCoupling,
@@ -38,6 +38,7 @@ mod streaming_tests {
                 handle: i16,
                 channel: PicoChannel,
             ) -> PicoResult<()>;
+            fn clear_data_buffers(&self, handle: i16) -> PicoResult<()>;
             fn set_data_buffer(
                 &self,
                 handle: i16,
@@ -86,6 +87,7 @@ mod streaming_tests {
         mock.expect_enable_channel().return_const(Ok(()));
         mock.expect_disable_channel().return_const(Ok(()));
         mock.expect_ping_unit().return_const(Ok(()));
+        mock.expect_clear_data_buffers().return_const(Ok(()));
         mock.expect_set_data_buffer().return_const(Ok(()));
         mock.expect_stop().return_const(Ok(()));
         mock.expect_get_latest_streaming_values()
@@ -111,5 +113,56 @@ mod streaming_tests {
         }
 
         thread::sleep(Duration::from_secs(1));
+    }
+
+    /// Drivers that add buffers keep the last stream's buffers, and refuse
+    /// a buffer of another length, so each start clears them first.
+    #[test]
+    fn start_clears_buffers_before_adding() {
+        let mut mock = MockMockDriver::new();
+        mock.expect_open_unit().return_const(Ok(1));
+        mock.expect_get_unit_info().returning(|_, t| match t {
+            PicoInfo::BATCH_AND_SERIAL => Ok("ABC/1234".to_string()),
+            PicoInfo::VARIANT_INFO => Ok("2222".to_string()),
+            _ => Ok("".to_string()),
+        });
+        mock.expect_get_channel_ranges()
+            .returning(|_, _| Ok(vec![PicoRange::X1_PROBE_2V]));
+        mock.expect_maximum_value().returning(|_| Ok(32_000));
+        mock.expect_close().return_const(Ok(()));
+        mock.expect_enable_channel().return_const(Ok(()));
+        mock.expect_disable_channel().return_const(Ok(()));
+        mock.expect_ping_unit().return_const(Ok(()));
+        mock.expect_stop().return_const(Ok(()));
+        mock.expect_get_latest_streaming_values()
+            .return_const(Ok(()));
+        mock.expect_start_streaming()
+            .return_const(Ok(OscilloscopeSampleConfig::default()));
+
+        let mut seq = Sequence::new();
+        for len in [1_000, 5_000] {
+            mock.expect_clear_data_buffers()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_const(Ok(()));
+            mock.expect_set_data_buffer()
+                .withf(move |_, ch, _, l| *ch == PicoChannel::A && *l == len)
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_const(Ok(()));
+        }
+
+        let driver = OscilloscopeDriver::new(mock);
+        let device = driver.open_device(None).unwrap();
+        let streaming = device.into_streaming_device();
+
+        let mut config = OscilloscopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000);
+        streaming.start(config.clone()).unwrap();
+
+        config.set_sample_rate(5_000);
+        streaming.start(config).unwrap();
+        streaming.close();
     }
 }

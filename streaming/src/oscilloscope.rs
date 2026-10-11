@@ -134,6 +134,8 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
         let mut state = ScopeStreamState::default();
 
+        self.driver.clear_data_buffers(*info.handle)?;
+
         for (channel, ranges) in &info.valid_channel_ranges {
             // If there are no valid ranges, skip configuring this channel
             if ranges.is_empty() {

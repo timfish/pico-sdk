@@ -8,7 +8,7 @@ use pico_common::{
     PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
 };
 use pico_sys_dynamic::ps6000a::{
-    enPicoAction_PICO_ADD, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T, enPicoDeviceResolution_PICO_DR_10BIT, enPicoDeviceResolution_PICO_DR_12BIT, enPicoDeviceResolution_PICO_DR_8BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO
+    enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T, enPicoDeviceResolution_PICO_DR_10BIT, enPicoDeviceResolution_PICO_DR_12BIT, enPicoDeviceResolution_PICO_DR_8BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO
 };
 use std::{mem::MaybeUninit, sync::Arc};
 
@@ -183,6 +183,23 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
     fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps6000aSetChannelOff(handle, channel.into()) })
             .to_result((), "disable_channel")
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn clear_data_buffers(&self, handle: i16) -> PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings.ps6000aSetDataBuffer(
+                handle,
+                PicoChannel::A.into(),
+                std::ptr::null_mut(),
+                0,
+                enPicoDataType_PICO_INT16_T,
+                0,
+                enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                enPicoAction_PICO_CLEAR_ALL,
+            )
+        })
+        .to_result((), "clear_data_buffers")
     }
 
     #[tracing::instrument(level = "trace", skip(self, buffer))]
