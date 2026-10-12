@@ -55,6 +55,17 @@ pub enum Current<Info, Stream> {
     Streaming(Info, Stream),
 }
 
+impl<Info, Stream> Current<Info, Stream> {
+    /// The state's name, for logs.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Current::Closed => "closed",
+            Current::Open(_) => "open",
+            Current::Streaming(..) => "streaming",
+        }
+    }
+}
+
 impl<Info, Stream> PartialEq for Current<Info, Stream> {
     fn eq(&self, other: &Self) -> bool {
         matches!(
@@ -188,7 +199,12 @@ where
         };
         let next = next_state(&self.device, &self.events, &current, &target)?;
         if current != next {
-            info!(previous_state = ?current, next_state = ?next);
+            info!(
+                from = current.name(),
+                to = next.name(),
+                "stream state changed"
+            );
+            debug!(previous_state = ?current, next_state = ?next, "stream state detail");
         }
         self.state.write().current = next;
         Ok(())
