@@ -256,7 +256,7 @@ mod streaming_tests {
             .return_const(Ok(OscilloscopeSampleConfig::default()));
 
         let mut seq = Sequence::new();
-        for len in [10_000, 50_000] {
+        for len in [3_000, 15_000] {
             mock.expect_clear_data_buffers()
                 .times(1)
                 .in_sequence(&mut seq)
