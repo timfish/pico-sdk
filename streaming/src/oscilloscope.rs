@@ -23,16 +23,19 @@ const POLL: Duration = Duration::from_millis(50);
 /// A poll slower than this is logged.
 const SLOW_CALL: Duration = Duration::from_millis(100);
 
-/// How long each channel's buffer holds at the stream's rate. A scope's
-/// driver drops samples once the poll thread is held up for about 4 s
-/// longer than its buffers hold (2208A, 1 MS/s, two channels).
-const BUFFER_TIME: Duration = Duration::from_secs(10);
+/// How long each channel's buffer holds at the stream's rate. A poll
+/// thread that is not napped waits under 100 ms between polls, so this
+/// leaves room for a host held up for seconds. A scope's driver drops
+/// samples once the poll thread is held up for about 4 s longer than
+/// its buffers hold (2208A, 1 MS/s, two channels).
+const BUFFER_TIME: Duration = Duration::from_secs(3);
 /// The least a buffer holds, whatever [`BUFFER_BYTES_MAX`] allows, so
 /// a poll every [`POLL`] still has room.
 const BUFFER_TIME_MIN: Duration = Duration::from_millis(250);
 /// The most the buffers of one stream take: ours, and the driver's
-/// overview buffers of the same length.
-const BUFFER_BYTES_MAX: usize = 256 << 20;
+/// overview buffers of the same length. [`BUFFER_TIME`] of two
+/// channels at 5 MS/s fits.
+const BUFFER_BYTES_MAX: usize = 128 << 20;
 
 /// The samples each channel's buffer holds for a stream of `channels`
 /// at `rate` S/s: [`BUFFER_TIME`] where [`BUFFER_BYTES_MAX`] allows it.
@@ -85,6 +88,8 @@ pub struct OscilloscopeStreamEvent {
 pub struct ScopeStreamState {
     sample_config: OscilloscopeSampleConfig,
     buffers: BufferMap,
+    /// The samples each channel's buffer holds.
+    buffer_len: usize,
     polls: Arc<PollTimes>,
 }
 
@@ -162,6 +167,17 @@ impl ScopeStreamState {
     /// The sample interval the driver set.
     pub fn sample_config(&self) -> OscilloscopeSampleConfig {
         self.sample_config
+    }
+
+    /// The samples each channel's buffer holds.
+    pub fn buffer_len(&self) -> usize {
+        self.buffer_len
+    }
+
+    /// How long the buffers hold at the rate the driver set: a poll
+    /// thread held up longer than this loses samples.
+    pub fn buffer_span(&self) -> Duration {
+        Duration::from_secs_f64(self.buffer_len as f64 / self.samples_per_second().max(1e-9))
     }
 }
 
@@ -242,6 +258,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
         self.driver.clear_data_buffers(*info.handle)?;
         let buffer_size = buffer_len(config.samples_per_second, config.channels.len());
+        state.buffer_len = buffer_size;
 
         for (channel, ranges) in &info.valid_channel_ranges {
             // If there are no valid ranges, skip configuring this channel
@@ -402,17 +419,22 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
 #[cfg(test)]
 mod tests {
-    use super::buffer_len;
+    use super::{buffer_bytes, buffer_len};
 
     #[test]
-    fn buffers_hold_ten_seconds_where_memory_allows() {
-        // 1 MS/s on two channels: 10 s, 80 MB with the driver's.
-        assert_eq!(buffer_len(1_000_000, 2), 10_000_000);
-        assert_eq!(buffer_len(1_000, 4), 10_000);
-        assert_eq!(buffer_len(1, 1), 10);
-        // 10 MS/s on two channels: 256 MB allows 3.4 s.
-        assert_eq!(buffer_len(10_000_000, 2), 33_554_432);
-        // 100 MS/s on four channels: the least, 250 ms.
+    fn buffers_hold_three_seconds_where_memory_allows() {
+        // 1 MS/s on two channels: 3 s, 24 MB with the driver's.
+        assert_eq!(buffer_len(1_000_000, 2), 3_000_000);
+        assert_eq!(buffer_bytes(3_000_000, 2), 24_000_000);
+        assert_eq!(buffer_len(1_000, 4), 3_000);
+        assert_eq!(buffer_len(1, 1), 3);
+        // 5 MS/s on two channels: 3 s, 120 MB.
+        assert_eq!(buffer_len(5_000_000, 2), 15_000_000);
+        assert_eq!(buffer_bytes(15_000_000, 2), 120_000_000);
+        // 10 MS/s on two channels: 128 MB allows 1.7 s.
+        assert_eq!(buffer_len(10_000_000, 2), 16_777_216);
+        assert_eq!(buffer_bytes(16_777_216, 2), 128 << 20);
+        // 100 MS/s on four channels: the least, 250 ms, past the cap.
         assert_eq!(buffer_len(100_000_000, 4), 25_000_000);
     }
 }
