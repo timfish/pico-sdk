@@ -245,6 +245,7 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
         handle: i16,
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
+        buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig> {
         let resolution = match enabled_channels {
             1 => enPicoDeviceResolution_PICO_DR_16BIT,
@@ -272,7 +273,7 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
                 (false).into(),
                 1,
                 DownsampleMode::NONE.into(),
-                sample_config.samples_per_second(),
+                u32::try_from(buffer_len).unwrap_or(u32::MAX),
             )
         })
         .to_result(

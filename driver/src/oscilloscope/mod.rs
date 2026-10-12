@@ -114,6 +114,7 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
         handle: i16,
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
+        buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig>;
     /// Gets the latest streaming values
     fn get_latest_streaming_values<'a>(

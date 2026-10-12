@@ -404,6 +404,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         handle: i16,
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
+        _buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig> {
         let status = PicoStatus::from(unsafe {
             self.bindings
