@@ -57,7 +57,8 @@ mod streaming_tests {
                 &self,
                 handle: i16,
                 sample_config: &OscilloscopeSampleConfig,
-                enabled_channels: u8
+                enabled_channels: u8,
+                buffer_len: usize
             ) -> PicoResult<OscilloscopeSampleConfig>;
             fn get_latest_streaming_values<'a>(
                 &self,
@@ -255,7 +256,7 @@ mod streaming_tests {
             .return_const(Ok(OscilloscopeSampleConfig::default()));
 
         let mut seq = Sequence::new();
-        for len in [1_000, 5_000] {
+        for len in [10_000, 50_000] {
             mock.expect_clear_data_buffers()
                 .times(1)
                 .in_sequence(&mut seq)

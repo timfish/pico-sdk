@@ -233,6 +233,7 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
         handle: i16,
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
+        _buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig> {
         let resolution = match enabled_channels {
             1 | 2 => enPicoDeviceResolution_PICO_DR_12BIT,

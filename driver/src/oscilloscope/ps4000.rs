@@ -220,6 +220,7 @@ impl OscilloscopeDriverInternal for PS4000Driver {
         handle: i16,
         sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
+        buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig> {
         let mut sample_interval = vec![sample_config.interval];
 
@@ -232,7 +233,7 @@ impl OscilloscopeDriverInternal for PS4000Driver {
                 0,
                 (false).into(),
                 1,
-                sample_config.samples_per_second(),
+                u32::try_from(buffer_len).unwrap_or(u32::MAX),
             )
         })
         .to_result(

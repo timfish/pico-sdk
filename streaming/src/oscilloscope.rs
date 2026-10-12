@@ -10,7 +10,10 @@ use pico_device::{
 use std::{
     collections::HashMap,
     fmt,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, OnceLock,
+    },
     time::{Duration, Instant},
 };
 use tracing::{debug, warn};
@@ -19,6 +22,33 @@ use tracing::{debug, warn};
 const POLL: Duration = Duration::from_millis(50);
 /// A poll slower than this is logged.
 const SLOW_CALL: Duration = Duration::from_millis(100);
+
+/// How long each channel's buffer holds at the stream's rate. A scope's
+/// driver drops samples once the poll thread is held up for about 4 s
+/// longer than its buffers hold (2208A, 1 MS/s, two channels).
+const BUFFER_TIME: Duration = Duration::from_secs(10);
+/// The least a buffer holds, whatever [`BUFFER_BYTES_MAX`] allows, so
+/// a poll every [`POLL`] still has room.
+const BUFFER_TIME_MIN: Duration = Duration::from_millis(250);
+/// The most the buffers of one stream take: ours, and the driver's
+/// overview buffers of the same length.
+const BUFFER_BYTES_MAX: usize = 256 << 20;
+
+/// The samples each channel's buffer holds for a stream of `channels`
+/// at `rate` S/s: [`BUFFER_TIME`] where [`BUFFER_BYTES_MAX`] allows it.
+pub(crate) fn buffer_len(rate: u32, channels: usize) -> usize {
+    let rate = rate.max(1) as f64;
+    let by_time = rate * BUFFER_TIME.as_secs_f64();
+    let by_bytes = BUFFER_BYTES_MAX as f64 / buffer_bytes(1, channels.max(1)) as f64;
+    let least = rate * BUFFER_TIME_MIN.as_secs_f64();
+    by_time.min(by_bytes).max(least).max(1.0) as usize
+}
+
+/// The bytes the buffers of `channels` of `len` samples take, counting
+/// the driver's overview buffers.
+fn buffer_bytes(len: usize, channels: usize) -> usize {
+    len * channels * std::mem::size_of::<i16>() * 2
+}
 
 type BufferMap = HashMap<PicoChannel, Arc<RwLock<Vec<i16>>>>;
 
@@ -55,6 +85,72 @@ pub struct OscilloscopeStreamEvent {
 pub struct ScopeStreamState {
     sample_config: OscilloscopeSampleConfig,
     buffers: BufferMap,
+    polls: Arc<PollTimes>,
+}
+
+/// A wait between polls this long puts samples at risk.
+const HELD_UP: Duration = Duration::from_secs(1);
+
+/// The poll thread's timing, summed over about a second. Atomics, as
+/// the state is cloned each step; only the poll thread writes them.
+#[derive(Default)]
+struct PollTimes {
+    /// Microseconds from [`origin`] of the last poll's end, and of the
+    /// start of the second being summed.
+    last_us: AtomicU64,
+    window_us: AtomicU64,
+    polls: AtomicU64,
+    samples: AtomicU64,
+    longest_wait_us: AtomicU64,
+    longest_call_us: AtomicU64,
+}
+
+fn origin() -> Instant {
+    static ORIGIN: OnceLock<Instant> = OnceLock::new();
+    *ORIGIN.get_or_init(Instant::now)
+}
+
+impl PollTimes {
+    /// Records a poll that started at `called`, took `call` and
+    /// returned `samples`.
+    fn record(&self, called: Instant, call: Duration, samples: usize) {
+        let start_us = called.duration_since(origin()).as_micros() as u64;
+        let end_us = start_us + call.as_micros() as u64;
+        let last = self.last_us.swap(end_us, Ordering::Relaxed);
+        let wait_us = if last == 0 {
+            0
+        } else {
+            start_us.saturating_sub(last)
+        };
+        let call_us = call.as_micros() as u64;
+        tracing::trace!(wait_us, call_us, samples, "poll");
+        if wait_us > HELD_UP.as_micros() as u64 {
+            warn!(
+                wait_ms = wait_us / 1000,
+                "poll thread held up; the driver's buffers may overflow"
+            );
+        }
+        self.longest_wait_us.fetch_max(wait_us, Ordering::Relaxed);
+        self.longest_call_us.fetch_max(call_us, Ordering::Relaxed);
+        let polls = self.polls.fetch_add(1, Ordering::Relaxed) + 1;
+        let samples = self.samples.fetch_add(samples as u64, Ordering::Relaxed) + samples as u64;
+        let window = self.window_us.load(Ordering::Relaxed);
+        if window == 0 {
+            self.window_us.store(start_us, Ordering::Relaxed);
+        } else if end_us - window >= 1_000_000 {
+            debug!(
+                polls,
+                samples,
+                span_ms = (end_us - window) / 1000,
+                longest_wait_ms = self.longest_wait_us.swap(0, Ordering::Relaxed) as f64 / 1e3,
+                longest_call_ms = self.longest_call_us.swap(0, Ordering::Relaxed) as f64 / 1e3,
+                "polls"
+            );
+            self.window_us.store(end_us, Ordering::Relaxed);
+            self.polls.store(0, Ordering::Relaxed);
+            self.samples.store(0, Ordering::Relaxed);
+        }
+    }
 }
 
 impl ScopeStreamState {
@@ -145,14 +241,13 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         let mut state = ScopeStreamState::default();
 
         self.driver.clear_data_buffers(*info.handle)?;
+        let buffer_size = buffer_len(config.samples_per_second, config.channels.len());
 
         for (channel, ranges) in &info.valid_channel_ranges {
             // If there are no valid ranges, skip configuring this channel
             if ranges.is_empty() {
                 continue;
             }
-
-            let buffer_size = config.samples_per_second as usize;
 
             // is this channel enabled?
             if let Some(config) = config.channels.get(channel) {
@@ -179,12 +274,18 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         let target_config =
             OscilloscopeSampleConfig::from_samples_per_second(config.samples_per_second);
 
-        state.sample_config =
-            self.driver
-                .start_streaming(*info.handle, &target_config, enabled_channel_count)?;
+        state.sample_config = self.driver.start_streaming(
+            *info.handle,
+            &target_config,
+            enabled_channel_count,
+            buffer_size,
+        )?;
         tracing::debug!(
             asked_hz = config.samples_per_second,
             set_hz = state.samples_per_second(),
+            buffer_samples = buffer_size,
+            buffer_s = buffer_size as f64 / config.samples_per_second.max(1) as f64,
+            buffer_bytes = buffer_bytes(buffer_size, enabled_channel_count as usize),
             interval = state.sample_config.interval,
             units = ?state.sample_config.units,
             "streaming started"
@@ -239,6 +340,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
             self.driver
                 .get_latest_streaming_values(*info.handle, &channels, Box::new(callback));
         let elapsed = called.elapsed();
+        state.polls.record(called, elapsed, returned);
         if elapsed > SLOW_CALL {
             debug!(
                 elapsed_ms = elapsed.as_secs_f64() * 1e3,
@@ -295,5 +397,22 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
     fn close(&self, info: &OscilloscopeInfo) -> Current<OscilloscopeInfo, ScopeStreamState> {
         let _ = self.driver.close(*info.handle);
         Current::Closed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::buffer_len;
+
+    #[test]
+    fn buffers_hold_ten_seconds_where_memory_allows() {
+        // 1 MS/s on two channels: 10 s, 80 MB with the driver's.
+        assert_eq!(buffer_len(1_000_000, 2), 10_000_000);
+        assert_eq!(buffer_len(1_000, 4), 10_000);
+        assert_eq!(buffer_len(1, 1), 10);
+        // 10 MS/s on two channels: 256 MB allows 3.4 s.
+        assert_eq!(buffer_len(10_000_000, 2), 33_554_432);
+        // 100 MS/s on four channels: the least, 250 ms.
+        assert_eq!(buffer_len(100_000_000, 4), 25_000_000);
     }
 }

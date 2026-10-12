@@ -361,6 +361,7 @@ impl OscilloscopeDriverInternal for PS2000Driver {
         handle: i16,
         sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
+        _buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig> {
         let status = PicoStatus::from(unsafe {
             self.bindings.ps2000_run_streaming_ns(
