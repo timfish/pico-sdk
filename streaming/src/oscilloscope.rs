@@ -10,7 +10,10 @@ use pico_device::{
 use std::{
     collections::HashMap,
     fmt,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, OnceLock,
+    },
     time::{Duration, Instant},
 };
 use tracing::{debug, warn};
@@ -82,6 +85,72 @@ pub struct OscilloscopeStreamEvent {
 pub struct ScopeStreamState {
     sample_config: OscilloscopeSampleConfig,
     buffers: BufferMap,
+    polls: Arc<PollTimes>,
+}
+
+/// A wait between polls this long puts samples at risk.
+const HELD_UP: Duration = Duration::from_secs(1);
+
+/// The poll thread's timing, summed over about a second. Atomics, as
+/// the state is cloned each step; only the poll thread writes them.
+#[derive(Default)]
+struct PollTimes {
+    /// Microseconds from [`origin`] of the last poll's end, and of the
+    /// start of the second being summed.
+    last_us: AtomicU64,
+    window_us: AtomicU64,
+    polls: AtomicU64,
+    samples: AtomicU64,
+    longest_wait_us: AtomicU64,
+    longest_call_us: AtomicU64,
+}
+
+fn origin() -> Instant {
+    static ORIGIN: OnceLock<Instant> = OnceLock::new();
+    *ORIGIN.get_or_init(Instant::now)
+}
+
+impl PollTimes {
+    /// Records a poll that started at `called`, took `call` and
+    /// returned `samples`.
+    fn record(&self, called: Instant, call: Duration, samples: usize) {
+        let start_us = called.duration_since(origin()).as_micros() as u64;
+        let end_us = start_us + call.as_micros() as u64;
+        let last = self.last_us.swap(end_us, Ordering::Relaxed);
+        let wait_us = if last == 0 {
+            0
+        } else {
+            start_us.saturating_sub(last)
+        };
+        let call_us = call.as_micros() as u64;
+        tracing::trace!(wait_us, call_us, samples, "poll");
+        if wait_us > HELD_UP.as_micros() as u64 {
+            warn!(
+                wait_ms = wait_us / 1000,
+                "poll thread held up; the driver's buffers may overflow"
+            );
+        }
+        self.longest_wait_us.fetch_max(wait_us, Ordering::Relaxed);
+        self.longest_call_us.fetch_max(call_us, Ordering::Relaxed);
+        let polls = self.polls.fetch_add(1, Ordering::Relaxed) + 1;
+        let samples = self.samples.fetch_add(samples as u64, Ordering::Relaxed) + samples as u64;
+        let window = self.window_us.load(Ordering::Relaxed);
+        if window == 0 {
+            self.window_us.store(start_us, Ordering::Relaxed);
+        } else if end_us - window >= 1_000_000 {
+            debug!(
+                polls,
+                samples,
+                span_ms = (end_us - window) / 1000,
+                longest_wait_ms = self.longest_wait_us.swap(0, Ordering::Relaxed) as f64 / 1e3,
+                longest_call_ms = self.longest_call_us.swap(0, Ordering::Relaxed) as f64 / 1e3,
+                "polls"
+            );
+            self.window_us.store(end_us, Ordering::Relaxed);
+            self.polls.store(0, Ordering::Relaxed);
+            self.samples.store(0, Ordering::Relaxed);
+        }
+    }
 }
 
 impl ScopeStreamState {
@@ -271,6 +340,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
             self.driver
                 .get_latest_streaming_values(*info.handle, &channels, Box::new(callback));
         let elapsed = called.elapsed();
+        state.polls.record(called, elapsed, returned);
         if elapsed > SLOW_CALL {
             debug!(
                 elapsed_ms = elapsed.as_secs_f64() * 1e3,
