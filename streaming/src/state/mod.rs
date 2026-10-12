@@ -2,15 +2,15 @@ mod events;
 
 use crossbeam::channel::{bounded, Receiver, Sender};
 pub use events::{EventEmitter, EventHandler};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, MutexGuard, RwLock};
 use pico_common::{PicoResult, PicoStatus};
 use std::{
     fmt,
     sync::Arc,
     thread::{self, JoinHandle},
-    time::Duration,
+    time::Instant,
 };
-use tracing::info;
+use tracing::{debug, info};
 
 pub fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -101,56 +101,51 @@ pub struct StreamingState<Config, Info, Stream> {
     current: Current<Info, Stream>,
 }
 
-impl<Config, Info, Stream> StreamingState<Config, Info, Stream>
-where
-    Info: fmt::Debug,
-    Stream: fmt::Debug,
-{
+impl<Config, Info, Stream> StreamingState<Config, Info, Stream> {
     pub fn new(current: Current<Info, Stream>, target: Target<Config>) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self { current, target }))
     }
+}
 
-    fn next_state<Event>(
-        &mut self,
-        device: &dyn StreamDevice<Config, Info, Stream, Event>,
-        events: &EventEmitter<Event>,
-    ) -> PicoResult<()> {
-        let next_state = match &self.current {
-            Current::Closed => match &self.target {
-                Target::Closed => {
-                    sleep_ms(10);
-                    Current::Closed
-                }
-                Target::Open | Target::Streaming { .. } => device.open(device.serial())?,
-            },
-            Current::Open(info) => match &mut self.target {
-                Target::Closed => device.close(info),
-                Target::Open => {
-                    sleep_ms(200);
-                    device.ping(info)
-                }
-                Target::Streaming(config) => device.start(info, config)?,
-            },
-            Current::Streaming(info, stream) => match &self.target {
-                Target::Closed | Target::Open => device.stop(info),
-                Target::Streaming(config) => device.stream(info, config, stream, events),
-            },
-        };
-
-        if self.current != next_state {
-            info!(previous_state = ?self.current, ?next_state);
-        }
-
-        self.current = next_state;
-
-        Ok(())
-    }
+/// The state after one step from `current` towards `target`.
+fn next_state<Config, Info, Stream, Event>(
+    device: &dyn StreamDevice<Config, Info, Stream, Event>,
+    events: &EventEmitter<Event>,
+    current: &Current<Info, Stream>,
+    target: &Target<Config>,
+) -> PicoResult<Current<Info, Stream>> {
+    Ok(match current {
+        Current::Closed => match target {
+            Target::Closed => {
+                sleep_ms(10);
+                Current::Closed
+            }
+            Target::Open | Target::Streaming { .. } => device.open(device.serial())?,
+        },
+        Current::Open(info) => match target {
+            Target::Closed => device.close(info),
+            Target::Open => {
+                sleep_ms(200);
+                device.ping(info)
+            }
+            Target::Streaming(config) => device.start(info, config)?,
+        },
+        Current::Streaming(info, stream) => match target {
+            Target::Closed | Target::Open => device.stop(info),
+            Target::Streaming(config) => device.stream(info, config, stream, events),
+        },
+    })
 }
 
 #[derive(Clone)]
 pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     device: Device,
+    /// Held only to read or set the target and the current state, never
+    /// across a driver call, so `stop`, `close` and the getters do not
+    /// wait for a slow driver.
     state: Arc<RwLock<StreamingState<Config, Info, Stream>>>,
+    /// Held across each step's driver calls, so steps run one at a time.
+    steps: Arc<Mutex<()>>,
     background_handle: Option<Arc<BackgroundThreadHandle>>,
     pub events: EventEmitter<Event>,
 }
@@ -174,6 +169,7 @@ where
         let mut runner = StreamingRunner {
             device,
             state,
+            steps: Arc::new(Mutex::new(())),
             events: EventEmitter::new(),
             background_handle: None,
         };
@@ -183,23 +179,50 @@ where
         runner
     }
 
+    /// One step from the current state towards the target, by the
+    /// holder of `_steps`.
+    fn step(&self, _steps: &MutexGuard<'_, ()>) -> PicoResult<()> {
+        let (current, target) = {
+            let state = self.state.read();
+            (state.current.clone(), state.target.clone())
+        };
+        let next = next_state(&self.device, &self.events, &current, &target)?;
+        if current != next {
+            info!(previous_state = ?current, next_state = ?next);
+        }
+        self.state.write().current = next;
+        Ok(())
+    }
+
     pub fn start(&self, config: Config) -> PicoResult<()> {
-        let mut state = self.state.write();
+        let waited = Instant::now();
+        let steps = self.steps.lock();
+        debug!(
+            waited_ms = waited.elapsed().as_secs_f64() * 1e3,
+            "start took the device"
+        );
 
         // If we're already streaming we need to stop first so we reconfigure
-        if let Target::Streaming(_) = state.target {
-            state.target = Target::Open;
-            state.next_state(&self.device, &self.events)?;
+        let streaming = {
+            let mut state = self.state.write();
+            let streaming = matches!(state.target, Target::Streaming(_));
+            if streaming {
+                state.target = Target::Open;
+            }
+            streaming
+        };
+        if streaming {
+            self.step(&steps)?;
         }
 
-        state.target = Target::Streaming(config);
+        self.state.write().target = Target::Streaming(config);
 
         // Drive the state until we're streaming or we get an error we can return
         let mut count = 0;
         loop {
-            state.next_state(&self.device, &self.events)?;
+            self.step(&steps)?;
 
-            if let Current::Streaming(_, _) = state.current {
+            if let Current::Streaming(_, _) = self.state.read().current {
                 return Ok(());
             }
 
@@ -261,18 +284,22 @@ where
         let mut wait_for_closed = false;
 
         loop {
-            let mut state = this.state.write();
-
-            if state.next_state(&this.device, &this.events).is_err() {
+            let steps = this.steps.lock();
+            let failed = this.step(&steps).is_err();
+            drop(steps);
+            if failed {
                 sleep_ms(500);
             }
 
-            if !wait_for_closed && rx_terminate.recv_timeout(Duration::from_millis(1)).is_ok() {
-                state.target = Target::Closed;
+            // Each step waits on its own when it has nothing to do. A
+            // wait here would slow a scope's backlog drain: Windows
+            // rounds even 1 ms up to about 15 ms.
+            if !wait_for_closed && rx_terminate.try_recv().is_ok() {
+                this.state.write().target = Target::Closed;
                 wait_for_closed = true;
             }
 
-            if wait_for_closed && state.current == Current::Closed {
+            if wait_for_closed && this.state.read().current == Current::Closed {
                 return;
             }
         }
