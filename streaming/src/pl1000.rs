@@ -114,11 +114,11 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
                     }
                 }
 
+                // Bit 0 is channel 1 (PicoLog 1000 Series Programmer's Guide, pl1000GetValues).
                 let over_range = channels
                     .iter()
-                    .enumerate()
-                    .filter(|(i, _)| overflow_bits & (1 << i) != 0)
-                    .map(|(_, &channel)| channel)
+                    .filter(|&&channel| overflow_bits & (1 << (i16::from(channel) - 1)) != 0)
+                    .copied()
                     .collect();
 
                 events.new_data(PL1000StreamingEvent {

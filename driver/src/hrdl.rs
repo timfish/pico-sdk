@@ -269,8 +269,9 @@ impl HRDLDriverInternal {
     /// Drains whatever samples have landed in the device's buffer since the last call
     ///
     /// Returns the raw interleaved ADC counts (channel-major within each sample set, i.e.
-    /// `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`) and a per-channel over-range bitmask (bit `n` set
-    /// means the `n`th requested channel is over-range in at least one returned sample).
+    /// `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`) and an over-range bit field by channel number: the
+    /// least significant bit is channel 1, set when that channel is over range in at least one
+    /// returned sample.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,

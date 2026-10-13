@@ -111,11 +111,11 @@ impl StreamDevice<HRDLConfig, HRDLInfo, i32, HRDLStreamingEvent> for HRDLDevice 
                 }
             }
 
+            // Bit 0 is channel 1 (ADC-20/ADC-24 Programmer's Guide, HRDLGetValues).
             let over_range = channels
                 .iter()
-                .enumerate()
-                .filter(|(i, _)| overflow_bits & (1 << i) != 0)
-                .map(|(_, &channel)| channel)
+                .filter(|&&channel| (overflow_bits as u16) & (1 << (i16::from(channel) - 1)) != 0)
+                .copied()
                 .collect();
 
             events.new_data(HRDLStreamingEvent {
