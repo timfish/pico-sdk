@@ -1,4 +1,4 @@
-//! Pacing for the poll-only loggers (PT-104, CM3).
+//! Pacing for the logger streams.
 
 use std::time::{Duration, Instant};
 
@@ -49,6 +49,17 @@ impl LoggerPollState {
     }
 }
 
+/// How long a buffered logger (PL1000, HRDL) waits after a poll that did not fill the poll
+/// buffer: the time to fill half of it, from 10 ms to 200 ms. A full poll is followed by
+/// another at once, so the drain keeps up with any rate the device buffer holds, and no step
+/// holds the step lock for long.
+pub(crate) fn drain_wait_ms(interval_us: u64, poll_sets: u64, sets: u64) -> u64 {
+    if sets >= poll_sets {
+        return 0;
+    }
+    (interval_us * poll_sets / 2 / 1_000).clamp(10, 200)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,6 +75,14 @@ mod tests {
         assert!(past.due());
         // After a stall the next poll is an interval away, not at once.
         assert!(!past.polled().due());
+    }
+
+    #[test]
+    fn a_full_drain_polls_again_at_once() {
+        assert_eq!(drain_wait_ms(10, 1_000, 1_000), 0);
+        assert_eq!(drain_wait_ms(10, 1_000, 3), 10);
+        assert_eq!(drain_wait_ms(100, 1_000, 3), 50);
+        assert_eq!(drain_wait_ms(1_000_000, 1_000, 0), 200);
     }
 
     #[test]

@@ -5,6 +5,7 @@
 //! collecting continuously into its own buffer, and `HRDLGetValues` drains whatever has landed
 //! since the last call.
 
+use super::poll::drain_wait_ms;
 use super::state::{
     sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
 };
@@ -17,7 +18,7 @@ use tracing::{debug, warn};
 /// wrappers and the PicoLog 6 reference's block sizing.
 const RUN_BUFFER_SAMPLES: i32 = 64_000;
 
-/// Number of sample sets drained per poll
+/// Number of sample sets drained per poll; a full poll is followed by another at once
 const POLL_BUFFER_SAMPLES: i32 = 1_000;
 
 /// One channel's scale while the unit streams
@@ -142,11 +143,11 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
         let channels: Vec<HRDLChannel> = config.enabled_channels().map(|(channel, _, _)| channel).collect();
 
         if channels.is_empty() {
-            sleep_ms(1_000);
+            sleep_ms(200);
             return Current::Streaming(info.clone(), state.clone());
         }
 
-        let result: PicoResult<()> = (|| {
+        let result: PicoResult<usize> = (|| {
             let (values, overflow_bits) =
                 self.driver
                     .get_values(*info.handle, channels.len(), POLL_BUFFER_SAMPLES)?;
@@ -170,18 +171,24 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
                 .copied()
                 .collect();
 
-            events.new_data(HRDLStreamingEvent {
-                interval_ms: state.interval_ms,
-                channels: per_channel,
-                over_range,
-            });
+            if sample_sets > 0 {
+                events.new_data(HRDLStreamingEvent {
+                    interval_ms: state.interval_ms,
+                    channels: per_channel,
+                    over_range,
+                });
+            }
 
-            Ok::<(), PicoError>(())
+            Ok::<usize, PicoError>(sample_sets)
         })();
 
         match result {
-            Ok(()) => {
-                sleep_ms(1_000);
+            Ok(sample_sets) => {
+                sleep_ms(drain_wait_ms(
+                    state.interval_ms.max(0) as u64 * 1_000,
+                    POLL_BUFFER_SAMPLES as u64,
+                    sample_sets as u64,
+                ));
                 Current::Streaming(info.clone(), state.clone())
             }
             Err(e) => {
