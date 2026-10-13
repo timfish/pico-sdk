@@ -98,6 +98,61 @@ impl From<PT104DataType> for u32 {
     }
 }
 
+impl PT104DataType {
+    /// The factor from a raw `UsbPt104GetValue` reading to the unit, and the unit
+    ///
+    /// From the scaling table of `UsbPt104GetValue` in the USB PT-104 Programmer's Guide
+    /// (usbpt104pg r8, section 3.4): temperature in 1/1000 °C, 0 to 2.5 V in 10 nV, 0 to
+    /// 115 mV in 1 nV, 0 to 375 Ω in 1 µΩ and 0 to 10 kΩ in 1 mΩ. The wiring does not change
+    /// the scale. `None` for [`PT104DataType::Off`].
+    pub fn scale(self) -> Option<(f64, &'static str)> {
+        match self {
+            PT104DataType::Off => None,
+            PT104DataType::PT100 | PT104DataType::PT1000 => Some((1e-3, "°C")),
+            PT104DataType::ResistanceTo375R => Some((1e-6, "Ω")),
+            PT104DataType::ResistanceTo10K => Some((1e-3, "Ω")),
+            PT104DataType::DifferentialTo115mV | PT104DataType::SingleEndedTo115mV => {
+                Some((1e-9, "V"))
+            }
+            PT104DataType::DifferentialTo2500mV | PT104DataType::SingleEndedTo2500mV => {
+                Some((1e-8, "V"))
+            }
+        }
+    }
+
+    /// A raw reading in the unit of [`PT104DataType::scale`]
+    pub fn to_unit(self, raw: i32) -> Option<f64> {
+        self.scale().map(|(factor, _)| raw as f64 * factor)
+    }
+
+    /// Whether the channel reads a single-ended voltage
+    ///
+    /// The guide says a single-ended channel also enables its 'sister' channel: enabling 3
+    /// also enables 7.
+    pub fn is_single_ended(self) -> bool {
+        matches!(
+            self,
+            PT104DataType::SingleEndedTo115mV | PT104DataType::SingleEndedTo2500mV
+        )
+    }
+}
+
+impl PT104Channel {
+    /// The channel a single-ended input on this channel also enables (1 and 5, 2 and 6, ...)
+    pub fn sister(self) -> PT104Channel {
+        match self {
+            PT104Channel::CHANNEL_1 => PT104Channel::CHANNEL_5,
+            PT104Channel::CHANNEL_2 => PT104Channel::CHANNEL_6,
+            PT104Channel::CHANNEL_3 => PT104Channel::CHANNEL_7,
+            PT104Channel::CHANNEL_4 => PT104Channel::CHANNEL_8,
+            PT104Channel::CHANNEL_5 => PT104Channel::CHANNEL_1,
+            PT104Channel::CHANNEL_6 => PT104Channel::CHANNEL_2,
+            PT104Channel::CHANNEL_7 => PT104Channel::CHANNEL_3,
+            PT104Channel::CHANNEL_8 => PT104Channel::CHANNEL_4,
+        }
+    }
+}
+
 impl fmt::Display for PT104DataType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -196,6 +251,34 @@ mod tests {
         assert_eq!(u32::from(PT104DataType::Off), 0);
         assert_eq!(u32::from(PT104DataType::PT100), 1);
         assert_eq!(u32::from(PT104DataType::PT1000), 2);
+    }
+
+    fn assert_close(value: Option<f64>, expected: f64) {
+        let value = value.expect("a value");
+        assert!((value - expected).abs() <= expected.abs() * 1e-12, "{value} != {expected}");
+    }
+
+    #[test]
+    fn scale_follows_the_guide() {
+        assert_eq!(PT104DataType::Off.scale(), None);
+        assert_close(PT104DataType::PT100.to_unit(21_500), 21.5);
+        assert_eq!(PT104DataType::PT1000.scale(), Some((1e-3, "°C")));
+        assert_close(PT104DataType::ResistanceTo375R.to_unit(100_000_000), 100.0);
+        assert_close(PT104DataType::ResistanceTo10K.to_unit(4_700_000), 4700.0);
+        assert_close(PT104DataType::DifferentialTo115mV.to_unit(115_000_000), 0.115);
+        assert_close(PT104DataType::SingleEndedTo2500mV.to_unit(250_000_000), 2.5);
+        // Every full-scale reading fits an i32.
+        assert!(2.5 / 1e-8 < i32::MAX as f64);
+        assert!(375.0 / 1e-6 < i32::MAX as f64);
+    }
+
+    #[test]
+    fn sisters_pair_1_with_5() {
+        for channel in enum_iterator::all::<PT104Channel>() {
+            assert_eq!(channel.sister().sister(), channel);
+            assert_ne!(channel.sister(), channel);
+        }
+        assert_eq!(PT104Channel::CHANNEL_3.sister(), PT104Channel::CHANNEL_7);
     }
 
     #[test]
