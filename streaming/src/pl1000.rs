@@ -7,6 +7,7 @@
 //! the state machine here still polls for data on a background thread rather than being driven by
 //! a native callback, so it plugs into the same [`StreamDevice`] shape as the other loggers.
 
+use super::poll::drain_wait_ms;
 use super::state::{
     sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
 };
@@ -19,7 +20,7 @@ use tracing::warn;
 /// reference's `run(true, handle, 64_000)`.
 const RUN_BUFFER_SAMPLES: u32 = 64_000;
 
-/// Number of sample sets drained per poll
+/// Number of sample sets drained per poll; a full poll is followed by another at once
 const POLL_BUFFER_SAMPLES: u32 = 1_000;
 
 /// A block of samples read back from the device's streaming buffer
@@ -93,7 +94,7 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
         let channels: Vec<PL1000Channel> = config.enabled_channels().collect();
 
         if channels.is_empty() {
-            sleep_ms(1_000);
+            sleep_ms(200);
             return Current::Streaming(info.clone(), *interval_us);
         }
 
@@ -114,21 +115,27 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
                     }
                 }
 
+                // Bit 0 is channel 1 (PicoLog 1000 Series Programmer's Guide, pl1000GetValues).
                 let over_range = channels
                     .iter()
-                    .enumerate()
-                    .filter(|(i, _)| overflow_bits & (1 << i) != 0)
-                    .map(|(_, &channel)| channel)
+                    .filter(|&&channel| overflow_bits & (1 << (i16::from(channel) - 1)) != 0)
+                    .copied()
                     .collect();
 
-                events.new_data(PL1000StreamingEvent {
-                    interval_us: *interval_us,
-                    max_value: info.max_value,
-                    channels: per_channel,
-                    over_range,
-                });
+                if sample_sets > 0 {
+                    events.new_data(PL1000StreamingEvent {
+                        interval_us: *interval_us,
+                        max_value: info.max_value,
+                        channels: per_channel,
+                        over_range,
+                    });
+                }
 
-                sleep_ms(1_000);
+                sleep_ms(drain_wait_ms(
+                    *interval_us as u64,
+                    POLL_BUFFER_SAMPLES as u64,
+                    sample_sets as u64,
+                ));
                 Current::Streaming(info.clone(), *interval_us)
             }
             Err(e) => {

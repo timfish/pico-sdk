@@ -17,8 +17,8 @@
 
 use crate::LibraryResolution;
 use pico_common::{
-    Driver, FromPicoStr, MainsRejectionFreq, PicoError, PicoInfo, PicoResult, PicoStatus,
-    PLCM3Channel, PLCM3DataType, PLCM3Info, ToPicoStr,
+    Driver, FromPicoStr, LoggerReading, MainsRejectionFreq, PicoError, PicoInfo, PicoResult,
+    PicoStatus, PLCM3Channel, PLCM3DataType, PLCM3Info, ToPicoStr,
 };
 use pico_sys_dynamic::plcm3::PLCM3Loader;
 use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
@@ -146,13 +146,12 @@ impl PLCM3DriverInternal {
         PicoStatus::from(status).to_result((), "set_channel")
     }
 
-    /// Reads the current value from a channel.
+    /// Reads the newest conversion of a channel
     ///
-    /// Returns `Some(value)` if data is available, or `None` if the device has no samples yet
-    /// (`PICO_NO_SAMPLES_AVAILABLE`). The raw i32 value's units depend on the channel's configured
-    /// [`PLCM3DataType`].
+    /// The scale of the raw value depends on the channel's [`PLCM3DataType`]; see
+    /// [`PLCM3DataType::scale`].
     #[tracing::instrument(level = "trace", skip(self), ret)]
-    pub fn get_value(&self, handle: i16, channel: PLCM3Channel) -> PicoResult<Option<i32>> {
+    pub fn get_value(&self, handle: i16, channel: PLCM3Channel) -> PicoResult<LoggerReading> {
         let mut value: i32 = 0;
 
         let status = unsafe {
@@ -161,8 +160,9 @@ impl PLCM3DriverInternal {
         };
 
         match PicoStatus::from(status) {
-            PicoStatus::OK | PicoStatus::WARNING_REPEAT_VALUE => Ok(Some(value)),
-            PicoStatus::NO_SAMPLES_AVAILABLE => Ok(None),
+            PicoStatus::OK => Ok(LoggerReading::New(value)),
+            PicoStatus::WARNING_REPEAT_VALUE => Ok(LoggerReading::Repeat(value)),
+            PicoStatus::NO_SAMPLES_AVAILABLE => Ok(LoggerReading::NotReady),
             status => Err(PicoError::from_status(status, "get_value")),
         }
     }

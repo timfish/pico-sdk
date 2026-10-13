@@ -103,6 +103,22 @@ impl From<HRDLRange> for i16 {
     }
 }
 
+impl HRDLRange {
+    /// The input voltage at the full-scale count
+    ///
+    /// ADC-20/ADC-24 Programmer's Guide (adc20.en r2, section 4.3 Scaling): Vmax = 2500 mV / 2^r
+    /// for range constant r, so ±312.5 mV for [`HRDLRange::Range313mV`] and so on (section 5.16,
+    /// voltage ranges).
+    pub fn volts(self) -> f64 {
+        2.5 / f64::from(1u16 << i16::from(self))
+    }
+
+    /// Whether the ADC-20 has this range: only ±2500 mV and ±1250 mV (section 5.16)
+    pub fn on_adc20(self) -> bool {
+        matches!(self, HRDLRange::Range2500mV | HRDLRange::Range1250mV)
+    }
+}
+
 impl fmt::Display for HRDLRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -164,6 +180,19 @@ impl From<HRDLConversionTime> for i16 {
     }
 }
 
+impl HRDLConversionTime {
+    /// The conversion time of one channel in milliseconds (section 5.18, conversion times)
+    pub fn ms(self) -> i32 {
+        match self {
+            HRDLConversionTime::Time60ms => 60,
+            HRDLConversionTime::Time100ms => 100,
+            HRDLConversionTime::Time180ms => 180,
+            HRDLConversionTime::Time340ms => 340,
+            HRDLConversionTime::Time660ms => 660,
+        }
+    }
+}
+
 impl fmt::Display for HRDLConversionTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -188,6 +217,32 @@ pub struct HRDLInfo {
     pub serial: String,
     pub hardware_version: String,
     pub variant: String,
+}
+
+impl HRDLInfo {
+    /// Whether the unit is an ADC-20, from its variant; else an ADC-24
+    pub fn is_adc20(&self) -> bool {
+        self.variant.trim().trim_start_matches("ADC-").starts_with("20")
+    }
+
+    /// The model name, `"ADC-20"` or `"ADC-24"`
+    pub fn model(&self) -> String {
+        if self.is_adc20() { "ADC-20" } else { "ADC-24" }.to_string()
+    }
+
+    /// The analog channels the variant has: 1 to 8 on the ADC-20 and 1 to 16 on the ADC-24
+    /// (section 5.16, `HRDLSetAnalogInChannel`)
+    pub fn channels(&self) -> Vec<HRDLChannel> {
+        let count = if self.is_adc20() { 8 } else { 16 };
+        enum_iterator::all::<HRDLChannel>().take(count).collect()
+    }
+
+    /// The ranges the variant has (section 5.16)
+    pub fn ranges(&self) -> Vec<HRDLRange> {
+        enum_iterator::all::<HRDLRange>()
+            .filter(|range| !self.is_adc20() || range.on_adc20())
+            .collect()
+    }
 }
 
 /// Error codes reported by `HRDLGetUnitInfo(handle, ..., HRDL_SETTINGS)`
@@ -270,6 +325,37 @@ mod tests {
     fn settings_error_ok_is_nine() {
         assert_eq!(HRDLError::OK as i32, 9);
         assert_eq!(HRDLError::OK.to_status(), PicoStatus::OK);
+    }
+
+    #[test]
+    fn ranges_halve_from_2500_mv() {
+        assert_eq!(HRDLRange::Range2500mV.volts(), 2.5);
+        assert_eq!(HRDLRange::Range1250mV.volts(), 1.25);
+        assert_eq!(HRDLRange::Range313mV.volts(), 0.3125);
+        assert_eq!(HRDLRange::Range156mV.volts(), 0.15625);
+        assert_eq!(HRDLRange::Range39mV.volts(), 0.0390625);
+    }
+
+    #[test]
+    fn conversion_times_in_ms() {
+        assert_eq!(HRDLConversionTime::Time60ms.ms(), 60);
+        assert_eq!(HRDLConversionTime::Time660ms.ms(), 660);
+    }
+
+    #[test]
+    fn channels_and_ranges_follow_the_variant() {
+        let info = |variant: &str| HRDLInfo {
+            handle: Arc::new(0),
+            serial: "A0001/001".into(),
+            hardware_version: "1".into(),
+            variant: variant.into(),
+        };
+        assert_eq!(info("20").channels().len(), 8);
+        assert_eq!(info("20").ranges(), [HRDLRange::Range2500mV, HRDLRange::Range1250mV]);
+        assert_eq!(info("20").model(), "ADC-20");
+        assert_eq!(info("24").channels().len(), 16);
+        assert_eq!(info("24").ranges().len(), 7);
+        assert_eq!(info("24").model(), "ADC-24");
     }
 
     #[test]

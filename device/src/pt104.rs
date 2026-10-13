@@ -1,5 +1,9 @@
 use crate::DeviceOpen;
-use pico_common::{MainsRejectionFreq, PicoResult, PT104Channel, PT104DataType, PT104Info, PT104Wires};
+use pico_common::{
+    MainsRejectionFreq, PicoResult, PT104Channel, PT104DataType, PT104Info, PT104Wires,
+    LOGGER_CONVERSION_MS,
+};
+use std::collections::BTreeSet;
 use pico_driver::pt104::PT104Driver;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -31,6 +35,28 @@ impl PT104Config {
         self.channels
             .iter()
             .map(|(channel, (data_type, wires))| (*channel, *data_type, *wires))
+    }
+
+    /// The channels the unit converts: each channel that is not off, and the sister of each
+    /// single-ended one, which the driver turns on with it
+    pub fn converted_channels(&self) -> BTreeSet<PT104Channel> {
+        let mut channels = BTreeSet::new();
+        for (channel, data_type, _) in self.enabled_channels() {
+            if data_type == PT104DataType::Off {
+                continue;
+            }
+            channels.insert(channel);
+            if data_type.is_single_ended() {
+                channels.insert(channel.sister());
+            }
+        }
+        channels
+    }
+
+    /// How often each channel gets a new conversion: about 720 ms per converted channel
+    /// (USB PT-104 Programmer's Guide, `UsbPt104SetChannel`)
+    pub fn poll_interval_ms(&self) -> u32 {
+        LOGGER_CONVERSION_MS * self.converted_channels().len().max(1) as u32
     }
 }
 
@@ -74,6 +100,30 @@ impl DeviceOpen<PT104Device> for PT104Driver {
             serial: info.serial.clone(),
             info: Some(info),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_single_ended_channel_also_converts_its_sister() {
+        let mut config = PT104Config::default();
+        assert_eq!(config.poll_interval_ms(), 720);
+        config.enable_channel(PT104Channel::CHANNEL_1, PT104DataType::PT100, PT104Wires::FourWire);
+        config.enable_channel(PT104Channel::CHANNEL_2, PT104DataType::Off, PT104Wires::FourWire);
+        assert_eq!(config.poll_interval_ms(), 720);
+        config.enable_channel(
+            PT104Channel::CHANNEL_3,
+            PT104DataType::SingleEndedTo115mV,
+            PT104Wires::FourWire,
+        );
+        assert_eq!(
+            config.converted_channels().into_iter().collect::<Vec<_>>(),
+            [PT104Channel::CHANNEL_1, PT104Channel::CHANNEL_3, PT104Channel::CHANNEL_7]
+        );
+        assert_eq!(config.poll_interval_ms(), 3 * 720);
     }
 }
 

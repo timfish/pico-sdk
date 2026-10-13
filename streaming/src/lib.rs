@@ -61,15 +61,17 @@ mod drdaq;
 mod hrdl;
 mod oscilloscope;
 mod pl1000;
+mod poll;
 mod pt104;
 mod state;
 mod tc08;
 
 pub use cm3::PLCM3StreamingEvent;
 pub use drdaq::DrDAQStreamingEvent;
-pub use hrdl::HRDLStreamingEvent;
+pub use hrdl::{HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent};
 pub use oscilloscope::{OscilloscopeStreamEvent, RawChannelDataBlock, ScopeStreamState};
 pub use pl1000::PL1000StreamingEvent;
+pub use poll::LoggerPollState;
 pub use pt104::PT104StreamingEvent;
 pub use state::{
     Current, EventEmitter, EventHandler, IntoStreamingDevice, StreamDevice, StreamingRunner, Target,

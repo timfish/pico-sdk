@@ -80,6 +80,30 @@ impl From<PLCM3DataType> for u32 {
     }
 }
 
+impl PLCM3DataType {
+    /// The factor from a raw `PLCM3GetValue` reading to the unit, and the unit
+    ///
+    /// A voltage channel reads µV (PicoLog CM3 Programmer's Guide, plcm3pg r4, section 2.9,
+    /// `PLCM3_DATA_TYPES`). The guide gives no unit for the clamp types; Pico's published
+    /// examples read every clamp type as mA (`ApplyScaling` in `plcm3/plcm3CExamples/plcm3Con.c`
+    /// of github.com/picotech/picosdk-c-examples, and the C# and VB .NET examples alike), so the
+    /// driver applies the clamp's mV/A itself. `None` for [`PLCM3DataType::Off`].
+    pub fn scale(self) -> Option<(f64, &'static str)> {
+        match self {
+            PLCM3DataType::Off => None,
+            PLCM3DataType::OneMillivoltPerAmp
+            | PLCM3DataType::TenMillivoltsPerAmp
+            | PLCM3DataType::HundredMillivoltsPerAmp => Some((1e-3, "A")),
+            PLCM3DataType::Voltage => Some((1e-6, "V")),
+        }
+    }
+
+    /// A raw reading in the unit of [`PLCM3DataType::scale`]
+    pub fn to_unit(self, raw: i32) -> Option<f64> {
+        self.scale().map(|(factor, _)| raw as f64 * factor)
+    }
+}
+
 impl fmt::Display for PLCM3DataType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -141,6 +165,17 @@ mod tests {
         assert_eq!(u32::from(PLCM3DataType::TenMillivoltsPerAmp), 2);
         assert_eq!(u32::from(PLCM3DataType::HundredMillivoltsPerAmp), 3);
         assert_eq!(u32::from(PLCM3DataType::Voltage), 4);
+    }
+
+    #[test]
+    fn clamps_read_amps_and_voltage_volts() {
+        assert_eq!(PLCM3DataType::Off.scale(), None);
+        assert_eq!(PLCM3DataType::OneMillivoltPerAmp.scale(), Some((1e-3, "A")));
+        assert_eq!(PLCM3DataType::HundredMillivoltsPerAmp.scale(), Some((1e-3, "A")));
+        let amps = PLCM3DataType::TenMillivoltsPerAmp.to_unit(2_500).unwrap();
+        assert!((amps - 2.5).abs() < 1e-12);
+        let volts = PLCM3DataType::Voltage.to_unit(-1_250_000).unwrap();
+        assert!((volts + 1.25).abs() < 1e-12);
     }
 
     #[test]

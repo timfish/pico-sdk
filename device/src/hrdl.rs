@@ -37,6 +37,13 @@ impl HRDLConfig {
             .iter()
             .map(|(channel, (range, single_ended))| (*channel, *range, *single_ended))
     }
+
+    /// The shortest sample interval the unit takes: more than the conversion time times the
+    /// channels that are on (ADC-20/ADC-24 Programmer's Guide, section 5.18 `HRDLSetInterval`:
+    /// two channels at 60 ms give a minimum of 121 ms)
+    pub fn min_interval_ms(&self) -> i32 {
+        self.conversion_time.ms() * self.channels.len() as i32 + 1
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +86,22 @@ impl DeviceOpen<HRDLDevice> for HRDLDriver {
             serial: info.serial.clone(),
             info: Some(info),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_shortest_interval_follows_the_conversions() {
+        let mut config = HRDLConfig::default();
+        assert_eq!(config.min_interval_ms(), 1);
+        config.enable_channel(HRDLChannel::CHANNEL_1, HRDLRange::Range2500mV, true);
+        config.enable_channel(HRDLChannel::CHANNEL_5, HRDLRange::Range39mV, false);
+        assert_eq!(config.min_interval_ms(), 121);
+        config.conversion_time = HRDLConversionTime::Time660ms;
+        assert_eq!(config.min_interval_ms(), 1321);
     }
 }
 
