@@ -86,10 +86,8 @@ impl FromStr for PL1000Channel {
 /// What was discovered about a PicoLog 1000 series unit once it was opened
 ///
 /// `max_value` is the full-scale ADC reading reported by `pl1000MaxValue`. The 1000 series has no
-/// per-channel range setting - every channel reads the same fixed input range - but that range
-/// varies by variant (e.g. PL1012 is 0-2.5V), and the variant is not enumerable from published
-/// docs alone. Rather than hard code voltage scaling per variant, callers scale `max_value`
-/// against whatever full-scale voltage they know for the reported `variant`.
+/// per-channel range setting: every channel reads 0 to [`PL1000_FULL_SCALE_VOLTS`], so
+/// [`PL1000Info::volts_per_count`] scales a reading to volts.
 ///
 /// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
 /// unit handle), not configuration or a capability. Every other field is already trivially
@@ -101,6 +99,46 @@ pub struct PL1000Info {
     pub serial: String,
     pub variant: String,
     pub max_value: u16,
+}
+
+/// The input voltage at `max_value` for every PicoLog 1000 Series unit
+///
+/// PicoLog 1000 Series Programmer's Guide (pl1000pg r7, section 3.2 Scaling): "To convert ADC
+/// readings to volts, multiply by 2.5 and divide by maxValue".
+pub const PL1000_FULL_SCALE_VOLTS: f64 = 2.5;
+
+impl PL1000Info {
+    /// The model name, for example `"PicoLog 1216"`
+    pub fn model(&self) -> String {
+        let variant = self.variant.trim();
+        if variant.starts_with(|c: char| c.is_ascii_digit()) {
+            format!("PicoLog {variant}")
+        } else if variant.is_empty() {
+            "PicoLog 1000".to_string()
+        } else {
+            variant.to_string()
+        }
+    }
+
+    /// The input voltage at `max_value`
+    pub fn full_scale_volts(&self) -> f64 {
+        PL1000_FULL_SCALE_VOLTS
+    }
+
+    /// The factor from an ADC count to volts
+    pub fn volts_per_count(&self) -> f64 {
+        PL1000_FULL_SCALE_VOLTS / self.max_value.max(1) as f64
+    }
+
+    /// The channels the variant has
+    ///
+    /// PicoLog 1000 Series Programmer's Guide (pl1000pg r7, section 1, and `pl1000GetSingle`):
+    /// the PicoLog 1012 has channels 1 to 12 and the PicoLog 1216 channels 1 to 16. An unknown
+    /// variant lists all 16.
+    pub fn channels(&self) -> Vec<PL1000Channel> {
+        let count = if self.variant.contains("1012") { 12 } else { 16 };
+        enum_iterator::all::<PL1000Channel>().take(count).collect()
+    }
 }
 
 #[cfg(test)]
@@ -120,6 +158,34 @@ mod tests {
         assert_eq!(i16::from(PL1000Channel::CHANNEL_16), 16);
         assert_eq!(u32::from(PL1000Channel::CHANNEL_1), 1);
         assert_eq!(u32::from(PL1000Channel::CHANNEL_16), 16);
+    }
+
+    fn info(variant: &str, max_value: u16) -> PL1000Info {
+        PL1000Info {
+            handle: Arc::new(0),
+            serial: "A0001/001".into(),
+            variant: variant.into(),
+            max_value,
+        }
+    }
+
+    #[test]
+    fn counts_scale_to_volts_by_the_max_value() {
+        let info = info("1216", 4095);
+        assert_eq!(info.full_scale_volts(), 2.5);
+        // The guide's example: 132 counts on a PicoLog 1216 is about 0.0806 V.
+        assert!((132.0 * info.volts_per_count() - 0.0806).abs() < 1e-4);
+        assert_eq!(4095.0 * info.volts_per_count(), 2.5);
+    }
+
+    #[test]
+    fn channels_and_model_follow_the_variant() {
+        assert_eq!(info("1012", 1023).channels().len(), 12);
+        assert_eq!(info("1216", 4095).channels().len(), 16);
+        assert_eq!(info("", 4095).channels().len(), 16);
+        assert_eq!(info("1216", 4095).channels()[0], PL1000Channel::CHANNEL_1);
+        assert_eq!(info("1012", 1023).model(), "PicoLog 1012");
+        assert_eq!(info("", 1023).model(), "PicoLog 1000");
     }
 
     #[test]
