@@ -6,13 +6,14 @@
 //!
 //! Compared to the TC-08, the PT-104:
 //! - Has no thermocouple type negotiation: channel type (PT100, voltage range, etc) is set explicitly.
-//! - Returns a single i32 raw value per channel read, not buffered samples.
+//! - Returns a single i32 raw value per channel read, not buffered samples; see
+//!   [`PT104DataType::scale`] for its unit.
 //! - Uses 4-wire, 3-wire, or 2-wire resistance measurement (for PT100/PT1000).
 //! - Returns `PICO_NO_SAMPLES_AVAILABLE` if data is not ready (not an error).
 
 use crate::LibraryResolution;
 use pico_common::{
-    Driver, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, PT104Channel,
+    Driver, LoggerReading, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, PT104Channel,
     PT104DataType, PT104Info, PT104Wires,
 };
 use pico_sys_dynamic::pt104::{
@@ -178,20 +179,17 @@ impl PT104DriverInternal {
         }
     }
 
-    /// Reads the current value from a channel.
+    /// Reads the newest conversion of a channel
     ///
-    /// Returns `Some(value)` if data is available, or `None` if the device has no samples yet
-    /// (PICO_NO_SAMPLES_AVAILABLE). The raw i32 value is device/sensor-dependent and needs
-    /// interpretation by the caller (typically conversion from raw ADC units to engineering units).
-    ///
-    /// The `filtered` parameter enables/disables mains rejection filtering.
+    /// The scale of the raw value depends on the channel's [`PT104DataType`]; see
+    /// [`PT104DataType::scale`]. `filtered` asks for the driver's low-pass filtered value.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn get_value(
         &self,
         handle: i16,
         channel: PT104Channel,
         filtered: bool,
-    ) -> PicoResult<Option<i32>> {
+    ) -> PicoResult<LoggerReading> {
         let mut value: i32 = 0;
         let filter_flag = if filtered { 1 } else { 0 };
 
@@ -205,8 +203,9 @@ impl PT104DriverInternal {
         };
 
         match status {
-            PICO_OK | PICO_WARNING_REPEAT_VALUE => Ok(Some(value)),
-            PICO_NO_SAMPLES_AVAILABLE => Ok(None),
+            PICO_OK => Ok(LoggerReading::New(value)),
+            PICO_WARNING_REPEAT_VALUE => Ok(LoggerReading::Repeat(value)),
+            PICO_NO_SAMPLES_AVAILABLE => Ok(LoggerReading::NotReady),
             _ => Err(PicoError::from_status(PicoStatus::from(status), "get_value")),
         }
     }

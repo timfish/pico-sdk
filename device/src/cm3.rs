@@ -1,5 +1,7 @@
 use crate::DeviceOpen;
-use pico_common::{MainsRejectionFreq, PicoResult, PLCM3Channel, PLCM3DataType, PLCM3Info};
+use pico_common::{
+    MainsRejectionFreq, PicoResult, PLCM3Channel, PLCM3DataType, PLCM3Info, LOGGER_CONVERSION_MS,
+};
 use pico_driver::cm3::PLCM3Driver;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -27,6 +29,16 @@ impl PLCM3Config {
     /// Returns all configured channels in channel order
     pub fn enabled_channels(&self) -> impl Iterator<Item = (PLCM3Channel, PLCM3DataType)> + '_ {
         self.channels.iter().map(|(channel, data_type)| (*channel, *data_type))
+    }
+
+    /// How often each channel gets a new conversion: about 720 ms per channel that is not off
+    /// (PicoLog CM3 Programmer's Guide, `PLCM3SetChannel`)
+    pub fn poll_interval_ms(&self) -> u32 {
+        let converted = self
+            .enabled_channels()
+            .filter(|(_, data_type)| *data_type != PLCM3DataType::Off)
+            .count();
+        LOGGER_CONVERSION_MS * converted.max(1) as u32
     }
 }
 
@@ -70,6 +82,21 @@ impl DeviceOpen<PLCM3Device> for PLCM3Driver {
             serial: info.serial.clone(),
             info: Some(info),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_poll_follows_the_channels_that_are_on() {
+        let mut config = PLCM3Config::default();
+        assert_eq!(config.poll_interval_ms(), 720);
+        config.enable_channel(PLCM3Channel::CHANNEL_1, PLCM3DataType::Voltage);
+        config.enable_channel(PLCM3Channel::CHANNEL_2, PLCM3DataType::Off);
+        config.enable_channel(PLCM3Channel::CHANNEL_3, PLCM3DataType::TenMillivoltsPerAmp);
+        assert_eq!(config.poll_interval_ms(), 2 * 720);
     }
 }
 
