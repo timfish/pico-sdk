@@ -45,6 +45,7 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
             arbitrary: true,
         }),
         aux_io: false,
+        channel_leds: false,
         bandwidth_hz: bandwidth_mhz.map(|mhz| mhz * MHZ),
         bandwidth_cases: Vec::new(),
         bandwidth_limits: Vec::new(),

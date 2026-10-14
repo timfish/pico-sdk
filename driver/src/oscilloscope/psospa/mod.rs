@@ -4,6 +4,7 @@ mod capabilities;
 mod digital;
 mod ets;
 mod extras;
+mod led;
 mod rapid_block;
 mod siggen;
 mod streaming;
@@ -467,7 +468,9 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn capabilities(&self, handle: i16) -> PicoResult<pico_common::ScopeCapabilities> {
         let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-        Ok(capabilities::of(&variant))
+        let mut capabilities = capabilities::of(&variant);
+        capabilities.channel_leds = led::has_channel_leds(self, handle);
+        Ok(capabilities)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

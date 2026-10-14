@@ -3,8 +3,8 @@ use super::state::{
     StreamDevice, StreamingRunner,
 };
 use pico_common::{
-    Downsample, DownsampleKind, OscilloscopeSampleConfig, PicoChannel, PicoError, PicoResult,
-    PicoStatus, PowerSource, SampleType,
+    AuxIoMode, Downsample, DownsampleKind, LedColour, LedState, OscilloscopeSampleConfig,
+    PicoChannel, PicoError, PicoLed, PicoResult, PicoStatus, PowerSource, SampleType,
 };
 use pico_device::{
     oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
@@ -535,6 +535,43 @@ fn start_stream(
     );
 
     Ok(Current::Streaming(info.clone(), state))
+}
+
+/// A scope's streaming runner.
+pub type ScopeRunner = StreamingRunner<
+    OscilloscopeDevice,
+    OscilloscopeConfig,
+    OscilloscopeInfo,
+    ScopeStreamState,
+    OscilloscopeStreamEvent,
+>;
+
+/// Calls a stream allows, each run between two polls so the stream
+/// goes on. LEDs are on units with `ScopeCapabilities::channel_leds`.
+impl ScopeRunner {
+    pub fn set_led_colours(&self, colours: &[(PicoLed, LedColour)]) -> PicoResult<()> {
+        self.with_open(|device, info| device.driver.set_led_colours(*info.handle, colours))
+            .unwrap_or_else(|| Err(closed("set_led_colours")))
+    }
+
+    pub fn set_led_states(&self, states: &[(PicoLed, LedState)]) -> PicoResult<()> {
+        self.with_open(|device, info| device.driver.set_led_states(*info.handle, states))
+            .unwrap_or_else(|| Err(closed("set_led_states")))
+    }
+
+    pub fn set_led_brightness(&self, brightness: u8) -> PicoResult<()> {
+        self.with_open(|device, info| device.driver.set_led_brightness(*info.handle, brightness))
+            .unwrap_or_else(|| Err(closed("set_led_brightness")))
+    }
+
+    pub fn set_aux_io_mode(&self, mode: AuxIoMode) -> PicoResult<()> {
+        self.with_open(|device, info| device.driver.set_aux_io_mode(*info.handle, mode))
+            .unwrap_or_else(|| Err(closed("set_aux_io_mode")))
+    }
+}
+
+fn closed(context: &str) -> PicoError {
+    PicoError::from_status(PicoStatus::INVALID_HANDLE, context)
 }
 
 impl

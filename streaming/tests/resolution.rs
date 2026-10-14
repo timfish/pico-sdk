@@ -10,8 +10,8 @@ use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
 use pico_driver::{
     oscilloscope::{
         AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EnumerationResult,
-        EtsDriver, OscilloscopeDriver, OscilloscopeDriverInternal, RapidBlockDriver, SampleBuffer,
-        SigGenDriver, StreamingDriver, TriggerDriver,
+        EtsDriver, LedDriver, OscilloscopeDriver, OscilloscopeDriverInternal, RapidBlockDriver,
+        SampleBuffer, SigGenDriver, StreamingDriver, TriggerDriver,
     },
     DriverLoadError,
 };
@@ -80,6 +80,7 @@ impl DigitalPortDriver for MockFlexResDriver {}
 impl SigGenDriver for MockFlexResDriver {}
 impl AuxIoDriver for MockFlexResDriver {}
 impl ChannelExtrasDriver for MockFlexResDriver {}
+impl LedDriver for MockFlexResDriver {}
 
 impl std::fmt::Debug for MockFlexResDriver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -162,9 +162,10 @@
 
 pub mod prelude {
     pub use pico_common::{
-        Downsample, DownsampleKind, Driver, MainsRejectionFreq, OscilloscopeChannelConfig,
-        PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoStatus,
-        PowerSource, RateLimit, SampleType, TC08Channel, TCType,
+        AuxIoMode, Downsample, DownsampleKind, Driver, LedColour, LedState, MainsRejectionFreq,
+        OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed,
+        PicoRange, PicoResolution, PicoStatus, PowerSource, RateLimit, SampleType,
+        ScopeCapabilities, TC08Channel, TCType,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
@@ -188,7 +189,7 @@ pub mod prelude {
         AfterPowerChange, DeviceNotice, DrDAQStreamingEvent, EventHandler, HRDLChannelScale,
         HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice, LoggerPollState,
         OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
-        RawChannelDataBlock, Samples, ScopeStreamState, TC08StreamingEvent,
+        RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState, TC08StreamingEvent,
     };
 }
 

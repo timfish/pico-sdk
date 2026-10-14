@@ -69,7 +69,9 @@ mod tc08;
 pub use cm3::PLCM3StreamingEvent;
 pub use drdaq::DrDAQStreamingEvent;
 pub use hrdl::{HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent};
-pub use oscilloscope::{OscilloscopeStreamEvent, RawChannelDataBlock, Samples, ScopeStreamState};
+pub use oscilloscope::{
+    OscilloscopeStreamEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
+};
 pub use pl1000::PL1000StreamingEvent;
 pub use poll::LoggerPollState;
 pub use pt104::PT104StreamingEvent;
