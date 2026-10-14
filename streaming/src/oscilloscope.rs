@@ -476,6 +476,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
         if let Some(resolution) = info.effective_resolution(config) {
             self.driver.set_resolution(*info.handle, resolution)?;
+            debug!(asked = ?resolution, set = ?self.driver.get_resolution(*info.handle), "resolution set");
         }
 
         for (channel, ranges) in &info.valid_channel_ranges {

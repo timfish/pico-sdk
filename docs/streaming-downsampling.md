@@ -38,12 +38,27 @@ The multiplier of `I8` samples is the range over the 8-bit limit (`max >> 8`, 12
 
 ## SUM
 
+On a 5464E (psospa) the driver refuses SUM in streaming with `RATIO_MODE_NOT_SUPPORTED` (2026-10-14), so psospa and ps6000a offer AVERAGE only. The code below stays for a driver that streams SUM.
+
 SUM gives `Samples::I32`, unscaled, with a multiplier of range / (max ADC × ratio), so `scale_sample` gives the group's mean and the sum keeps every bit. A scaled float would lose bits past 2^24 and an `I16` would overflow. The guides do not say whether the sum is of 16-bit-scaled values or raw codes, nor the ratio limit; the multiplier assumes 16-bit-scaled values (one of 32512 at 8 bits).
 
 ## Needs hardware
 
 - Whether ps6000a and psospa take `INT8` buffers for RAW streaming at 8 bits, and what the codes are (±127 assumed). Pico's published Python streaming examples use `INT16` at 8 bits.
-- Whether SUM streams at all, its data type (`INT32` assumed) and its scale.
+- SUM: refused in streaming on a 5464E (psospa). ps6000a not checked.
 - Whether AVERAGE at 8 bits gives a fraction in the low byte on each family.
 - Whether 8-bit codes in `i16` buffers are always multiples of 256 (2208A, ps3000a, ps6000).
 - Whether `ps4000RunStreamingEx` is in the installed ps4000 driver.
+
+## Checked on hardware (2026-10-14)
+
+| Scope | Test | Result |
+|---|---|---|
+| 2208A (ps2000a) | 8-bit raw at 1 MS/s | `I8`, 100% of samples, every i16 code a multiple of 256 |
+| 2208A | AVERAGE ×16, ×256 | `I16` at 62.5 kS/s and 3.9 kS/s; fractions in the low byte (16 and 72 distinct codes where raw gives 3) |
+| 5464E (psospa) | 8-bit raw at 1 MS/s | native `INT8` buffers, `I8`, 99.3% of samples |
+| 5464E | 8-bit AVERAGE ×16 | `I16` at 62.2 kS/s; noise 0.64 mV → 0.16 mV (√16) |
+| 5464E | 16-bit AVERAGE ×16 | noise 0.145 mV → 0.065 mV |
+| 5464E | SUM ×16 | refused: `RATIO_MODE_NOT_SUPPORTED` |
+| 5464E | 12, 14, 15 bit | the unit lists only 8 and 16 bit; these are now refused (they fell back to 16 bit before) |
+| 5464E | 8 and 16 bit at 31.25 MS/s, one channel | 8 bit keeps every sample; 16 bit keeps about 65% over USB 2 |

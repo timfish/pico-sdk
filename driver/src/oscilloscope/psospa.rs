@@ -174,8 +174,10 @@ impl PSOSPADriver {
 }
 
 impl OscilloscopeDriverInternal for PSOSPADriver {
+    // SUM streaming is refused by the driver (RATIO_MODE_NOT_SUPPORTED
+    // on a 5464E, 2026-10-14), though the header lists the mode.
     fn downsample_modes(&self) -> &'static [DownsampleKind] {
-        &[DownsampleKind::Average, DownsampleKind::Sum]
+        &[DownsampleKind::Average]
     }
 
     fn sample_types(&self) -> &'static [SampleType] {
@@ -331,7 +333,15 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     }
 
     fn get_resolution(&self, handle: i16) -> Option<PicoResolution> {
-        PicoResolution::from_driver_value(self.resolution(handle))
+        let mut value = 0;
+        let status = PicoStatus::from(unsafe {
+            self.bindings.psospaGetDeviceResolution(handle, &mut value)
+        });
+        if status == PicoStatus::OK {
+            PicoResolution::from_driver_value(value)
+        } else {
+            PicoResolution::from_driver_value(self.resolution(handle))
+        }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
