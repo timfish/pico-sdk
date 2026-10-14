@@ -1,16 +1,45 @@
 use super::{
+    check_channel_limit,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result, EnumerationResult, OscilloscopeDriverInternal,
 };
 use parking_lot::RwLock;
 use pico_common::{
-    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
+    Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
+    PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, ToPicoStr,
 };
 use pico_sys_dynamic::ps6000a::{
-    enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL, enPicoDataType_PICO_INT16_T, enPicoDeviceResolution_PICO_DR_10BIT, enPicoDeviceResolution_PICO_DR_12BIT, enPicoDeviceResolution_PICO_DR_8BIT, enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO
+    enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL,
+    enPicoDataType_PICO_INT16_T, enPicoDeviceResolution_PICO_DR_8BIT,
+    enPicoRatioMode_PICO_RATIO_MODE_RAW, PS6000ALoader, PICO_DEVICE_RESOLUTION,
+    PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
 };
 use std::{mem::MaybeUninit, sync::Arc};
+
+const FLEXRES: [PicoResolution; 3] = [
+    PicoResolution::DR_8BIT,
+    PicoResolution::DR_10BIT,
+    PicoResolution::DR_12BIT,
+];
+
+/// 12-bit allows 2 channels (Programmer's Guide ps6000apg-9, 3.47).
+const FLEXRES_CHANNEL_LIMITS: [(PicoResolution, u8); 1] = [(PicoResolution::DR_12BIT, 2)];
+
+/// FlexRes models have a 2 as their third digit (6424E, 6824E,
+/// 6428E-D); the others (6403E, 6804E) are 8-bit only, as Pico's data
+/// sheet lists them.
+fn is_flexres(variant: &str) -> bool {
+    variant.chars().nth(2) == Some('2')
+}
+
+/// The resolutions a variant can run at.
+fn variant_resolutions(variant: &str) -> &'static [PicoResolution] {
+    if is_flexres(variant) {
+        &FLEXRES
+    } else {
+        &FLEXRES[..1]
+    }
+}
 
 pub struct PS6000ADriver {
     _dependencies: LoadedDependencies,
@@ -33,6 +62,36 @@ impl PS6000ADriver {
         Ok(PS6000ADriver {
             bindings,
             _dependencies: dependencies,
+        })
+    }
+}
+
+impl PS6000ADriver {
+    fn variant_resolutions(&self, handle: i16) -> PicoResult<&'static [PicoResolution]> {
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
+        Ok(variant_resolutions(&variant))
+    }
+
+    fn adc_limits(&self, handle: i16, resolution: PicoResolution) -> PicoResult<i16> {
+        let mut min_value = 0;
+        let mut max_value = 0;
+        PicoStatus::from(unsafe {
+            self.bindings.ps6000aGetAdcLimits(
+                handle,
+                resolution.to_driver_value(),
+                &mut min_value,
+                &mut max_value,
+            )
+        })
+        .to_result(max_value, "get_adc_limits")
+    }
+
+    fn device_resolution(&self, handle: i16) -> PicoResult<PicoResolution> {
+        let mut value: PICO_DEVICE_RESOLUTION = enPicoDeviceResolution_PICO_DR_8BIT;
+        PicoStatus::from(unsafe { self.bindings.ps6000aGetDeviceResolution(handle, &mut value) })
+            .to_result((), "get_resolution")?;
+        PicoResolution::from_driver_value(value).ok_or_else(|| {
+            PicoError::from_status(PicoStatus::INVALID_DEVICE_RESOLUTION, "get_resolution")
         })
     }
 }
@@ -111,18 +170,7 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn maximum_value(&self, handle: i16) -> PicoResult<i16> {
-        let mut min_value = 0;
-        let mut max_value = 0;
-
-        PicoStatus::from(unsafe {
-            self.bindings.ps6000aGetAdcLimits(
-                handle,
-                enPicoDeviceResolution_PICO_DR_12BIT,
-                &mut min_value,
-                &mut max_value,
-            )
-        })
-        .to_result(max_value, "maximum_value")
+        self.adc_limits(handle, self.device_resolution(handle)?)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -157,6 +205,40 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
         // The 6000a doesn't support querying of supported channel ranges but
         // fortunately they use the same 10mV to 20v ranges
         Ok((0..=10).map(|r| r.into()).collect())
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn get_resolutions(&self, handle: i16) -> PicoResult<Vec<(PicoResolution, i16)>> {
+        self.variant_resolutions(handle)?
+            .iter()
+            .map(|r| Ok((*r, self.adc_limits(handle, *r)?)))
+            .collect()
+    }
+
+    fn get_resolution(&self, handle: i16) -> Option<PicoResolution> {
+        self.device_resolution(handle).ok()
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_resolution(&self, handle: i16, resolution: PicoResolution) -> PicoResult<()> {
+        if !self.variant_resolutions(handle)?.contains(&resolution) {
+            return Err(PicoError::from_status(
+                PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT,
+                "set_resolution",
+            ));
+        }
+        PicoStatus::from(unsafe {
+            self.bindings
+                .ps6000aSetDeviceResolution(handle, resolution.to_driver_value())
+        })
+        .to_result((), "set_resolution")
+    }
+
+    fn get_resolution_channel_limits(&self, handle: i16) -> Vec<(PicoResolution, u8)> {
+        match self.get_unit_info(handle, PicoInfo::VARIANT_INFO) {
+            Ok(variant) if is_flexres(&variant) => FLEXRES_CHANNEL_LIMITS.to_vec(),
+            _ => Vec::new(),
+        }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -235,18 +317,12 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
         enabled_channels: u8,
         _buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig> {
-        let resolution = match enabled_channels {
-            1 | 2 => enPicoDeviceResolution_PICO_DR_12BIT,
-            _ => enPicoDeviceResolution_PICO_DR_10BIT,
-        };
-
-        let status = PicoStatus::from(unsafe {
-            self.bindings.ps6000aSetDeviceResolution(handle, resolution)
-        });
-
-        if status != PicoStatus::OK {
-            return status.to_result(OscilloscopeSampleConfig::default(), "ps6000aSetDeviceResolution");
-        }
+        let resolution = self.device_resolution(handle)?;
+        check_channel_limit(
+            &FLEXRES_CHANNEL_LIMITS,
+            resolution,
+            enabled_channels as usize,
+        )?;
 
         let mut sample_interval = sample_config.interval as f64;
 
@@ -313,5 +389,33 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn stop(&self, handle: i16) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps6000aStop(handle) }).to_result((), "stop")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_models_list_only_8_bit() {
+        for variant in ["6403E", "6404E", "6406E", "6804E"] {
+            assert_eq!(variant_resolutions(variant), &[PicoResolution::DR_8BIT]);
+        }
+        for variant in ["6424E", "6426E", "6824E", "6428E-D"] {
+            assert_eq!(variant_resolutions(variant), &FLEXRES);
+        }
+    }
+
+    #[test]
+    fn twelve_bit_allows_two_channels() {
+        let limits = FLEXRES_CHANNEL_LIMITS;
+        assert!(check_channel_limit(&limits, PicoResolution::DR_12BIT, 2).is_ok());
+        let err = check_channel_limit(&limits, PicoResolution::DR_12BIT, 3).unwrap_err();
+        assert_eq!(
+            err.status,
+            PicoStatus::INVALID_NUMBER_CHANNELS_FOR_RESOLUTION
+        );
+        assert!(check_channel_limit(&limits, PicoResolution::DR_10BIT, 4).is_ok());
+        assert!(check_channel_limit(&limits, PicoResolution::DR_8BIT, 8).is_ok());
     }
 }

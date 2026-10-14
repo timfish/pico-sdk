@@ -1,4 +1,5 @@
 use super::{
+    check_channel_limit,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
@@ -6,14 +7,27 @@ use super::{
 };
 use parking_lot::RwLock;
 use pico_common::{
-    OscilloscopeChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
-    PicoRange, PicoResult, PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
+    DownsampleMode, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, ToPicoStr,
 };
 use pico_sys_dynamic::ps5000a::{
-    enPicoDeviceResolution_PICO_DR_14BIT, enPicoDeviceResolution_PICO_DR_15BIT,
-    enPicoDeviceResolution_PICO_DR_16BIT, PS5000ALoader,
+    enPicoDeviceResolution_PICO_DR_14BIT, PS5000ALoader, PS5000A_DEVICE_RESOLUTION,
 };
 use std::sync::Arc;
+
+/// Every 5000A, 5000B and 5000D model has all five resolutions, each
+/// with its maximum ADC value (Programmer's Guide ps5000apg r4, 3.2).
+const RESOLUTIONS: [(PicoResolution, i16); 5] = [
+    (PicoResolution::DR_8BIT, 32_512),
+    (PicoResolution::DR_12BIT, 32_767),
+    (PicoResolution::DR_14BIT, 32_767),
+    (PicoResolution::DR_15BIT, 32_767),
+    (PicoResolution::DR_16BIT, 32_767),
+];
+
+/// 15-bit allows 2 channels and 16-bit 1 (ps5000apg r4, 4.49).
+const CHANNEL_LIMITS: [(PicoResolution, u8); 2] =
+    [(PicoResolution::DR_15BIT, 2), (PicoResolution::DR_16BIT, 1)];
 
 pub struct PS5000ADriver {
     _dependencies: LoadedDependencies,
@@ -38,6 +52,31 @@ impl PS5000ADriver {
         Ok(PS5000ADriver {
             bindings,
             _dependencies: dependencies,
+        })
+    }
+}
+
+impl PS5000ADriver {
+    /// The shortest sample interval at a resolution, in ns, from the
+    /// timebase tables (ps5000apg r4, 3.6). These are block mode
+    /// limits with the fewest channels on; streaming is slower and
+    /// the driver returns the interval it can run at.
+    pub fn fastest_interval_ns(resolution: PicoResolution) -> Option<f64> {
+        match resolution {
+            PicoResolution::DR_8BIT => Some(1.0),
+            PicoResolution::DR_12BIT => Some(2.0),
+            PicoResolution::DR_14BIT | PicoResolution::DR_15BIT => Some(8.0),
+            PicoResolution::DR_16BIT => Some(16.0),
+            PicoResolution::DR_10BIT => None,
+        }
+    }
+
+    fn device_resolution(&self, handle: i16) -> PicoResult<PicoResolution> {
+        let mut value: PS5000A_DEVICE_RESOLUTION = 0;
+        PicoStatus::from(unsafe { self.bindings.ps5000aGetDeviceResolution(handle, &mut value) })
+            .to_result((), "get_resolution")?;
+        PicoResolution::from_driver_value(value).ok_or_else(|| {
+            PicoError::from_status(PicoStatus::INVALID_DEVICE_RESOLUTION, "get_resolution")
         })
     }
 }
@@ -187,6 +226,33 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
         }
     }
 
+    fn get_resolutions(&self, _handle: i16) -> PicoResult<Vec<(PicoResolution, i16)>> {
+        Ok(RESOLUTIONS.to_vec())
+    }
+
+    fn get_resolution(&self, handle: i16) -> Option<PicoResolution> {
+        self.device_resolution(handle).ok()
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_resolution(&self, handle: i16, resolution: PicoResolution) -> PicoResult<()> {
+        if !RESOLUTIONS.iter().any(|(r, _)| *r == resolution) {
+            return Err(PicoError::from_status(
+                PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT,
+                "set_resolution",
+            ));
+        }
+        PicoStatus::from(unsafe {
+            self.bindings
+                .ps5000aSetDeviceResolution(handle, resolution.to_driver_value())
+        })
+        .to_result((), "set_resolution")
+    }
+
+    fn get_resolution_channel_limits(&self, _handle: i16) -> Vec<(PicoResolution, u8)> {
+        CHANNEL_LIMITS.to_vec()
+    }
+
     #[tracing::instrument(level = "trace", skip(self))]
     fn enable_channel(
         &self,
@@ -247,19 +313,8 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
         enabled_channels: u8,
         buffer_len: usize,
     ) -> PicoResult<OscilloscopeSampleConfig> {
-        let resolution = match enabled_channels {
-            1 => enPicoDeviceResolution_PICO_DR_16BIT,
-            2 => enPicoDeviceResolution_PICO_DR_15BIT,
-            _ => enPicoDeviceResolution_PICO_DR_14BIT,
-        };
-
-        let status = PicoStatus::from(unsafe {
-            self.bindings.ps5000aSetDeviceResolution(handle, resolution)
-        });
-
-        if status != PicoStatus::OK {
-            return status.to_result(OscilloscopeSampleConfig::default(), "ps5000aSetDeviceResolution");
-        }
+        let resolution = self.device_resolution(handle)?;
+        check_channel_limit(&CHANNEL_LIMITS, resolution, enabled_channels as usize)?;
 
         let mut sample_interval = sample_config.interval;
 
@@ -310,5 +365,40 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn stop(&self, handle: i16) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.ps5000aStop(handle) }).to_result((), "stop")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eight_bit_has_its_own_maximum() {
+        let max = |r| RESOLUTIONS.iter().find(|(s, _)| *s == r).unwrap().1;
+        assert_eq!(max(PicoResolution::DR_8BIT), 32_512);
+        for r in [12, 14, 15, 16] {
+            let r = RESOLUTIONS.iter().find(|(s, _)| s.bits() == r).unwrap().0;
+            assert_eq!(max(r), 32_767);
+        }
+    }
+
+    #[test]
+    fn channel_counts_follow_the_guide() {
+        let ok = |r, n| check_channel_limit(&CHANNEL_LIMITS, r, n).is_ok();
+        assert!(ok(PicoResolution::DR_16BIT, 1));
+        assert!(!ok(PicoResolution::DR_16BIT, 2));
+        assert!(ok(PicoResolution::DR_15BIT, 2));
+        assert!(!ok(PicoResolution::DR_15BIT, 3));
+        assert!(ok(PicoResolution::DR_14BIT, 4));
+        assert!(ok(PicoResolution::DR_12BIT, 4));
+        assert!(ok(PicoResolution::DR_8BIT, 4));
+    }
+
+    #[test]
+    fn fastest_interval_grows_with_resolution() {
+        let fastest = PS5000ADriver::fastest_interval_ns;
+        assert_eq!(fastest(PicoResolution::DR_8BIT), Some(1.0));
+        assert_eq!(fastest(PicoResolution::DR_16BIT), Some(16.0));
+        assert_eq!(fastest(PicoResolution::DR_10BIT), None);
     }
 }
