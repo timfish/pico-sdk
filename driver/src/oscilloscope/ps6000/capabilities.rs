@@ -62,6 +62,7 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
             arbitrary: !(model.ends_with('A') || model.ends_with('C')),
         }),
         aux_io: false,
+        channel_leds: false,
         bandwidth_hz,
         bandwidth_cases,
         bandwidth_limits,

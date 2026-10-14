@@ -33,8 +33,8 @@ pub use ps6000a::PS6000ADriver;
 pub use psospa::PSOSPADriver;
 
 pub use features::{
-    AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EtsDriver, RapidBlockDriver,
-    SigGenDriver, StreamingDriver, TriggerDriver,
+    AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EtsDriver, LedDriver,
+    RapidBlockDriver, SigGenDriver, StreamingDriver, TriggerDriver,
 };
 
 use crate::DriverLoadError;
@@ -205,6 +205,7 @@ pub trait OscilloscopeDriverInternal:
     + SigGenDriver
     + AuxIoDriver
     + ChannelExtrasDriver
+    + LedDriver
     + fmt::Debug
     + Send
     + Sync
