@@ -102,8 +102,10 @@ impl PS6000ADriver {
 }
 
 impl OscilloscopeDriverInternal for PS6000ADriver {
+    // SUM streaming is refused by the driver (RATIO_MODE_NOT_SUPPORTED
+    // on a 5464E, 2026-10-14), though the header lists the mode.
     fn downsample_modes(&self) -> &'static [DownsampleKind] {
-        &[DownsampleKind::Average, DownsampleKind::Sum]
+        &[DownsampleKind::Average]
     }
 
     fn sample_types(&self) -> &'static [SampleType] {

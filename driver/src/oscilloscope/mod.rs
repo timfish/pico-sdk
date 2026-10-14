@@ -151,12 +151,12 @@ impl PicoStreamMode {
                 mode: DownsampleKind::Sum,
             }) => (ratio, enPicoRatioMode_PICO_RATIO_MODE_SUM),
         };
-        let fits = match (downsample.map(|d| d.mode), sample_type) {
-            (None, SampleType::I8 | SampleType::I16) => true,
-            (Some(DownsampleKind::Average), SampleType::I16) => true,
-            (Some(DownsampleKind::Sum), SampleType::I32) => true,
-            _ => false,
-        };
+        let fits = matches!(
+            (downsample.map(|d| d.mode), sample_type),
+            (None, SampleType::I8 | SampleType::I16)
+                | (Some(DownsampleKind::Average), SampleType::I16)
+                | (Some(DownsampleKind::Sum), SampleType::I32)
+        );
         if !fits {
             return Err(PicoError::from_status(
                 PicoStatus::RATIO_MODE_DOES_NOT_SUPPORT_DATATYPE,

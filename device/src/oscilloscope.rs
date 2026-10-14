@@ -124,6 +124,15 @@ impl OscilloscopeInfo {
     /// Refuses a config whose resolution allows fewer channels than it
     /// turns on
     pub fn check_resolution(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
+        let unlisted = config.resolution.filter(|asked| {
+            !self.resolutions.is_empty() && !self.resolutions.iter().any(|(r, _)| r == asked)
+        });
+        if let Some(asked) = unlisted {
+            return Err(PicoError::from_status(
+                PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT,
+                &format!("{asked} is not one of this unit's resolutions"),
+            ));
+        }
         let Some(resolution) = self.effective_resolution(config) else {
             return Ok(());
         };
@@ -314,6 +323,24 @@ mod resolution_tests {
         assert!(info
             .check_resolution(&config(&[A, B, C, D], Some(DR_8BIT)))
             .is_ok());
+    }
+
+    /// A 5000E such as the 5464E lists only 8 and 16 bit; a resolution it
+    /// does not list is refused, not replaced by the open one.
+    #[test]
+    fn an_unlisted_resolution_is_refused() {
+        use PicoChannel::*;
+        let info = OscilloscopeInfo {
+            resolution: Some(DR_16BIT),
+            resolutions: vec![(DR_8BIT, 32_512), (DR_16BIT, 32_767)],
+            channel_limits: Vec::new(),
+            ..ps5000d()
+        };
+        let err = info
+            .check_resolution(&config(&[A], Some(DR_12BIT)))
+            .unwrap_err();
+        assert_eq!(err.status, PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT);
+        assert!(info.check_resolution(&config(&[A], Some(DR_8BIT))).is_ok());
     }
 
     #[test]
