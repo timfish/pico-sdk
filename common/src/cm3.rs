@@ -171,7 +171,10 @@ mod tests {
     fn clamps_read_amps_and_voltage_volts() {
         assert_eq!(PLCM3DataType::Off.scale(), None);
         assert_eq!(PLCM3DataType::OneMillivoltPerAmp.scale(), Some((1e-3, "A")));
-        assert_eq!(PLCM3DataType::HundredMillivoltsPerAmp.scale(), Some((1e-3, "A")));
+        assert_eq!(
+            PLCM3DataType::HundredMillivoltsPerAmp.scale(),
+            Some((1e-3, "A"))
+        );
         let amps = PLCM3DataType::TenMillivoltsPerAmp.to_unit(2_500).unwrap();
         assert!((amps - 2.5).abs() < 1e-12);
         let volts = PLCM3DataType::Voltage.to_unit(-1_250_000).unwrap();

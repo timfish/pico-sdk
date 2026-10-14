@@ -18,7 +18,7 @@ use pico_common::{
     Driver, FromPicoStr, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, TC08Channel,
     TC08Error, TC08Info, TCType,
 };
-use pico_sys_dynamic::tc08::{TC08Loader, USBTC08Info, USBTC08_MAX_SERIAL_CHARS};
+use pico_sys_dynamic::tc08::{TC08Loader, USBTC08_INFO, USBTC08_MAX_SERIAL_CHARS};
 use std::{
     cmp::Ordering,
     fmt, iter,
@@ -28,7 +28,7 @@ use std::{
     sync::Arc,
 };
 
-fn to_tc08_info(handle: i16, value: USBTC08Info) -> TC08Info {
+fn to_tc08_info(handle: i16, value: USBTC08_INFO) -> TC08Info {
     TC08Info {
         handle: Arc::new(handle),
         serial: value
@@ -117,8 +117,8 @@ impl TC08DriverInternal {
     }
 
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<TC08Info> {
-        let mut info: USBTC08Info = unsafe { MaybeUninit::zeroed().assume_init() };
-        info.size = size_of::<USBTC08Info>() as i16;
+        let mut info: USBTC08_INFO = unsafe { MaybeUninit::zeroed().assume_init() };
+        info.size = size_of::<USBTC08_INFO>() as i16;
 
         self.wrap_with_get_last_error(handle, || unsafe {
             self.bindings.usb_tc08_get_unit_info(handle, &mut info)

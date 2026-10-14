@@ -1,16 +1,18 @@
 use super::{
+    average_only,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, OscilloscopeDriverInternal,
+    EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
-use parking_lot::RwLock;
 use pico_common::{
-    OscilloscopeChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
-    PicoRange, PicoResult, PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
+    Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
 };
-use pico_sys_dynamic::ps6000::PS6000Loader;
-use std::sync::Arc;
+use pico_sys_dynamic::ps6000::{
+    enPS6000RatioMode_PS6000_RATIO_MODE_AVERAGE, enPS6000RatioMode_PS6000_RATIO_MODE_NONE,
+    PS6000Loader,
+};
 
 pub struct PS6000Driver {
     _dependencies: LoadedDependencies,
@@ -181,10 +183,16 @@ impl OscilloscopeDriverInternal for PS6000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()> {
-        let mut buffer = buffer.write();
+        let (_, mode) = average_only(
+            downsample,
+            enPS6000RatioMode_PS6000_RATIO_MODE_NONE,
+            enPS6000RatioMode_PS6000_RATIO_MODE_AVERAGE,
+        )?;
+        let mut buffer = buffer.as_i16("set_data_buffer")?.write();
 
         PicoStatus::from(unsafe {
             self.bindings.ps6000SetDataBuffer(
@@ -192,7 +200,7 @@ impl OscilloscopeDriverInternal for PS6000Driver {
                 channel.into(),
                 buffer.as_mut_ptr(),
                 buffer_len as u32,
-                DownsampleMode::NONE.into(),
+                mode,
             )
         })
         .to_result((), "set_data_buffer")
@@ -205,7 +213,13 @@ impl OscilloscopeDriverInternal for PS6000Driver {
         sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig> {
+        let (ratio, mode) = average_only(
+            downsample,
+            enPS6000RatioMode_PS6000_RATIO_MODE_NONE,
+            enPS6000RatioMode_PS6000_RATIO_MODE_AVERAGE,
+        )?;
         let mut sample_interval = vec![sample_config.interval];
 
         PicoStatus::from(unsafe {
@@ -216,8 +230,8 @@ impl OscilloscopeDriverInternal for PS6000Driver {
                 0,
                 0,
                 (false).into(),
-                1,
-                DownsampleMode::NONE.into(),
+                ratio,
+                mode,
                 u32::try_from(buffer_len).unwrap_or(u32::MAX),
             )
         })

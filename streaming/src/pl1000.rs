@@ -11,7 +11,7 @@ use super::poll::drain_wait_ms;
 use super::state::{
     sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
 };
-use pico_common::{PicoResult, PL1000Channel, PL1000Info};
+use pico_common::{PL1000Channel, PL1000Info, PicoResult};
 use pico_device::pl1000::{PL1000Config, PL1000Device};
 use std::collections::BTreeMap;
 use tracing::warn;
@@ -36,7 +36,9 @@ pub struct PL1000StreamingEvent {
     pub over_range: Vec<PL1000Channel>,
 }
 
-impl IntoStreamingDevice<PL1000Device, PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL1000Device {
+impl IntoStreamingDevice<PL1000Device, PL1000Config, PL1000Info, u32, PL1000StreamingEvent>
+    for PL1000Device
+{
     fn into_streaming_device(
         self,
     ) -> StreamingRunner<Self, PL1000Config, PL1000Info, u32, PL1000StreamingEvent> {
@@ -68,7 +70,11 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &PL1000Info, config: &PL1000Config) -> PicoResult<Current<PL1000Info, u32>> {
+    fn start(
+        &self,
+        info: &PL1000Info,
+        config: &PL1000Config,
+    ) -> PicoResult<Current<PL1000Info, u32>> {
         let channels: Vec<PL1000Channel> = config.enabled_channels().collect();
 
         let interval_us = self.driver.set_interval(
@@ -111,7 +117,10 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
 
                 for set in values.chunks_exact(channels.len()) {
                     for (i, &channel) in channels.iter().enumerate() {
-                        per_channel.get_mut(&channel).expect("channel just inserted").push(set[i]);
+                        per_channel
+                            .get_mut(&channel)
+                            .expect("channel just inserted")
+                            .push(set[i]);
                     }
                 }
 

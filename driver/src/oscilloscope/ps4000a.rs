@@ -1,18 +1,22 @@
 use super::{
+    average_only,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, OscilloscopeDriverInternal,
+    EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
 use c_vec::CVec;
 use lazy_static::lazy_static;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use pico_common::{
-    OscilloscopeChannelConfig, DownsampleMode, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo,
-    PicoRange, PicoResult, PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
+    Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
 };
-use pico_sys_dynamic::ps4000a::{PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS};
-use std::{collections::HashMap, matches, sync::Arc};
+use pico_sys_dynamic::ps4000a::{
+    enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE, enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
+    PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS,
+};
+use std::{collections::HashMap, matches};
 
 type ChannelRangesMap = HashMap<PicoChannel, Vec<PicoRange>>;
 
@@ -279,10 +283,16 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()> {
-        let mut buffer = buffer.write();
+        let (_, mode) = average_only(
+            downsample,
+            enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
+            enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE,
+        )?;
+        let mut buffer = buffer.as_i16("set_data_buffer")?.write();
 
         PicoStatus::from(unsafe {
             self.bindings.ps4000aSetDataBuffer(
@@ -291,7 +301,7 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
                 buffer.as_mut_ptr(),
                 buffer_len as i32,
                 0,
-                DownsampleMode::NONE.into(),
+                mode,
             )
         })
         .to_result((), "set_data_buffer")
@@ -304,7 +314,13 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
         sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig> {
+        let (ratio, mode) = average_only(
+            downsample,
+            enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
+            enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE,
+        )?;
         let mut sample_interval = sample_config.interval;
 
         PicoStatus::from(unsafe {
@@ -315,8 +331,8 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
                 0,
                 0,
                 (false).into(),
-                1,
-                DownsampleMode::NONE.into(),
+                ratio,
+                mode,
                 u32::try_from(buffer_len).unwrap_or(u32::MAX),
             )
         })
