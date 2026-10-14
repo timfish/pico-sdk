@@ -85,6 +85,7 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
             arbitrary: true,
         }),
         aux_io: true,
+        channel_leds: false,
         bandwidth_hz: bandwidth_mhz.map(|mhz| mhz * MHZ),
         bandwidth_cases: sixteen_bit_mhz
             .map(|mhz| at_resolution(PicoResolution::DR_16BIT, mhz * MHZ))

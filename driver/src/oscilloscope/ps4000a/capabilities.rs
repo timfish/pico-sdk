@@ -53,6 +53,7 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
             },
         ),
         aux_io: false,
+        channel_leds: false,
         bandwidth_hz,
         bandwidth_cases,
         bandwidth_limits: if model == "4444" {
