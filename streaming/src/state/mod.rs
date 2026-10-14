@@ -3,14 +3,14 @@ mod events;
 use crossbeam::channel::{bounded, Receiver, Sender};
 pub use events::{EventEmitter, EventHandler};
 use parking_lot::{Mutex, MutexGuard, RwLock};
-use pico_common::{PicoResult, PicoStatus};
+use pico_common::{PicoChannel, PicoResult, PicoStatus, PowerSource};
 use std::{
     fmt,
     sync::Arc,
     thread::{self, JoinHandle},
     time::Instant,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -90,18 +90,60 @@ where
     }
 }
 
+/// What happened to a stream after the unit's power changed
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AfterPowerChange {
+    /// No stream was running.
+    Idle,
+    /// The new power runs the stream's channels, so it starts again.
+    /// The samples while it was down are lost.
+    Restarts,
+    /// A channel on needs the power the unit lost, so the stream
+    /// stopped. Start it again with channels the new power runs.
+    Stopped,
+}
+
+/// A change in a device that is not data, sent to the runner's
+/// [`StreamingRunner::notices`] listeners
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceNotice {
+    /// The external supply was plugged in or out. The driver lost the
+    /// unit's settings, and the device's info now has the new power.
+    PowerChanged {
+        from: Option<PowerSource>,
+        to: PowerSource,
+        /// The channels the new power runs
+        available: Vec<PicoChannel>,
+        stream: AfterPowerChange,
+    },
+}
+
+pub type Notices = EventEmitter<DeviceNotice>;
+
 pub trait StreamDevice<Config, Info, Stream, Event> {
     fn serial(&self) -> &str;
     fn info(&mut self) -> Option<Info>;
     fn open(&self, serial: &str) -> PicoResult<Current<Info, Stream>>;
-    fn ping(&self, info: &Info) -> Current<Info, Stream>;
-    fn start(&self, info: &Info, config: &Config) -> PicoResult<Current<Info, Stream>>;
+    fn ping(&self, info: &Info, notices: &Notices) -> Current<Info, Stream>;
+    /// Refuses a config the device cannot run as it is now. A stream
+    /// whose config is refused stops, rather than tries again.
+    fn check(&self, _info: &Info, _config: &Config) -> PicoResult<()> {
+        Ok(())
+    }
+    fn start(
+        &self,
+        info: &Info,
+        config: &Config,
+        notices: &Notices,
+    ) -> PicoResult<Current<Info, Stream>>;
     fn stream(
         &self,
         info: &Info,
         config: &Config,
         stream: &Stream,
         events: &EventEmitter<Event>,
+        notices: &Notices,
     ) -> Current<Info, Stream>;
     fn stop(&self, info: &Info) -> Current<Info, Stream>;
     fn close(&self, info: &Info) -> Current<Info, Stream>;
@@ -122,6 +164,7 @@ impl<Config, Info, Stream> StreamingState<Config, Info, Stream> {
 fn next_state<Config, Info, Stream, Event>(
     device: &dyn StreamDevice<Config, Info, Stream, Event>,
     events: &EventEmitter<Event>,
+    notices: &Notices,
     current: &Current<Info, Stream>,
     target: &Target<Config>,
 ) -> PicoResult<Current<Info, Stream>> {
@@ -137,13 +180,13 @@ fn next_state<Config, Info, Stream, Event>(
             Target::Closed => device.close(info),
             Target::Open => {
                 sleep_ms(200);
-                device.ping(info)
+                device.ping(info, notices)
             }
-            Target::Streaming(config) => device.start(info, config)?,
+            Target::Streaming(config) => device.start(info, config, notices)?,
         },
         Current::Streaming(info, stream) => match target {
             Target::Closed | Target::Open => device.stop(info),
-            Target::Streaming(config) => device.stream(info, config, stream, events),
+            Target::Streaming(config) => device.stream(info, config, stream, events, notices),
         },
     })
 }
@@ -159,6 +202,8 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     steps: Arc<Mutex<()>>,
     background_handle: Option<Arc<BackgroundThreadHandle>>,
     pub events: EventEmitter<Event>,
+    /// Changes in the device that are not data, such as its power
+    pub notices: Notices,
 }
 
 impl<Device, Config, Info, Stream, Event> StreamingRunner<Device, Config, Info, Stream, Event>
@@ -182,6 +227,7 @@ where
             state,
             steps: Arc::new(Mutex::new(())),
             events: EventEmitter::new(),
+            notices: Notices::new(),
             background_handle: None,
         };
 
@@ -197,7 +243,17 @@ where
             let state = self.state.read();
             (state.current.clone(), state.target.clone())
         };
-        let next = next_state(&self.device, &self.events, &current, &target)?;
+        if let (Current::Open(info), Target::Streaming(config)) = (&current, &target) {
+            if let Err(error) = self.device.check(info, config) {
+                let mut state = self.state.write();
+                if matches!(state.target, Target::Streaming(_)) {
+                    state.target = Target::Open;
+                }
+                warn!(%error, "config refused; the stream stays stopped");
+                return Err(error);
+            }
+        }
+        let next = next_state(&self.device, &self.events, &self.notices, &current, &target)?;
         if current != next {
             info!(
                 from = current.name(),

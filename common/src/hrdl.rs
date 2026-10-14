@@ -222,7 +222,10 @@ pub struct HRDLInfo {
 impl HRDLInfo {
     /// Whether the unit is an ADC-20, from its variant; else an ADC-24
     pub fn is_adc20(&self) -> bool {
-        self.variant.trim().trim_start_matches("ADC-").starts_with("20")
+        self.variant
+            .trim()
+            .trim_start_matches("ADC-")
+            .starts_with("20")
     }
 
     /// The model name, `"ADC-20"` or `"ADC-24"`
@@ -351,7 +354,10 @@ mod tests {
             variant: variant.into(),
         };
         assert_eq!(info("20").channels().len(), 8);
-        assert_eq!(info("20").ranges(), [HRDLRange::Range2500mV, HRDLRange::Range1250mV]);
+        assert_eq!(
+            info("20").ranges(),
+            [HRDLRange::Range2500mV, HRDLRange::Range1250mV]
+        );
         assert_eq!(info("20").model(), "ADC-20");
         assert_eq!(info("24").channels().len(), 16);
         assert_eq!(info("24").ranges().len(), 7);

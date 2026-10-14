@@ -33,10 +33,11 @@ pub use psospa::PSOSPADriver;
 use crate::DriverLoadError;
 use parking_lot::RwLock;
 use pico_common::{
-    Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
-    PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
+    Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
+    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution,
+    PicoResult, PicoStatus, PowerSource, RateLimit, SampleType,
 };
-use std::{fmt, ops::Deref, sync::Arc};
+use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
 
 /// Serial and variant pairs returned by driver enumeration
@@ -45,6 +46,144 @@ use version_compare::Version;
 pub struct EnumerationResult {
     pub variant: String,
     pub serial: String,
+}
+
+/// A buffer the driver writes samples into, of the type the driver was
+/// asked for.
+#[derive(Clone, Debug)]
+pub enum SampleBuffer {
+    I8(Arc<RwLock<Vec<i8>>>),
+    I16(Arc<RwLock<Vec<i16>>>),
+    I32(Arc<RwLock<Vec<i32>>>),
+}
+
+impl SampleBuffer {
+    /// A zeroed buffer of `len` samples of `sample_type`.
+    pub fn new(sample_type: SampleType, len: usize) -> Self {
+        match sample_type {
+            SampleType::I8 => SampleBuffer::I8(Arc::new(RwLock::new(vec![0; len]))),
+            SampleType::I16 => SampleBuffer::I16(Arc::new(RwLock::new(vec![0; len]))),
+            SampleType::I32 => SampleBuffer::I32(Arc::new(RwLock::new(vec![0; len]))),
+        }
+    }
+
+    pub fn sample_type(&self) -> SampleType {
+        match self {
+            SampleBuffer::I8(_) => SampleType::I8,
+            SampleBuffer::I16(_) => SampleType::I16,
+            SampleBuffer::I32(_) => SampleType::I32,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            SampleBuffer::I8(b) => b.read().len(),
+            SampleBuffer::I16(b) => b.read().len(),
+            SampleBuffer::I32(b) => b.read().len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The `i16` buffer, for drivers that take no other type.
+    pub fn as_i16(&self, context: &str) -> PicoResult<&Arc<RwLock<Vec<i16>>>> {
+        match self {
+            SampleBuffer::I16(b) => Ok(b),
+            _ => Err(PicoError::from_status(
+                PicoStatus::RATIO_MODE_DOES_NOT_SUPPORT_DATATYPE,
+                context,
+            )),
+        }
+    }
+}
+
+/// The ratio and mode code for a family whose streaming downsample is
+/// average only, given the family's codes for no mode and for average.
+pub(crate) fn average_only<M>(
+    downsample: Option<Downsample>,
+    none: M,
+    average: M,
+) -> PicoResult<(u32, M)> {
+    match Downsample::effective(downsample)? {
+        None => Ok((1, none)),
+        Some(Downsample {
+            ratio,
+            mode: DownsampleKind::Average,
+        }) => Ok((ratio, average)),
+        Some(_) => Err(PicoError::from_status(
+            PicoStatus::RATIO_MODE_NOT_SUPPORTED,
+            "downsample",
+        )),
+    }
+}
+
+/// The ratio, ratio mode and data type codes of the ps6000a and psospa
+/// drivers for a stream with `downsample` into buffers of `sample_type`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PicoStreamMode {
+    pub ratio: u64,
+    pub mode: u32,
+    pub data_type: u32,
+}
+
+impl PicoStreamMode {
+    pub(crate) fn new(
+        downsample: Option<Downsample>,
+        sample_type: SampleType,
+    ) -> PicoResult<PicoStreamMode> {
+        use pico_sys_dynamic::psospa::{
+            enPicoDataType_PICO_INT16_T, enPicoDataType_PICO_INT32_T, enPicoDataType_PICO_INT8_T,
+            enPicoRatioMode_PICO_RATIO_MODE_AVERAGE, enPicoRatioMode_PICO_RATIO_MODE_RAW,
+            enPicoRatioMode_PICO_RATIO_MODE_SUM,
+        };
+
+        let downsample = Downsample::effective(downsample)?;
+        let (ratio, mode) = match downsample {
+            None => (1, enPicoRatioMode_PICO_RATIO_MODE_RAW),
+            Some(Downsample {
+                ratio,
+                mode: DownsampleKind::Average,
+            }) => (ratio, enPicoRatioMode_PICO_RATIO_MODE_AVERAGE),
+            Some(Downsample {
+                ratio,
+                mode: DownsampleKind::Sum,
+            }) => (ratio, enPicoRatioMode_PICO_RATIO_MODE_SUM),
+        };
+        let fits = matches!(
+            (downsample.map(|d| d.mode), sample_type),
+            (None, SampleType::I8 | SampleType::I16)
+                | (Some(DownsampleKind::Average), SampleType::I16)
+                | (Some(DownsampleKind::Sum), SampleType::I32)
+        );
+        if !fits {
+            return Err(PicoError::from_status(
+                PicoStatus::RATIO_MODE_DOES_NOT_SUPPORT_DATATYPE,
+                "set_data_buffer",
+            ));
+        }
+        let data_type = match sample_type {
+            SampleType::I8 => enPicoDataType_PICO_INT8_T,
+            SampleType::I16 => enPicoDataType_PICO_INT16_T,
+            SampleType::I32 => enPicoDataType_PICO_INT32_T,
+        };
+        Ok(PicoStreamMode {
+            ratio: ratio as u64,
+            mode,
+            data_type,
+        })
+    }
+}
+
+/// The pointer the driver writes `buffer`'s samples through. The caller
+/// keeps the buffer alive while the driver holds the pointer.
+pub(crate) fn buffer_pointer(buffer: &SampleBuffer) -> *mut std::ffi::c_void {
+    match buffer {
+        SampleBuffer::I8(b) => b.write().as_mut_ptr() as *mut std::ffi::c_void,
+        SampleBuffer::I16(b) => b.write().as_mut_ptr() as *mut std::ffi::c_void,
+        SampleBuffer::I32(b) => b.write().as_mut_ptr() as *mut std::ffi::c_void,
+    }
 }
 
 /// Common trait implemented for every oscilloscope driver
@@ -91,6 +230,28 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     fn get_resolution_channel_limits(&self, _handle: i16) -> Vec<(PicoResolution, u8)> {
         Vec::new()
     }
+    /// The fastest the unit samples with each count of analog channels
+    /// on, at each resolution. Empty where the driver cannot say.
+    fn get_rate_limits(&self, _handle: i16) -> Vec<RateLimit> {
+        Vec::new()
+    }
+    /// Where the unit takes its power from, or `None` for a unit with
+    /// no choice of power.
+    fn get_power_source(&self, _handle: i16) -> Option<PowerSource> {
+        None
+    }
+    /// Tell the driver which power to run on. Settings on the unit are
+    /// lost, so channels and streams are set up again after it.
+    fn set_power_source(&self, _handle: i16, _power: PowerSource) -> PicoResult<()> {
+        Err(PicoError::from_status(
+            PicoStatus::POWER_SUPPLY_REQUEST_INVALID,
+            "set_power_source",
+        ))
+    }
+    /// Channels that run only on the external supply.
+    fn get_supply_channels(&self, _handle: i16) -> Vec<PicoChannel> {
+        Vec::new()
+    }
     /// Set up a channel with the supplied config
     fn enable_channel(
         &self,
@@ -106,21 +267,34 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     fn clear_data_buffers(&self, _handle: i16) -> PicoResult<()> {
         Ok(())
     }
-    /// Give the driver a buffer to write data into
+    /// The streaming downsample modes the driver has.
+    fn downsample_modes(&self) -> &'static [DownsampleKind] {
+        &[DownsampleKind::Average]
+    }
+    /// The sample types the driver writes into buffers. Drivers of 8-bit
+    /// units without `I8` write 8-bit codes shifted left by 8 in `I16`.
+    fn sample_types(&self) -> &'static [SampleType] {
+        &[SampleType::I16]
+    }
+    /// Give the driver a buffer to write data into, for a stream with
+    /// `downsample`
     fn set_data_buffer(
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()>;
-    /// Starts the device streaming
+    /// Starts the device streaming. `sample_config` is the device's
+    /// interval, before any downsample.
     fn start_streaming(
         &self,
         handle: i16,
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig>;
     /// Gets the latest streaming values
     fn get_latest_streaming_values<'a>(
@@ -206,6 +380,71 @@ pub(crate) fn parse_enum_result(buffer: &[i8], len: usize) -> Vec<EnumerationRes
         .collect()
 }
 
+/// The power each open handle of a ps3000a, ps4000a or ps5000a driver
+/// runs on, as open and `ChangePowerSource` left it. Their
+/// `CurrentPowerSource` says `OK` where a unit has one power state,
+/// which hides a USB 3 unit on a USB 2 port, so the state from open is
+/// kept as well.
+#[derive(Default)]
+pub(crate) struct PowerStates(RwLock<HashMap<i16, PowerSource>>);
+
+impl PowerStates {
+    /// The status an open returned, before `ChangePowerSource`.
+    pub(crate) fn opened(&self, handle: i16, status: PicoStatus) {
+        let mut states = self.0.write();
+        match PowerSource::from_status(status) {
+            Some(power) => states.insert(handle, power),
+            None => states.remove(&handle),
+        };
+    }
+
+    pub(crate) fn set(&self, handle: i16, power: PowerSource) {
+        self.0.write().insert(handle, power);
+    }
+
+    pub(crate) fn closed(&self, handle: i16) {
+        self.0.write().remove(&handle);
+    }
+
+    /// The power from what `CurrentPowerSource` returned, else from
+    /// open or the last change.
+    pub(crate) fn current(&self, handle: i16, status: PicoStatus) -> Option<PowerSource> {
+        PowerSource::from_status(status).or_else(|| self.0.read().get(&handle).copied())
+    }
+}
+
+/// The fastest rate with the first 1 to `channels` analog channels on
+/// at each of `resolutions`, from `min_interval`, which gives the
+/// driver's shortest interval in seconds for a set of channel flags
+/// (bit 0 for channel A) at a resolution, or `None` where it refuses.
+pub(crate) fn rate_limits(
+    resolutions: &[PicoResolution],
+    channels: u8,
+    mut min_interval: impl FnMut(u32, PicoResolution) -> Option<f64>,
+) -> Vec<RateLimit> {
+    let mut limits = Vec::new();
+    for resolution in resolutions {
+        for on in 1..=channels.min(31) {
+            let flags = (1u32 << on) - 1;
+            match min_interval(flags, *resolution) {
+                Some(interval) if interval > 0.0 => limits.push(RateLimit {
+                    resolution: Some(*resolution),
+                    channels: on,
+                    max_samples_per_second: 1.0 / interval,
+                }),
+                _ => {}
+            }
+        }
+    }
+    limits
+}
+
+/// The number of analog channels a variant name gives: its second
+/// character on every scope family.
+pub(crate) fn variant_channel_count(variant: &str) -> Option<u8> {
+    variant.get(1..2)?.parse().ok()
+}
+
 /// Refuses a stream of `enabled` channels at `resolution` when `limits`
 /// allow fewer.
 pub fn check_channel_limit(
@@ -262,6 +501,174 @@ mod tests {
                 ("13474/0004".to_string(), "5464E+MSO".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn each_family_gets_its_own_average_code() {
+        use pico_sys_dynamic::{ps2000a, ps3000a, ps4000, ps4000a, ps5000a, ps6000};
+        let avg = Some(Downsample::average(16));
+        assert_eq!(
+            average_only(
+                avg,
+                ps2000a::enPS2000ARatioMode_PS2000A_RATIO_MODE_NONE,
+                ps2000a::enPS2000ARatioMode_PS2000A_RATIO_MODE_AVERAGE
+            )
+            .unwrap(),
+            (16, 4)
+        );
+        assert_eq!(
+            average_only(
+                avg,
+                ps3000a::enPS3000ARatioMode_PS3000A_RATIO_MODE_NONE,
+                ps3000a::enPS3000ARatioMode_PS3000A_RATIO_MODE_AVERAGE
+            )
+            .unwrap(),
+            (16, 4)
+        );
+        assert_eq!(
+            average_only(
+                avg,
+                ps4000a::enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
+                ps4000a::enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE
+            )
+            .unwrap(),
+            (16, 4)
+        );
+        assert_eq!(
+            average_only(
+                avg,
+                ps5000a::enPS5000ARatioMode_PS5000A_RATIO_MODE_NONE,
+                ps5000a::enPS5000ARatioMode_PS5000A_RATIO_MODE_AVERAGE
+            )
+            .unwrap(),
+            (16, 4)
+        );
+        // The ps4000 and ps6000 headers number average 2, not 4.
+        assert_eq!(
+            average_only(
+                avg,
+                ps4000::enRatioMode_RATIO_MODE_NONE,
+                ps4000::enRatioMode_RATIO_MODE_AVERAGE
+            )
+            .unwrap(),
+            (16, 2)
+        );
+        assert_eq!(
+            average_only(
+                avg,
+                ps6000::enPS6000RatioMode_PS6000_RATIO_MODE_NONE,
+                ps6000::enPS6000RatioMode_PS6000_RATIO_MODE_AVERAGE
+            )
+            .unwrap(),
+            (16, 2)
+        );
+        assert_eq!(average_only(None, 0u32, 4).unwrap(), (1, 0));
+        assert_eq!(
+            average_only(Some(Downsample::average(1)), 0u32, 4).unwrap(),
+            (1, 0)
+        );
+        assert_eq!(
+            average_only(Some(Downsample::sum(4)), 0u32, 4)
+                .unwrap_err()
+                .status,
+            PicoStatus::RATIO_MODE_NOT_SUPPORTED
+        );
+    }
+
+    #[test]
+    fn pico_stream_modes_match_buffer_types() {
+        use pico_sys_dynamic::psospa::*;
+        let raw8 = PicoStreamMode::new(None, SampleType::I8).unwrap();
+        assert_eq!(raw8.mode, enPicoRatioMode_PICO_RATIO_MODE_RAW);
+        assert_eq!(raw8.data_type, enPicoDataType_PICO_INT8_T);
+        assert_eq!(raw8.ratio, 1);
+
+        let avg = PicoStreamMode::new(Some(Downsample::average(32)), SampleType::I16).unwrap();
+        assert_eq!(
+            (avg.ratio, avg.mode, avg.data_type),
+            (
+                32,
+                enPicoRatioMode_PICO_RATIO_MODE_AVERAGE,
+                enPicoDataType_PICO_INT16_T
+            )
+        );
+
+        let sum = PicoStreamMode::new(Some(Downsample::sum(32)), SampleType::I32).unwrap();
+        assert_eq!(
+            (sum.ratio, sum.mode, sum.data_type),
+            (
+                32,
+                enPicoRatioMode_PICO_RATIO_MODE_SUM,
+                enPicoDataType_PICO_INT32_T
+            )
+        );
+
+        for (downsample, sample_type) in [
+            (None, SampleType::I32),
+            (Some(Downsample::average(4)), SampleType::I8),
+            (Some(Downsample::sum(4)), SampleType::I16),
+        ] {
+            assert_eq!(
+                PicoStreamMode::new(downsample, sample_type)
+                    .unwrap_err()
+                    .status,
+                PicoStatus::RATIO_MODE_DOES_NOT_SUPPORT_DATATYPE
+            );
+        }
+    }
+
+    #[test]
+    fn sample_buffers_hold_their_type() {
+        let buffer = SampleBuffer::new(SampleType::I8, 10);
+        assert_eq!((buffer.sample_type(), buffer.len()), (SampleType::I8, 10));
+        assert!(buffer.as_i16("test").is_err());
+        assert!(SampleBuffer::new(SampleType::I16, 1).as_i16("test").is_ok());
+    }
+
+    #[test]
+    fn power_states_keep_open_state_where_the_driver_says_ok() {
+        let states = PowerStates::default();
+        // A 4-channel unit on USB power.
+        states.opened(1, PicoStatus::POWER_SUPPLY_NOT_CONNECTED);
+        assert_eq!(states.current(1, PicoStatus::OK), Some(PowerSource::Usb));
+        assert_eq!(
+            states.current(1, PicoStatus::POWER_SUPPLY_CONNECTED),
+            Some(PowerSource::External)
+        );
+        // A 2-channel USB 3 unit on a USB 2 port reads OK later.
+        states.opened(2, PicoStatus::USB3_0_DEVICE_NON_USB3_0_PORT);
+        assert_eq!(
+            states.current(2, PicoStatus::OK),
+            Some(PowerSource::UsbNonUsb3Port)
+        );
+        // One with no choice of power.
+        states.opened(3, PicoStatus::OK);
+        assert_eq!(states.current(3, PicoStatus::OK), None);
+        states.set(3, PowerSource::External);
+        assert_eq!(
+            states.current(3, PicoStatus::OK),
+            Some(PowerSource::External)
+        );
+        states.closed(3);
+        assert_eq!(states.current(3, PicoStatus::OK), None);
+    }
+
+    #[test]
+    fn variant_names_give_their_channel_count() {
+        assert_eq!(variant_channel_count("5444D"), Some(4));
+        assert_eq!(variant_channel_count("3206D MSO"), Some(2));
+        assert_eq!(variant_channel_count("6824E"), Some(8));
+        assert_eq!(variant_channel_count(""), None);
+    }
+
+    #[test]
+    fn rate_limits_skip_refused_sets() {
+        let limits = rate_limits(&[PicoResolution::DR_12BIT], 4, |flags, _| {
+            (flags.count_ones() <= 2).then_some(1e-9)
+        });
+        assert_eq!(limits.len(), 2);
+        assert_eq!(limits[1].channels, 2);
+        assert_eq!(limits[1].max_samples_per_second.round(), 1e9);
     }
 
     #[test]

@@ -17,7 +17,9 @@ pub struct TC08StreamingEvent {
 ///
 /// Channels missing from the config are yielded as `None` so that `start` disables them rather
 /// than leaving whatever the previous run configured.
-fn all_channel_settings(config: &TC08Config) -> impl Iterator<Item = (TC08Channel, Option<TCType>)> + '_ {
+fn all_channel_settings(
+    config: &TC08Config,
+) -> impl Iterator<Item = (TC08Channel, Option<TCType>)> + '_ {
     enum_iterator::all::<TC08Channel>()
         .map(move |channel| (channel, config.channels.get(&channel).copied().flatten()))
 }
@@ -44,7 +46,7 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &TC08Info) -> Current<TC08Info, u32> {
+    fn ping(&self, info: &TC08Info, _notices: &super::state::Notices) -> Current<TC08Info, u32> {
         // There is no ping call, so reading the unit info stands in for one
         if self.driver.get_unit_info(*info.handle).is_err() {
             let _ = self.driver.stop(*info.handle);
@@ -57,7 +59,12 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &TC08Info, config: &TC08Config) -> PicoResult<Current<TC08Info, u32>> {
+    fn start(
+        &self,
+        info: &TC08Info,
+        config: &TC08Config,
+        _notices: &super::state::Notices,
+    ) -> PicoResult<Current<TC08Info, u32>> {
         self.driver
             .set_mains_rejection(*info.handle, config.mains_rejection)?;
 
@@ -83,6 +90,7 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
         config: &TC08Config,
         interval_ms: &u32,
         events: &EventEmitter<TC08StreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<TC08Info, u32> {
         let mut event = TC08StreamingEvent {
             interval_ms: *interval_ms,

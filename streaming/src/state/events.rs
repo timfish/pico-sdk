@@ -9,7 +9,7 @@ use std::sync::{Arc, Weak};
 ///
 /// ```
 /// # use std::sync::Arc;
-/// # use pico_streaming::{EventHandler, OscilloscopeStreamEvent};
+/// # use pico_streaming::{EventHandler, OscilloscopeStreamEvent, Samples};
 /// struct Take;
 ///
 /// impl EventHandler<OscilloscopeStreamEvent> for Take {
@@ -17,7 +17,7 @@ use std::sync::{Arc, Weak};
 ///         // Copies only when another listener still holds the event
 ///         let event = Arc::unwrap_or_clone(event);
 ///         for (_channel, block) in event.channels {
-///             let _samples: Vec<i16> = block.samples;
+///             let _samples: Samples = block.samples;
 ///         }
 ///     }
 /// }

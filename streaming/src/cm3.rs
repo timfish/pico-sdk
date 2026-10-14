@@ -7,10 +7,8 @@
 //! conversions and reports only new conversions, the same pattern as PT-104.
 
 use super::poll::LoggerPollState;
-use super::state::{
-    Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
-};
-use pico_common::{PicoError, PicoResult, PLCM3Channel, PLCM3DataType, PLCM3Info};
+use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
+use pico_common::{PLCM3Channel, PLCM3DataType, PLCM3Info, PicoError, PicoResult};
 use pico_device::cm3::{PLCM3Config, PLCM3Device};
 use std::collections::BTreeMap;
 use tracing::{debug, warn};
@@ -25,7 +23,9 @@ pub struct PLCM3StreamingEvent {
     pub channels: BTreeMap<PLCM3Channel, Option<i32>>,
 }
 
-impl IntoStreamingDevice<PLCM3Device, PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> for PLCM3Device {
+impl IntoStreamingDevice<PLCM3Device, PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent>
+    for PLCM3Device
+{
     fn into_streaming_device(
         self,
     ) -> StreamingRunner<Self, PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> {
@@ -47,7 +47,11 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &PLCM3Info) -> Current<PLCM3Info, LoggerPollState> {
+    fn ping(
+        &self,
+        info: &PLCM3Info,
+        _notices: &super::state::Notices,
+    ) -> Current<PLCM3Info, LoggerPollState> {
         // There is no ping call for CM3, so just check if we can read unit info
         if self.driver.get_unit_info(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
@@ -58,8 +62,14 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &PLCM3Info, config: &PLCM3Config) -> PicoResult<Current<PLCM3Info, LoggerPollState>> {
-        self.driver.set_mains(*info.handle, config.mains_rejection)?;
+    fn start(
+        &self,
+        info: &PLCM3Info,
+        config: &PLCM3Config,
+        _notices: &super::state::Notices,
+    ) -> PicoResult<Current<PLCM3Info, LoggerPollState>> {
+        self.driver
+            .set_mains(*info.handle, config.mains_rejection)?;
 
         for (channel, data_type) in config.enabled_channels() {
             self.driver.set_channel(*info.handle, channel, data_type)?;
@@ -68,7 +78,10 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
         // The CM3 has no start call: it converts the channels that are on in turn, so poll once
         // a round of conversions.
         let state = LoggerPollState::new(config.poll_interval_ms());
-        debug!(poll_interval_ms = state.poll_interval_ms, "CM3 polls started");
+        debug!(
+            poll_interval_ms = state.poll_interval_ms,
+            "CM3 polls started"
+        );
 
         Ok(Current::Streaming(info.clone(), state))
     }
@@ -80,6 +93,7 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
         config: &PLCM3Config,
         state: &LoggerPollState,
         events: &EventEmitter<PLCM3StreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<PLCM3Info, LoggerPollState> {
         if !state.due() {
             return Current::Streaming(info.clone(), state.clone());

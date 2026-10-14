@@ -1,16 +1,17 @@
 use super::{
+    average_only,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, OscilloscopeDriverInternal,
+    EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
-use parking_lot::RwLock;
 use pico_common::{
-    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult,
-    PicoStatus, OscilloscopeSampleConfig, ToPicoStr,
+    Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
 };
-use pico_sys_dynamic::ps4000::PS4000Loader;
-use std::sync::Arc;
+use pico_sys_dynamic::ps4000::{
+    enRatioMode_RATIO_MODE_AVERAGE, enRatioMode_RATIO_MODE_NONE, PS4000Loader,
+};
 
 pub struct PS4000Driver {
     _dependencies: LoadedDependencies,
@@ -198,18 +199,37 @@ impl OscilloscopeDriverInternal for PS4000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()> {
-        let mut buffer = buffer.write();
+        let (ratio, mode) = average_only(
+            downsample,
+            enRatioMode_RATIO_MODE_NONE,
+            enRatioMode_RATIO_MODE_AVERAGE,
+        )?;
+        let mut buffer = buffer.as_i16("set_data_buffer")?.write();
+        let pointer = buffer.as_mut_ptr();
 
+        // The calls with a mode are used only to downsample, so a raw
+        // stream runs as it did with drivers that lack them.
         PicoStatus::from(unsafe {
-            self.bindings.ps4000SetDataBuffer(
-                handle,
-                channel.into(),
-                buffer.as_mut_ptr(),
-                buffer_len as i32,
-            )
+            if ratio == 1 {
+                self.bindings.ps4000SetDataBuffer(
+                    handle,
+                    channel.into(),
+                    pointer,
+                    buffer_len as i32,
+                )
+            } else {
+                self.bindings.ps4000SetDataBufferWithMode(
+                    handle,
+                    channel.into(),
+                    pointer,
+                    buffer_len as i32,
+                    mode,
+                )
+            }
         })
         .to_result((), "set_data_buffer")
     }
@@ -221,20 +241,42 @@ impl OscilloscopeDriverInternal for PS4000Driver {
         sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig> {
+        let (ratio, mode) = average_only(
+            downsample,
+            enRatioMode_RATIO_MODE_NONE,
+            enRatioMode_RATIO_MODE_AVERAGE,
+        )?;
         let mut sample_interval = vec![sample_config.interval];
 
+        let overview = u32::try_from(buffer_len).unwrap_or(u32::MAX);
+
         PicoStatus::from(unsafe {
-            self.bindings.ps4000RunStreaming(
-                handle,
-                sample_interval.as_mut_ptr(),
-                sample_config.units.into(),
-                0,
-                0,
-                (false).into(),
-                1,
-                u32::try_from(buffer_len).unwrap_or(u32::MAX),
-            )
+            if ratio == 1 {
+                self.bindings.ps4000RunStreaming(
+                    handle,
+                    sample_interval.as_mut_ptr(),
+                    sample_config.units.into(),
+                    0,
+                    0,
+                    (false).into(),
+                    1,
+                    overview,
+                )
+            } else {
+                self.bindings.ps4000RunStreamingEx(
+                    handle,
+                    sample_interval.as_mut_ptr(),
+                    sample_config.units.into(),
+                    0,
+                    0,
+                    (false).into(),
+                    ratio,
+                    mode as i16,
+                    overview,
+                )
+            }
         })
         .to_result(
             sample_config.with_interval(sample_interval[0]),

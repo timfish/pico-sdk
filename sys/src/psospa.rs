@@ -1,115 +1,8 @@
+pub const DIGITAL_PORT_SERIAL_LENGTH: u32 = 10;
+pub const DIGITAL_PORT_CALIBRATION_DATE_LENGTH: u32 = 8;
 pub type PICO_POINTER = *mut ::std::os::raw::c_void;
 pub type PICO_INFO = u32;
 pub type PICO_STATUS = u32;
-/// Output format for `psospaGetVariantDetails`: 0 is JSON data, 1 its schema.
-pub type PICO_TEXT_FORMAT = u32;
-pub const PICO_TEXT_FORMAT_JSON: PICO_TEXT_FORMAT = 0;
-pub const enPicoStringValue_PICO_SV_MEMORY: enPicoStringValue = 0;
-pub const enPicoStringValue_PICO_SV_MEMORY_NO_OF_SEGMENTS: enPicoStringValue = 1;
-pub const enPicoStringValue_PICO_SV_MEMORY_MAX_SAMPLES: enPicoStringValue = 2;
-pub const enPicoStringValue_PICO_SV_NO_OF_CHANNELS: enPicoStringValue = 3;
-pub const enPicoStringValue_PICO_SV_ARRAY_OF_CHANNELS: enPicoStringValue = 4;
-pub const enPicoStringValue_PICO_SV_CHANNEL: enPicoStringValue = 5;
-pub const enPicoStringValue_PICO_SV_CHANNEL_NAME: enPicoStringValue = 6;
-pub const enPicoStringValue_PICO_SV_CHANNEL_RANGE: enPicoStringValue = 7;
-pub const enPicoStringValue_PICO_SV_CHANNEL_COUPLING: enPicoStringValue = 8;
-pub const enPicoStringValue_PICO_SV_CHANNEL_ENABLED: enPicoStringValue = 9;
-pub const enPicoStringValue_PICO_SV_CHANNEL_ANALOGUE_OFFSET: enPicoStringValue = 10;
-pub const enPicoStringValue_PICO_SV_CHANNEL_FILTER: enPicoStringValue = 11;
-pub const enPicoStringValue_PICO_SV_TRIGGER: enPicoStringValue = 12;
-pub const enPicoStringValue_PICO_SV_TRIGGER_AUXIO_OUTPUT_ENABLED: enPicoStringValue = 13;
-pub const enPicoStringValue_PICO_SV_TRIGGER_AUTO_TRIGGER_MICROSECONDS: enPicoStringValue = 14;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES: enPicoStringValue = 15;
-pub const enPicoStringValue_PICO_SV_NO_OF_TRIGGER_PROPERTIES: enPicoStringValue = 16;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_CHANNEL: enPicoStringValue = 17;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_UPPER: enPicoStringValue = 18;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_UPPER_HYSTERESIS:
-    enPicoStringValue = 19;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_LOWER: enPicoStringValue = 20;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_LOWER_HYSTERESIS:
-    enPicoStringValue = 21;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_MODE: enPicoStringValue = 22;
-pub const enPicoStringValue_PICO_SV_TRIGGER_ARRAY_OF_BLOCK_CONDITIONS: enPicoStringValue = 23;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_BLOCK_CONDITIONS: enPicoStringValue = 24;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITIONS: enPicoStringValue = 25;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_CONDITIONS: enPicoStringValue = 26;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITION_SOURCE: enPicoStringValue = 27;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITION_STATE: enPicoStringValue = 28;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION: enPicoStringValue = 29;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_DIRECTIONS: enPicoStringValue = 30;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION_CHANNEL: enPicoStringValue = 31;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION_DIRECTION: enPicoStringValue = 32;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DELAY: enPicoStringValue = 33;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DELAY_MS: enPicoStringValue = 34;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER: enPicoStringValue = 35;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_ENABLED: enPicoStringValue = 36;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_CHANNEL: enPicoStringValue = 37;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_RANGE: enPicoStringValue = 38;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_TRESHOLDMAJOR: enPicoStringValue = 39;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_TRESHOLDMINOR: enPicoStringValue = 40;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES: enPicoStringValue = 41;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_DIRECTION: enPicoStringValue = 42;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_LOWER: enPicoStringValue = 43;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_UPPER: enPicoStringValue = 44;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_TYPE: enPicoStringValue = 45;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_ARRAY_OF_BLOCK_CONDITIONS: enPicoStringValue = 46;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_NO_OF_BLOCK_CONDITIONS: enPicoStringValue = 47;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS: enPicoStringValue = 48;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_NO_OF_CONDITIONS: enPicoStringValue = 49;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS_SOURCE: enPicoStringValue = 50;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS_STATE: enPicoStringValue = 51;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES: enPicoStringValue = 52;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_PRE_TRIGGER_SAMPLES: enPicoStringValue = 53;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_POST_TRIGGER_SAMPLES: enPicoStringValue = 54;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_TIMEBASE: enPicoStringValue = 55;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_NO_OF_CAPTURES: enPicoStringValue = 56;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_RESOLUTION: enPicoStringValue = 57;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED: enPicoStringValue = 58;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_DOWN_SAMPLE_RATIO:
-    enPicoStringValue = 59;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_DOWN_SAMPLE_RATIO_MODE:
-    enPicoStringValue = 60;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_REQUERSTED_NO_OF_SAMPLES:
-    enPicoStringValue = 61;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_SEGMENT_INDEX_FROM:
-    enPicoStringValue = 62;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_SEGMENT_INDEX_TO:
-    enPicoStringValue = 63;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR: enPicoStringValue = 64;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN: enPicoStringValue = 65;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_WAVE_TYPE: enPicoStringValue = 66;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_START_FREQUENCY: enPicoStringValue =
-    67;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_STOP_FREQUENCY: enPicoStringValue =
-    68;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_INCREMENT: enPicoStringValue = 69;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_DWELL_TIME: enPicoStringValue = 70;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG: enPicoStringValue = 71;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_START_DELTA_PHASE: enPicoStringValue = 72;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_STOP_DELTA_PHASE: enPicoStringValue = 73;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_DELTA_PHASE_INCREMENT: enPicoStringValue =
-    74;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_DWELL_COUNT: enPicoStringValue = 75;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_INDEX_MODE: enPicoStringValue = 76;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_WAVEFORM_SIZE: enPicoStringValue = 77;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_ARRAY_OF_AWG_WAVEFORM_VALUES:
-    enPicoStringValue = 78;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_OFFSET_VOLTAGE: enPicoStringValue = 79;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_PK_TO_PK: enPicoStringValue = 80;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_OPERATION: enPicoStringValue = 81;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SHOTS: enPicoStringValue = 82;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SWEEPS: enPicoStringValue = 83;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SWEEP_TYPE: enPicoStringValue = 84;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_TRIGGER_TYPE: enPicoStringValue = 85;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_TRIGGER_SOURCE: enPicoStringValue = 86;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_EXT_IN_THRESHOLD: enPicoStringValue = 87;
-pub const enPicoStringValue_PICO_SV_ETS: enPicoStringValue = 88;
-pub const enPicoStringValue_PICO_SV_ETS_STATE: enPicoStringValue = 89;
-pub const enPicoStringValue_PICO_SV_ETS_CYCLE: enPicoStringValue = 90;
-pub const enPicoStringValue_PICO_SV_ETS_INTERLEAVE: enPicoStringValue = 91;
-pub const enPicoStringValue_PICO_SV_ETS_SAMPLE_TIME_PICOSECONDS: enPicoStringValue = 92;
-pub type enPicoStringValue = ::std::os::raw::c_uint;
-pub use self::enPicoStringValue as PICO_STRING_VALUE;
 pub const enPicoRatioMode_PICO_RATIO_MODE_AGGREGATE: enPicoRatioMode = 1;
 pub const enPicoRatioMode_PICO_RATIO_MODE_DECIMATE: enPicoRatioMode = 2;
 pub const enPicoRatioMode_PICO_RATIO_MODE_AVERAGE: enPicoRatioMode = 4;
@@ -369,6 +262,49 @@ pub const enPicoUsbPowerDeliveryDeviceType_Source: enPicoUsbPowerDeliveryDeviceT
 pub const enPicoUsbPowerDeliveryDeviceType_Debug: enPicoUsbPowerDeliveryDeviceType = 3;
 pub type enPicoUsbPowerDeliveryDeviceType = ::std::os::raw::c_uint;
 pub use self::enPicoUsbPowerDeliveryDeviceType as PICO_USB_POWER_DELIVERY_DEVICE_TYPE;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_A: enPicoLedSelect = 0;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_B: enPicoLedSelect = 1;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_C: enPicoLedSelect = 2;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_D: enPicoLedSelect = 3;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_E: enPicoLedSelect = 4;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_F: enPicoLedSelect = 5;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_G: enPicoLedSelect = 6;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_H: enPicoLedSelect = 7;
+pub const enPicoLedSelect_PICO_LED_AWG: enPicoLedSelect = 65536;
+pub const enPicoLedSelect_PICO_LED_AUX: enPicoLedSelect = 131072;
+pub type enPicoLedSelect = ::std::os::raw::c_uint;
+pub use self::enPicoLedSelect as PICO_LED_SELECT;
+pub const enPicoLedState_PICO_LED_AUTO: enPicoLedState = -1;
+pub const enPicoLedState_PICO_LED_OFF: enPicoLedState = 0;
+pub const enPicoLedState_PICO_LED_ON: enPicoLedState = 1;
+pub type enPicoLedState = ::std::os::raw::c_int;
+pub use self::enPicoLedState as PICO_LED_STATE;
+pub const enPicoTextFormat_PICO_JSON_DATA: enPicoTextFormat = 0;
+pub const enPicoTextFormat_PICO_JSON_SCHEMA: enPicoTextFormat = 1;
+pub type enPicoTextFormat = ::std::os::raw::c_uint;
+pub use self::enPicoTextFormat as PICO_TEXT_FORMAT;
+pub const enPicoAuxIoMode_PICO_AUXIO_INPUT: enPicoAuxIoMode = 0;
+pub const enPicoAuxIoMode_PICO_AUXIO_HIGH_OUT: enPicoAuxIoMode = 1;
+pub const enPicoAuxIoMode_PICO_AUXIO_LOW_OUT: enPicoAuxIoMode = 2;
+pub const enPicoAuxIoMode_PICO_AUXIO_TRIGGER_OUT: enPicoAuxIoMode = 3;
+pub type enPicoAuxIoMode = ::std::os::raw::c_uint;
+pub use self::enPicoAuxIoMode as PICO_AUXIO_MODE;
+pub const enPicoAutoTriggerStatus_PICO_TRIGGER_NOT_SET: enPicoAutoTriggerStatus = 0;
+pub const enPicoAutoTriggerStatus_PICO_REAL_TRIGGER: enPicoAutoTriggerStatus = 1;
+pub const enPicoAutoTriggerStatus_PICO_AUTO_TRIGGER: enPicoAutoTriggerStatus = 2;
+pub type enPicoAutoTriggerStatus = ::std::os::raw::c_uint;
+pub use self::enPicoAutoTriggerStatus as PICO_AUTO_TRIGGER_STATUS;
+pub const enPicoScopeState_IDLE: enPicoScopeState = 0;
+pub const enPicoScopeState_PRE_TRIGGER: enPicoScopeState = 1;
+pub const enPicoScopeState_WAITING_FOR_TRIGGER: enPicoScopeState = 2;
+pub const enPicoScopeState_CAPTURING: enPicoScopeState = 3;
+pub const enPicoScopeState_READING: enPicoScopeState = 4;
+pub type enPicoScopeState = ::std::os::raw::c_uint;
+pub use self::enPicoScopeState as PICO_SCOPE_STATE;
+pub const enCalibrationType_PICO_CAL_HOUSE: enCalibrationType = 0;
+pub const enCalibrationType_PICO_USER_CAL: enCalibrationType = 1;
+pub type enCalibrationType = ::std::os::raw::c_uint;
+pub use self::enCalibrationType as PICO_CAL_TYPE;
 pub type PicoConnectProbe = i32;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_NONE: enPicoConnectProbe = 0;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_D9_BNC: enPicoConnectProbe = 4000;
@@ -393,9 +329,13 @@ pub const enPicoConnectProbe_PICO_BNC_PLUS_RESISTANCE_LEAD: enPicoConnectProbe =
 pub const enPicoConnectProbe_PICO_BNC_PLUS_60A_CURRENT_CLAMP: enPicoConnectProbe = 5010;
 pub const enPicoConnectProbe_PICO_BNC_PLUS_OPTICAL_SENSOR: enPicoConnectProbe = 5011;
 pub const enPicoConnectProbe_PICO_BNC_PLUS_60A_CURRENT_CLAMP_V2: enPicoConnectProbe = 5012;
+pub const enPicoConnectProbe_PICO_BNC_PLUS_HIGH_VOLTAGE_DIFFERENTIAL: enPicoConnectProbe = 5013;
+pub const enPicoConnectProbe_PICO_BNC_PLUS_TRI_AXIAL_ACCELEROMETER: enPicoConnectProbe = 5014;
+pub const enPicoConnectProbe_PICO_BNC_PLUS_MICROPHONE: enPicoConnectProbe = 5015;
 pub const enPicoConnectProbe_PICO_PASSIVE_PROBE_X10: enPicoConnectProbe = 6000;
 pub const enPicoConnectProbe_PICO_ACTIVE_X10_750MHZ: enPicoConnectProbe = 6001;
 pub const enPicoConnectProbe_PICO_ACTIVE_X10_1_3GHZ: enPicoConnectProbe = 6002;
+pub const enPicoConnectProbe_PICO_PASSIVE_PROBE_X10_50OHM: enPicoConnectProbe = 6003;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_INTELLIGENT: enPicoConnectProbe = -3;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_UNKNOWN_PROBE: enPicoConnectProbe = -2;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_FAULT_PROBE: enPicoConnectProbe = -1;
@@ -550,6 +490,7 @@ pub const enPicoConnectProbeRange_PICO_HT_NEG5_TO_50KV_INVERTED: enPicoConnectPr
 pub const enPicoConnectProbeRange_PICO_HT_NEG5_TO_100KV_INVERTED: enPicoConnectProbeRange = 8959;
 pub const enPicoConnectProbeRange_PICO_MAX_HT_RANGES: enPicoConnectProbeRange = 10;
 pub const enPicoConnectProbeRange_PICO_TEMPERATURE_NEG50_TO_150DEGC: enPicoConnectProbeRange = 9000;
+pub const enPicoConnectProbeRange_PICO_TEMPERATURE_NEG4_TO_125DEGC: enPicoConnectProbeRange = 9001;
 pub const enPicoConnectProbeRange_PICO_PRESSURE_SENSOR_NEG100000_TO_150000_PASCALS:
     enPicoConnectProbeRange = 9100;
 pub const enPicoConnectProbeRange_PICO_PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS:
@@ -583,12 +524,52 @@ pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_10A: enPicoConnectPr
 pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_20A: enPicoConnectProbeRange = 10605;
 pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_50A: enPicoConnectProbeRange = 10606;
 pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_60A: enPicoConnectProbeRange = 10607;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_5V: enPicoConnectProbeRange =
+    10650;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_10V: enPicoConnectProbeRange =
+    10651;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_20V: enPicoConnectProbeRange =
+    10652;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_50V: enPicoConnectProbeRange =
+    10653;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_100V: enPicoConnectProbeRange =
+    10654;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_200V: enPicoConnectProbeRange =
+    10655;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_500V: enPicoConnectProbeRange =
+    10656;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_1000V: enPicoConnectProbeRange =
+    10657;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_1400V: enPicoConnectProbeRange =
+    10658;
 pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_100MV: enPicoConnectProbeRange = 10700;
 pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_200MV: enPicoConnectProbeRange = 10701;
 pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_500MV: enPicoConnectProbeRange = 10702;
 pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_1V: enPicoConnectProbeRange = 10703;
 pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_2V: enPicoConnectProbeRange = 10704;
 pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_5V: enPicoConnectProbeRange = 10705;
+pub const enPicoConnectProbeRange_PICO_TRIAXIAL_ACCELEROMETER_5G: enPicoConnectProbeRange = 10750;
+pub const enPicoConnectProbeRange_PICO_TRIAXIAL_ACCELEROMETER_9G: enPicoConnectProbeRange = 10751;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_150MG: enPicoConnectProbeRange =
+    10752;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_300MG: enPicoConnectProbeRange =
+    10753;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_600MG: enPicoConnectProbeRange =
+    10754;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_1500MG: enPicoConnectProbeRange =
+    10755;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_3G: enPicoConnectProbeRange = 10756;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_6G: enPicoConnectProbeRange = 10757;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_9G: enPicoConnectProbeRange = 10758;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_800_MILLI_PASCAL: enPicoConnectProbeRange = 10800;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_1600_MILLI_PASCAL: enPicoConnectProbeRange =
+    10801;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_3200_MILLI_PASCAL: enPicoConnectProbeRange =
+    10802;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_8000_MILLI_PASCAL: enPicoConnectProbeRange =
+    10803;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_16000_MILLI_PASCAL: enPicoConnectProbeRange =
+    10804;
 pub type enPicoConnectProbeRange = ::std::os::raw::c_uint;
 pub use self::enPicoConnectProbeRange as PICO_CONNECT_PROBE_RANGE;
 pub const enPicoProbeRangeInfo_PICO_PROBE_NONE_NV: enPicoProbeRangeInfo = 0;
@@ -607,7 +588,6 @@ pub struct tPicoTriggerInfo {
     pub missedTriggers: u64,
     pub timeStampCounter: u64,
 }
-
 pub type PICO_TRIGGER_INFO = tPicoTriggerInfo;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -618,7 +598,6 @@ pub struct tPicoTriggerChannelProperties {
     pub thresholdLowerHysteresis: u16,
     pub channel: PICO_CHANNEL,
 }
-
 pub type PICO_TRIGGER_CHANNEL_PROPERTIES = tPicoTriggerChannelProperties;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -626,7 +605,6 @@ pub struct tPicoCondition {
     pub source: PICO_CHANNEL,
     pub condition: PICO_TRIGGER_STATE,
 }
-
 pub type PICO_CONDITION = tPicoCondition;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -635,7 +613,6 @@ pub struct tPicoDirection {
     pub direction: PICO_THRESHOLD_DIRECTION,
     pub thresholdMode: PICO_THRESHOLD_MODE,
 }
-
 pub type PICO_DIRECTION = tPicoDirection;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -658,7 +635,6 @@ pub struct tPicoUserProbeInteractions {
     pub filterCurrent_: PICO_BANDWIDTH_LIMITER_FLAGS,
     pub defaultFilter_: PICO_BANDWIDTH_LIMITER,
 }
-
 pub type PICO_USER_PROBE_INTERACTIONS = tPicoUserProbeInteractions;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -672,7 +648,6 @@ pub struct tPicoDataBuffers {
     pub dataType_: PICO_DATA_TYPE,
     pub nDistributionPoints_: u32,
 }
-
 pub type PICO_DATA_BUFFERS = tPicoDataBuffers;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -685,7 +660,6 @@ pub struct tPicoStreamingDataInfo {
     pub startIndex_: i32,
     pub overflow_: i16,
 }
-
 pub type PICO_STREAMING_DATA_INFO = tPicoStreamingDataInfo;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -694,7 +668,6 @@ pub struct tPicoStreamingDataTriggerInfo {
     pub triggered_: i16,
     pub autoStop_: i16,
 }
-
 pub type PICO_STREAMING_DATA_TRIGGER_INFO = tPicoStreamingDataTriggerInfo;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -704,7 +677,6 @@ pub struct tPicoScalingFactors {
     pub offset: i16,
     pub scalingFactor: f64,
 }
-
 pub type PICO_SCALING_FACTORS_VALUES = tPicoScalingFactors;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -716,7 +688,6 @@ pub struct tPicoScalingFactorsForRangeTypes {
     pub offset: i16,
     pub scalingFactor: f64,
 }
-
 pub type PICO_SCALING_FACTORS_FOR_RANGE_TYPES_VALUES = tPicoScalingFactorsForRangeTypes;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -725,7 +696,6 @@ pub struct tProbeApp {
     pub appMajorVersion_: i32,
     pub appMinorVersion_: i32,
 }
-
 pub type PROBE_APP = tProbeApp;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -733,7 +703,6 @@ pub struct tDigitalChannelDirections {
     pub channel: PICO_PORT_DIGITAL_CHANNEL,
     pub direction: PICO_DIGITAL_DIRECTION,
 }
-
 pub type PICO_DIGITAL_CHANNEL_DIRECTIONS = tDigitalChannelDirections;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -745,7 +714,6 @@ pub struct tPicoDigitalPortInteractions {
     pub serial_: [i8; 10usize],
     pub calibrationDate_: [i8; 8usize],
 }
-
 pub type PICO_DIGITAL_PORT_INTERACTIONS = tPicoDigitalPortInteractions;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -753,7 +721,6 @@ pub struct tPicoChannelOvervoltageTripped {
     pub channel_: PICO_CHANNEL,
     pub tripped_: u8,
 }
-
 pub type PICO_CHANNEL_OVERVOLTAGE_TRIPPED = tPicoChannelOvervoltageTripped;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -768,7 +735,6 @@ pub struct tPicoUsbPowerDelivery {
     pub currentPdo_: u32,
     pub currentRdo_: u32,
 }
-
 pub type PICO_USB_POWER_DELIVERY = tPicoUsbPowerDelivery;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -777,8 +743,22 @@ pub struct tPicoUsbPowerDetails {
     pub dataPort_: PICO_USB_POWER_DELIVERY,
     pub powerPort_: PICO_USB_POWER_DELIVERY,
 }
-
 pub type PICO_USB_POWER_DETAILS = tPicoUsbPowerDetails;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoLedColourProperties {
+    pub led_: PICO_LED_SELECT,
+    pub hue_: u16,
+    pub saturation_: u8,
+}
+pub type PICO_LED_COLOUR_PROPERTIES = tPicoLedColourProperties;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoLedStateProperties {
+    pub led_: PICO_LED_SELECT,
+    pub state_: PICO_LED_STATE,
+}
+pub type PICO_LED_STATE_PROPERTIES = tPicoLedStateProperties;
 pub type PicoUpdateFirmwareProgress =
     ::std::option::Option<unsafe extern "C" fn(handle: i16, progress: u16)>;
 pub type PicoProbeInteractions = ::std::option::Option<
@@ -815,7 +795,6 @@ pub struct tPicoVersion {
     pub revision_: i16,
     pub build_: i16,
 }
-
 pub type PICO_VERSION = tPicoVersion;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -825,7 +804,6 @@ pub struct tPicoFirmwareInfo {
     pub updateVersion: PICO_VERSION,
     pub updateRequired: u16,
 }
-
 pub type PICO_FIRMWARE_INFO = tPicoFirmwareInfo;
 pub type psospaBlockReady = ::std::option::Option<
     unsafe extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: PICO_POINTER),
@@ -839,7 +817,11 @@ pub type psospaDataReady = ::std::option::Option<
         pParameter: PICO_POINTER,
     ),
 >;
-extern crate libloading;
+pub const enPicoDeviceTempSensor_PICO_TEMP_SENSOR_NONE: enPicoDeviceTempSensor = 0;
+pub const enPicoDeviceTempSensor_PICO_TEMP_SENSOR_FPGA: enPicoDeviceTempSensor = 1;
+pub const enPicoDeviceTempSensor_PICO_TEMP_SENSOR_ADC: enPicoDeviceTempSensor = 2;
+pub type enPicoDeviceTempSensor = ::std::os::raw::c_uint;
+pub use self::enPicoDeviceTempSensor as PICO_TEMP_SENSOR;
 pub struct PSOSPALoader {
     __library: ::libloading::Library,
     pub psospaOpenUnit: Result<
@@ -868,17 +850,6 @@ pub struct PSOSPALoader {
             outputString: *mut i8,
             outputStringLength: *mut i32,
             textFormat: PICO_TEXT_FORMAT,
-        ) -> PICO_STATUS,
-        ::libloading::Error,
-    >,
-    pub psospaGetAccessoryInfo: Result<
-        unsafe extern "C" fn(
-            handle: i16,
-            channel: PICO_CHANNEL,
-            string: *mut i8,
-            stringLength: i16,
-            requiredSize: *mut i16,
-            info: PICO_INFO,
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
@@ -931,9 +902,7 @@ pub struct PSOSPALoader {
         unsafe extern "C" fn(
             handle: i16,
             port: PICO_CHANNEL,
-            logicThresholdLevel: *mut i16,
-            logicThresholdLevelLength: i16,
-            hysteresis: PICO_DIGITAL_PORT_HYSTERESIS,
+            logicThresholdLevelVolts: f64,
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
@@ -979,10 +948,6 @@ pub struct PSOSPALoader {
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
-    pub psospaSigGenFilter: Result<
-        unsafe extern "C" fn(handle: i16, filterState: PICO_SIGGEN_FILTER_STATE) -> PICO_STATUS,
-        ::libloading::Error,
-    >,
     pub psospaSigGenFrequency: Result<
         unsafe extern "C" fn(handle: i16, frequencyHz: f64) -> PICO_STATUS,
         ::libloading::Error,
@@ -1011,14 +976,6 @@ pub struct PSOSPALoader {
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
-    pub psospaSigGenClockManual: Result<
-        unsafe extern "C" fn(
-            handle: i16,
-            dacClockFrequency: f64,
-            prescaleRatio: u64,
-        ) -> PICO_STATUS,
-        ::libloading::Error,
-    >,
     pub psospaSigGenSoftwareTriggerControl: Result<
         unsafe extern "C" fn(handle: i16, triggerState: PICO_SIGGEN_TRIG_TYPE) -> PICO_STATUS,
         ::libloading::Error,
@@ -1029,8 +986,6 @@ pub struct PSOSPALoader {
             sigGenEnabled: i16,
             sweepEnabled: i16,
             triggerEnabled: i16,
-            automaticClockOptimisationEnabled: i16,
-            overrideAutomaticClockAndPrescale: i16,
             frequency: *mut f64,
             stopFrequency: *mut f64,
             frequencyIncrement: *mut f64,
@@ -1053,11 +1008,8 @@ pub struct PSOSPALoader {
             handle: i16,
             waveType: PICO_WAVE_TYPE,
             numSamples: *mut u64,
-            startFrequency: *mut f64,
-            sweepEnabled: i16,
-            manualDacClockFrequency: *mut f64,
-            manualPrescaleRatio: *mut u64,
-            maxStopFrequencyOut: *mut f64,
+            minFrequencyOut: *mut f64,
+            maxFrequencyOut: *mut f64,
             minFrequencyStepOut: *mut f64,
             maxFrequencyStepOut: *mut f64,
             minDwellTimeOut: *mut f64,
@@ -1090,7 +1042,6 @@ pub struct PSOSPALoader {
             handle: i16,
             channelProperties: *mut PICO_TRIGGER_CHANNEL_PROPERTIES,
             nChannelProperties: i16,
-            auxOutputEnable: i16,
             autoTriggerMicroSeconds: u32,
         ) -> PICO_STATUS,
         ::libloading::Error,
@@ -1186,7 +1137,7 @@ pub struct PSOSPALoader {
             handle: i16,
             channel: PICO_CHANNEL,
             buffer: PICO_POINTER,
-            nSamples: i32,
+            nSamples: u64,
             dataType: PICO_DATA_TYPE,
             waveform: u64,
             downSampleRatioMode: PICO_RATIO_MODE,
@@ -1200,7 +1151,7 @@ pub struct PSOSPALoader {
             channel: PICO_CHANNEL,
             bufferMax: PICO_POINTER,
             bufferMin: PICO_POINTER,
-            nSamples: i32,
+            nSamples: u64,
             dataType: PICO_DATA_TYPE,
             waveform: u64,
             downSampleRatioMode: PICO_RATIO_MODE,
@@ -1231,7 +1182,7 @@ pub struct PSOSPALoader {
             sampleInterval: *mut f64,
             sampleIntervalTimeUnits: PICO_TIME_UNITS,
             maxPreTriggerSamples: u64,
-            maxPostPreTriggerSamples: u64,
+            maxPostTriggerSamples: u64,
             autoStop: i16,
             downSampleRatio: u64,
             downSampleRatioMode: PICO_RATIO_MODE,
@@ -1340,6 +1291,15 @@ pub struct PSOSPALoader {
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
+    pub psospaGetAutoTriggerStatus: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            autoTriggerStatus: *mut PICO_AUTO_TRIGGER_STATUS,
+            firstSegmentIndex: u64,
+            segmentCount: u64,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
     pub psospaEnumerateUnits: Result<
         unsafe extern "C" fn(count: *mut i16, serials: *mut i8, serialLth: *mut i16) -> PICO_STATUS,
         ::libloading::Error,
@@ -1377,16 +1337,6 @@ pub struct PSOSPALoader {
             resolution: PICO_DEVICE_RESOLUTION,
             timebase: *mut u32,
             timeIntervalAvailable: *mut f64,
-        ) -> PICO_STATUS,
-        ::libloading::Error,
-    >,
-    pub psospaChannelCombinationsStateless: Result<
-        unsafe extern "C" fn(
-            handle: i16,
-            channelFlagsCombinations: *mut PICO_CHANNEL_FLAGS,
-            nChannelCombinations: *mut u32,
-            resolution: PICO_DEVICE_RESOLUTION,
-            timebase: u32,
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
@@ -1450,12 +1400,79 @@ pub struct PSOSPALoader {
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
+    pub psospaSetLedColours: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            colourProperties: *const PICO_LED_COLOUR_PROPERTIES,
+            nColourProperties: u32,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaSetLedBrightness: Result<
+        unsafe extern "C" fn(handle: i16, brightness: u8) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaSetLedStates: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            stateProperties: *const PICO_LED_STATE_PROPERTIES,
+            nStateProperties: u32,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaSetAuxIoMode: Result<
+        unsafe extern "C" fn(handle: i16, auxIoMode: PICO_AUXIO_MODE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaRunAutomaticOffsetAdjustment: Result<
+        unsafe extern "C" fn(handle: i16, calType: PICO_CAL_TYPE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaCommitCurrentAdjustmentSettingsToDevice: Result<
+        unsafe extern "C" fn(handle: i16, calType: PICO_CAL_TYPE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaResetAdjustmentSettings: Result<
+        unsafe extern "C" fn(handle: i16, calType: PICO_CAL_TYPE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaSetAdjustmentSettingDetails: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            calType: PICO_CAL_TYPE,
+            nameString: *mut i8,
+            nameStringLength: *mut i32,
+            addressString: *mut i8,
+            addressStringLength: *mut i32,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaGetAdjustmentSettingDetails: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            calType: PICO_CAL_TYPE,
+            detailsString: *mut i8,
+            stringLength: *mut i32,
+            textFormat: PICO_TEXT_FORMAT,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub psospaGetDeviceTemperatures: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            temperatureFlags: u32,
+            temperatures_degC: *mut f64,
+            temperaturesLength: u8,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
 }
 impl PSOSPALoader {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let path = path.as_ref();
         let library = ::libloading::Library::new(path)?;
         Self::from_library(library)
     }
@@ -1467,7 +1484,6 @@ impl PSOSPALoader {
         let psospaOpenUnit = __library.get(b"psospaOpenUnit\0").map(|sym| *sym);
         let psospaGetUnitInfo = __library.get(b"psospaGetUnitInfo\0").map(|sym| *sym);
         let psospaGetVariantDetails = __library.get(b"psospaGetVariantDetails\0").map(|sym| *sym);
-        let psospaGetAccessoryInfo = __library.get(b"psospaGetAccessoryInfo\0").map(|sym| *sym);
         let psospaCloseUnit = __library.get(b"psospaCloseUnit\0").map(|sym| *sym);
         let psospaMemorySegments = __library.get(b"psospaMemorySegments\0").map(|sym| *sym);
         let psospaMemorySegmentsBySamples = __library
@@ -1490,14 +1506,12 @@ impl PSOSPALoader {
             .get(b"psospaSigGenWaveformDutyCycle\0")
             .map(|sym| *sym);
         let psospaSigGenTrigger = __library.get(b"psospaSigGenTrigger\0").map(|sym| *sym);
-        let psospaSigGenFilter = __library.get(b"psospaSigGenFilter\0").map(|sym| *sym);
         let psospaSigGenFrequency = __library.get(b"psospaSigGenFrequency\0").map(|sym| *sym);
         let psospaSigGenFrequencySweep = __library
             .get(b"psospaSigGenFrequencySweep\0")
             .map(|sym| *sym);
         let psospaSigGenPhase = __library.get(b"psospaSigGenPhase\0").map(|sym| *sym);
         let psospaSigGenPhaseSweep = __library.get(b"psospaSigGenPhaseSweep\0").map(|sym| *sym);
-        let psospaSigGenClockManual = __library.get(b"psospaSigGenClockManual\0").map(|sym| *sym);
         let psospaSigGenSoftwareTriggerControl = __library
             .get(b"psospaSigGenSoftwareTriggerControl\0")
             .map(|sym| *sym);
@@ -1574,6 +1588,9 @@ impl PSOSPALoader {
         let psospaStop = __library.get(b"psospaStop\0").map(|sym| *sym);
         let psospaSetNoOfCaptures = __library.get(b"psospaSetNoOfCaptures\0").map(|sym| *sym);
         let psospaGetTriggerInfo = __library.get(b"psospaGetTriggerInfo\0").map(|sym| *sym);
+        let psospaGetAutoTriggerStatus = __library
+            .get(b"psospaGetAutoTriggerStatus\0")
+            .map(|sym| *sym);
         let psospaEnumerateUnits = __library.get(b"psospaEnumerateUnits\0").map(|sym| *sym);
         let psospaPingUnit = __library.get(b"psospaPingUnit\0").map(|sym| *sym);
         let psospaGetAnalogueOffsetLimits = __library
@@ -1584,9 +1601,6 @@ impl PSOSPALoader {
             .map(|sym| *sym);
         let psospaNearestSampleIntervalStateless = __library
             .get(b"psospaNearestSampleIntervalStateless\0")
-            .map(|sym| *sym);
-        let psospaChannelCombinationsStateless = __library
-            .get(b"psospaChannelCombinationsStateless\0")
             .map(|sym| *sym);
         let psospaSetDeviceResolution = __library
             .get(b"psospaSetDeviceResolution\0")
@@ -1612,12 +1626,33 @@ impl PSOSPALoader {
         let psospaReportAllChannelsOvervoltageTripStatus = __library
             .get(b"psospaReportAllChannelsOvervoltageTripStatus\0")
             .map(|sym| *sym);
+        let psospaSetLedColours = __library.get(b"psospaSetLedColours\0").map(|sym| *sym);
+        let psospaSetLedBrightness = __library.get(b"psospaSetLedBrightness\0").map(|sym| *sym);
+        let psospaSetLedStates = __library.get(b"psospaSetLedStates\0").map(|sym| *sym);
+        let psospaSetAuxIoMode = __library.get(b"psospaSetAuxIoMode\0").map(|sym| *sym);
+        let psospaRunAutomaticOffsetAdjustment = __library
+            .get(b"psospaRunAutomaticOffsetAdjustment\0")
+            .map(|sym| *sym);
+        let psospaCommitCurrentAdjustmentSettingsToDevice = __library
+            .get(b"psospaCommitCurrentAdjustmentSettingsToDevice\0")
+            .map(|sym| *sym);
+        let psospaResetAdjustmentSettings = __library
+            .get(b"psospaResetAdjustmentSettings\0")
+            .map(|sym| *sym);
+        let psospaSetAdjustmentSettingDetails = __library
+            .get(b"psospaSetAdjustmentSettingDetails\0")
+            .map(|sym| *sym);
+        let psospaGetAdjustmentSettingDetails = __library
+            .get(b"psospaGetAdjustmentSettingDetails\0")
+            .map(|sym| *sym);
+        let psospaGetDeviceTemperatures = __library
+            .get(b"psospaGetDeviceTemperatures\0")
+            .map(|sym| *sym);
         Ok(PSOSPALoader {
             __library,
             psospaOpenUnit,
             psospaGetUnitInfo,
             psospaGetVariantDetails,
-            psospaGetAccessoryInfo,
             psospaCloseUnit,
             psospaMemorySegments,
             psospaMemorySegmentsBySamples,
@@ -1632,12 +1667,10 @@ impl PSOSPALoader {
             psospaSigGenRange,
             psospaSigGenWaveformDutyCycle,
             psospaSigGenTrigger,
-            psospaSigGenFilter,
             psospaSigGenFrequency,
             psospaSigGenFrequencySweep,
             psospaSigGenPhase,
             psospaSigGenPhaseSweep,
-            psospaSigGenClockManual,
             psospaSigGenSoftwareTriggerControl,
             psospaSigGenApply,
             psospaSigGenLimits,
@@ -1676,12 +1709,12 @@ impl PSOSPALoader {
             psospaStop,
             psospaSetNoOfCaptures,
             psospaGetTriggerInfo,
+            psospaGetAutoTriggerStatus,
             psospaEnumerateUnits,
             psospaPingUnit,
             psospaGetAnalogueOffsetLimits,
             psospaGetMinimumTimebaseStateless,
             psospaNearestSampleIntervalStateless,
-            psospaChannelCombinationsStateless,
             psospaSetDeviceResolution,
             psospaGetDeviceResolution,
             psospaQueryOutputEdgeDetect,
@@ -1692,6 +1725,16 @@ impl PSOSPALoader {
             psospaStartFirmwareUpdate,
             psospaResetChannelsAndReportAllChannelsOvervoltageTripStatus,
             psospaReportAllChannelsOvervoltageTripStatus,
+            psospaSetLedColours,
+            psospaSetLedBrightness,
+            psospaSetLedStates,
+            psospaSetAuxIoMode,
+            psospaRunAutomaticOffsetAdjustment,
+            psospaCommitCurrentAdjustmentSettingsToDevice,
+            psospaResetAdjustmentSettings,
+            psospaSetAdjustmentSettingDetails,
+            psospaGetAdjustmentSettingDetails,
+            psospaGetDeviceTemperatures,
         })
     }
     pub unsafe fn psospaOpenUnit(
@@ -1744,27 +1787,6 @@ impl PSOSPALoader {
             outputString,
             outputStringLength,
             textFormat,
-        )
-    }
-    pub unsafe fn psospaGetAccessoryInfo(
-        &self,
-        handle: i16,
-        channel: PICO_CHANNEL,
-        string: *mut i8,
-        stringLength: i16,
-        requiredSize: *mut i16,
-        info: PICO_INFO,
-    ) -> PICO_STATUS {
-        (self
-            .psospaGetAccessoryInfo
-            .as_ref()
-            .expect("Expected function, got error."))(
-            handle,
-            channel,
-            string,
-            stringLength,
-            requiredSize,
-            info,
         )
     }
     pub unsafe fn psospaCloseUnit(&self, handle: i16) -> PICO_STATUS {
@@ -1860,20 +1882,12 @@ impl PSOSPALoader {
         &self,
         handle: i16,
         port: PICO_CHANNEL,
-        logicThresholdLevel: *mut i16,
-        logicThresholdLevelLength: i16,
-        hysteresis: PICO_DIGITAL_PORT_HYSTERESIS,
+        logicThresholdLevelVolts: f64,
     ) -> PICO_STATUS {
         (self
             .psospaSetDigitalPortOn
             .as_ref()
-            .expect("Expected function, got error."))(
-            handle,
-            port,
-            logicThresholdLevel,
-            logicThresholdLevelLength,
-            hysteresis,
-        )
+            .expect("Expected function, got error."))(handle, port, logicThresholdLevelVolts)
     }
     pub unsafe fn psospaSetDigitalPortOff(&self, handle: i16, port: PICO_CHANNEL) -> PICO_STATUS {
         (self
@@ -1954,16 +1968,6 @@ impl PSOSPALoader {
             autoTriggerPicoSeconds,
         )
     }
-    pub unsafe fn psospaSigGenFilter(
-        &self,
-        handle: i16,
-        filterState: PICO_SIGGEN_FILTER_STATE,
-    ) -> PICO_STATUS {
-        (self
-            .psospaSigGenFilter
-            .as_ref()
-            .expect("Expected function, got error."))(handle, filterState)
-    }
     pub unsafe fn psospaSigGenFrequency(&self, handle: i16, frequencyHz: f64) -> PICO_STATUS {
         (self
             .psospaSigGenFrequency
@@ -2014,19 +2018,6 @@ impl PSOSPALoader {
             sweepType,
         )
     }
-    pub unsafe fn psospaSigGenClockManual(
-        &self,
-        handle: i16,
-        dacClockFrequency: f64,
-        prescaleRatio: u64,
-    ) -> PICO_STATUS {
-        (self
-            .psospaSigGenClockManual
-            .as_ref()
-            .expect("Expected function, got error."))(
-            handle, dacClockFrequency, prescaleRatio
-        )
-    }
     pub unsafe fn psospaSigGenSoftwareTriggerControl(
         &self,
         handle: i16,
@@ -2043,8 +2034,6 @@ impl PSOSPALoader {
         sigGenEnabled: i16,
         sweepEnabled: i16,
         triggerEnabled: i16,
-        automaticClockOptimisationEnabled: i16,
-        overrideAutomaticClockAndPrescale: i16,
         frequency: *mut f64,
         stopFrequency: *mut f64,
         frequencyIncrement: *mut f64,
@@ -2058,8 +2047,6 @@ impl PSOSPALoader {
             sigGenEnabled,
             sweepEnabled,
             triggerEnabled,
-            automaticClockOptimisationEnabled,
-            overrideAutomaticClockAndPrescale,
             frequency,
             stopFrequency,
             frequencyIncrement,
@@ -2090,11 +2077,8 @@ impl PSOSPALoader {
         handle: i16,
         waveType: PICO_WAVE_TYPE,
         numSamples: *mut u64,
-        startFrequency: *mut f64,
-        sweepEnabled: i16,
-        manualDacClockFrequency: *mut f64,
-        manualPrescaleRatio: *mut u64,
-        maxStopFrequencyOut: *mut f64,
+        minFrequencyOut: *mut f64,
+        maxFrequencyOut: *mut f64,
         minFrequencyStepOut: *mut f64,
         maxFrequencyStepOut: *mut f64,
         minDwellTimeOut: *mut f64,
@@ -2107,11 +2091,8 @@ impl PSOSPALoader {
             handle,
             waveType,
             numSamples,
-            startFrequency,
-            sweepEnabled,
-            manualDacClockFrequency,
-            manualPrescaleRatio,
-            maxStopFrequencyOut,
+            minFrequencyOut,
+            maxFrequencyOut,
             minFrequencyStepOut,
             maxFrequencyStepOut,
             minDwellTimeOut,
@@ -2168,7 +2149,6 @@ impl PSOSPALoader {
         handle: i16,
         channelProperties: *mut PICO_TRIGGER_CHANNEL_PROPERTIES,
         nChannelProperties: i16,
-        auxOutputEnable: i16,
         autoTriggerMicroSeconds: u32,
     ) -> PICO_STATUS {
         (self
@@ -2178,7 +2158,6 @@ impl PSOSPALoader {
             handle,
             channelProperties,
             nChannelProperties,
-            auxOutputEnable,
             autoTriggerMicroSeconds,
         )
     }
@@ -2320,7 +2299,7 @@ impl PSOSPALoader {
         handle: i16,
         channel: PICO_CHANNEL,
         buffer: PICO_POINTER,
-        nSamples: i32,
+        nSamples: u64,
         dataType: PICO_DATA_TYPE,
         waveform: u64,
         downSampleRatioMode: PICO_RATIO_MODE,
@@ -2346,7 +2325,7 @@ impl PSOSPALoader {
         channel: PICO_CHANNEL,
         bufferMax: PICO_POINTER,
         bufferMin: PICO_POINTER,
-        nSamples: i32,
+        nSamples: u64,
         dataType: PICO_DATA_TYPE,
         waveform: u64,
         downSampleRatioMode: PICO_RATIO_MODE,
@@ -2404,7 +2383,7 @@ impl PSOSPALoader {
         sampleInterval: *mut f64,
         sampleIntervalTimeUnits: PICO_TIME_UNITS,
         maxPreTriggerSamples: u64,
-        maxPostPreTriggerSamples: u64,
+        maxPostTriggerSamples: u64,
         autoStop: i16,
         downSampleRatio: u64,
         downSampleRatioMode: PICO_RATIO_MODE,
@@ -2417,7 +2396,7 @@ impl PSOSPALoader {
             sampleInterval,
             sampleIntervalTimeUnits,
             maxPreTriggerSamples,
-            maxPostPreTriggerSamples,
+            maxPostTriggerSamples,
             autoStop,
             downSampleRatio,
             downSampleRatioMode,
@@ -2626,6 +2605,23 @@ impl PSOSPALoader {
             segmentCount,
         )
     }
+    pub unsafe fn psospaGetAutoTriggerStatus(
+        &self,
+        handle: i16,
+        autoTriggerStatus: *mut PICO_AUTO_TRIGGER_STATUS,
+        firstSegmentIndex: u64,
+        segmentCount: u64,
+    ) -> PICO_STATUS {
+        (self
+            .psospaGetAutoTriggerStatus
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            autoTriggerStatus,
+            firstSegmentIndex,
+            segmentCount,
+        )
+    }
     pub unsafe fn psospaEnumerateUnits(
         &self,
         count: *mut i16,
@@ -2706,25 +2702,6 @@ impl PSOSPALoader {
             resolution,
             timebase,
             timeIntervalAvailable,
-        )
-    }
-    pub unsafe fn psospaChannelCombinationsStateless(
-        &self,
-        handle: i16,
-        channelFlagsCombinations: *mut PICO_CHANNEL_FLAGS,
-        nChannelCombinations: *mut u32,
-        resolution: PICO_DEVICE_RESOLUTION,
-        timebase: u32,
-    ) -> PICO_STATUS {
-        (self
-            .psospaChannelCombinationsStateless
-            .as_ref()
-            .expect("Expected function, got error."))(
-            handle,
-            channelFlagsCombinations,
-            nChannelCombinations,
-            resolution,
-            timebase,
         )
     }
     pub unsafe fn psospaSetDeviceResolution(
@@ -2837,6 +2814,135 @@ impl PSOSPALoader {
             handle,
             allChannelsTrippedStatus,
             nChannelTrippedStatus,
+        )
+    }
+    pub unsafe fn psospaSetLedColours(
+        &self,
+        handle: i16,
+        colourProperties: *const PICO_LED_COLOUR_PROPERTIES,
+        nColourProperties: u32,
+    ) -> PICO_STATUS {
+        (self
+            .psospaSetLedColours
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle, colourProperties, nColourProperties
+        )
+    }
+    pub unsafe fn psospaSetLedBrightness(&self, handle: i16, brightness: u8) -> PICO_STATUS {
+        (self
+            .psospaSetLedBrightness
+            .as_ref()
+            .expect("Expected function, got error."))(handle, brightness)
+    }
+    pub unsafe fn psospaSetLedStates(
+        &self,
+        handle: i16,
+        stateProperties: *const PICO_LED_STATE_PROPERTIES,
+        nStateProperties: u32,
+    ) -> PICO_STATUS {
+        (self
+            .psospaSetLedStates
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle, stateProperties, nStateProperties
+        )
+    }
+    pub unsafe fn psospaSetAuxIoMode(
+        &self,
+        handle: i16,
+        auxIoMode: PICO_AUXIO_MODE,
+    ) -> PICO_STATUS {
+        (self
+            .psospaSetAuxIoMode
+            .as_ref()
+            .expect("Expected function, got error."))(handle, auxIoMode)
+    }
+    pub unsafe fn psospaRunAutomaticOffsetAdjustment(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+    ) -> PICO_STATUS {
+        (self
+            .psospaRunAutomaticOffsetAdjustment
+            .as_ref()
+            .expect("Expected function, got error."))(handle, calType)
+    }
+    pub unsafe fn psospaCommitCurrentAdjustmentSettingsToDevice(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+    ) -> PICO_STATUS {
+        (self
+            .psospaCommitCurrentAdjustmentSettingsToDevice
+            .as_ref()
+            .expect("Expected function, got error."))(handle, calType)
+    }
+    pub unsafe fn psospaResetAdjustmentSettings(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+    ) -> PICO_STATUS {
+        (self
+            .psospaResetAdjustmentSettings
+            .as_ref()
+            .expect("Expected function, got error."))(handle, calType)
+    }
+    pub unsafe fn psospaSetAdjustmentSettingDetails(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+        nameString: *mut i8,
+        nameStringLength: *mut i32,
+        addressString: *mut i8,
+        addressStringLength: *mut i32,
+    ) -> PICO_STATUS {
+        (self
+            .psospaSetAdjustmentSettingDetails
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            calType,
+            nameString,
+            nameStringLength,
+            addressString,
+            addressStringLength,
+        )
+    }
+    pub unsafe fn psospaGetAdjustmentSettingDetails(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+        detailsString: *mut i8,
+        stringLength: *mut i32,
+        textFormat: PICO_TEXT_FORMAT,
+    ) -> PICO_STATUS {
+        (self
+            .psospaGetAdjustmentSettingDetails
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            calType,
+            detailsString,
+            stringLength,
+            textFormat,
+        )
+    }
+    pub unsafe fn psospaGetDeviceTemperatures(
+        &self,
+        handle: i16,
+        temperatureFlags: u32,
+        temperatures_degC: *mut f64,
+        temperaturesLength: u8,
+    ) -> PICO_STATUS {
+        (self
+            .psospaGetDeviceTemperatures
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            temperatureFlags,
+            temperatures_degC,
+            temperaturesLength,
         )
     }
 }

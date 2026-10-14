@@ -162,14 +162,15 @@
 
 pub mod prelude {
     pub use pico_common::{
-        Driver, MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError,
-        PicoInfo, PicoRange, PicoStatus, TC08Channel, TCType,
+        Downsample, DownsampleKind, Driver, MainsRejectionFreq, OscilloscopeChannelConfig,
+        PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoStatus,
+        PowerSource, RateLimit, SampleType, TC08Channel, TCType,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
         drdaq::{DrDAQConfig, DrDAQDevice},
         hrdl::{HRDLConfig, HRDLDevice},
-        oscilloscope::{OscilloscopeConfig, OscilloscopeDevice},
+        oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
         pl1000::{PL1000Config, PL1000Device},
         pt104::{PT104Config, PT104Device},
         tc08::{TC08Config, TC08Device},
@@ -184,9 +185,10 @@ pub mod prelude {
         DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
     };
     pub use pico_streaming::{
-        DrDAQStreamingEvent, EventHandler, HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent,
-        IntoStreamingDevice, LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
-        TC08StreamingEvent,
+        AfterPowerChange, DeviceNotice, DrDAQStreamingEvent, EventHandler, HRDLChannelScale,
+        HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice, LoggerPollState,
+        OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
+        RawChannelDataBlock, Samples, ScopeStreamState, TC08StreamingEvent,
     };
 }
 

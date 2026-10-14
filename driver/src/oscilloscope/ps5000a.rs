@@ -1,19 +1,20 @@
 use super::{
-    check_channel_limit,
+    average_only, check_channel_limit,
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, parse_enum_result,
+    get_version_string, parse_enum_result, rate_limits,
     trampoline::split_closure,
-    EnumerationResult, OscilloscopeDriverInternal,
+    variant_channel_count, EnumerationResult, OscilloscopeDriverInternal, PowerStates,
+    SampleBuffer,
 };
-use parking_lot::RwLock;
 use pico_common::{
-    DownsampleMode, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
-    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, ToPicoStr,
+    Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
+    PowerSource, RateLimit, ToPicoStr,
 };
 use pico_sys_dynamic::ps5000a::{
+    enPS5000ARatioMode_PS5000A_RATIO_MODE_AVERAGE, enPS5000ARatioMode_PS5000A_RATIO_MODE_NONE,
     enPicoDeviceResolution_PICO_DR_14BIT, PS5000ALoader, PS5000A_DEVICE_RESOLUTION,
 };
-use std::sync::Arc;
 
 /// Every 5000A, 5000B and 5000D model has all five resolutions, each
 /// with its maximum ADC value (Programmer's Guide ps5000apg r4, 3.2).
@@ -29,9 +30,19 @@ const RESOLUTIONS: [(PicoResolution, i16); 5] = [
 const CHANNEL_LIMITS: [(PicoResolution, u8); 2] =
     [(PicoResolution::DR_15BIT, 2), (PicoResolution::DR_16BIT, 1)];
 
+/// The channels a unit with `channels` analog channels runs only on
+/// the AC adaptor.
+fn supply_channels(channels: Option<u8>) -> Vec<PicoChannel> {
+    match channels {
+        Some(4) => vec![PicoChannel::C, PicoChannel::D],
+        _ => Vec::new(),
+    }
+}
+
 pub struct PS5000ADriver {
     _dependencies: LoadedDependencies,
     bindings: PS5000ALoader,
+    power: PowerStates,
 }
 
 impl std::fmt::Debug for PS5000ADriver {
@@ -52,6 +63,7 @@ impl PS5000ADriver {
         Ok(PS5000ADriver {
             bindings,
             _dependencies: dependencies,
+            power: PowerStates::default(),
         })
     }
 }
@@ -142,15 +154,23 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
             }
         });
 
-        // Handle changing power source...
+        // A unit on USB power, or a USB 3 unit on a USB 2 port, opens
+        // with a valid handle and needs ChangePowerSource with the same
+        // status to finish powering up.
         if matches!(
             status,
             PicoStatus::POWER_SUPPLY_NOT_CONNECTED | PicoStatus::USB3_0_DEVICE_NON_USB3_0_PORT
         ) {
+            self.power.opened(handle, status);
             status = PicoStatus::from(unsafe {
                 self.bindings
                     .ps5000aChangePowerSource(handle, status.into())
             })
+        } else if matches!(status, PicoStatus::OK | PicoStatus::POWER_SUPPLY_CONNECTED) {
+            // A 4444 with its supply opens with POWER_SUPPLY_CONNECTED
+            // (ps4000apg 4.37).
+            self.power.opened(handle, status);
+            status = PicoStatus::OK;
         }
 
         match status {
@@ -175,6 +195,7 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn close(&self, handle: i16) -> PicoResult<()> {
+        self.power.closed(handle);
         PicoStatus::from(unsafe { self.bindings.ps5000aCloseUnit(handle) })
             .to_result((), "close_unit")
     }
@@ -254,6 +275,58 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
+    fn get_power_source(&self, handle: i16) -> Option<PowerSource> {
+        let status = PicoStatus::from(unsafe { self.bindings.ps5000aCurrentPowerSource(handle) });
+        self.power.current(handle, status)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_power_source(&self, handle: i16, power: PowerSource) -> PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings
+                .ps5000aChangePowerSource(handle, power.to_status().into())
+        })
+        .to_result((), "set_power_source")?;
+        self.power.set(handle, power);
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn get_rate_limits(&self, handle: i16) -> Vec<RateLimit> {
+        if self.bindings.ps5000aGetMinimumTimebaseStateless.is_err() {
+            return Vec::new();
+        }
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO);
+        let channels = variant
+            .ok()
+            .as_deref()
+            .and_then(variant_channel_count)
+            .unwrap_or(0);
+        let resolutions = RESOLUTIONS.map(|(r, _)| r);
+        rate_limits(&resolutions, channels, |flags, resolution| {
+            let mut timebase = 0u32;
+            let mut interval = 0f64;
+            let status = PicoStatus::from(unsafe {
+                self.bindings.ps5000aGetMinimumTimebaseStateless(
+                    handle,
+                    flags,
+                    &mut timebase,
+                    &mut interval,
+                    resolution.to_driver_value(),
+                )
+            });
+            (status == PicoStatus::OK).then_some(interval)
+        })
+    }
+
+    // 4-channel 5000A, 5000B and 5000D units run channels C and D only
+    // on the AC adaptor (ps5000apg r4, 3.7 and 4.1).
+    fn get_supply_channels(&self, handle: i16) -> Vec<PicoChannel> {
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO);
+        supply_channels(variant.ok().as_deref().and_then(variant_channel_count))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
     fn enable_channel(
         &self,
         handle: i16,
@@ -287,10 +360,16 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()> {
-        let mut buffer = buffer.write();
+        let (_, mode) = average_only(
+            downsample,
+            enPS5000ARatioMode_PS5000A_RATIO_MODE_NONE,
+            enPS5000ARatioMode_PS5000A_RATIO_MODE_AVERAGE,
+        )?;
+        let mut buffer = buffer.as_i16("set_data_buffer")?.write();
 
         PicoStatus::from(unsafe {
             self.bindings.ps5000aSetDataBuffer(
@@ -299,7 +378,7 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
                 buffer.as_mut_ptr(),
                 buffer_len as i32,
                 0,
-                DownsampleMode::NONE.into(),
+                mode,
             )
         })
         .to_result((), "set_data_buffer")
@@ -312,7 +391,13 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig> {
+        let (ratio, mode) = average_only(
+            downsample,
+            enPS5000ARatioMode_PS5000A_RATIO_MODE_NONE,
+            enPS5000ARatioMode_PS5000A_RATIO_MODE_AVERAGE,
+        )?;
         let resolution = self.device_resolution(handle)?;
         check_channel_limit(&CHANNEL_LIMITS, resolution, enabled_channels as usize)?;
 
@@ -326,8 +411,8 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
                 0,
                 0,
                 (false).into(),
-                1,
-                DownsampleMode::NONE.into(),
+                ratio,
+                mode,
                 u32::try_from(buffer_len).unwrap_or(u32::MAX),
             )
         })
@@ -392,6 +477,17 @@ mod tests {
         assert!(ok(PicoResolution::DR_14BIT, 4));
         assert!(ok(PicoResolution::DR_12BIT, 4));
         assert!(ok(PicoResolution::DR_8BIT, 4));
+    }
+
+    #[test]
+    fn four_channel_units_need_the_adaptor_for_c_and_d() {
+        assert_eq!(
+            supply_channels(variant_channel_count("5444D")),
+            vec![PicoChannel::C, PicoChannel::D]
+        );
+        assert_eq!(supply_channels(variant_channel_count("5444DMSO")).len(), 2);
+        assert!(supply_channels(variant_channel_count("5244D")).is_empty());
+        assert!(supply_channels(None).is_empty());
     }
 
     #[test]

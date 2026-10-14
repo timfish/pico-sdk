@@ -1,17 +1,21 @@
 use super::{
+    buffer_pointer,
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, parse_enum_result, EnumerationResult, OscilloscopeDriverInternal,
+    get_version_string, parse_enum_result, rate_limits, EnumerationResult,
+    OscilloscopeDriverInternal, PicoStreamMode, SampleBuffer,
 };
 use parking_lot::RwLock;
 use pico_common::{
-    Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
-    PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, ToPicoStr,
+    Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
+    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution,
+    PicoResult, PicoStatus, PowerSource, RateLimit, SampleType, ToPicoStr,
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL,
     enPicoDataType_PICO_INT16_T, enPicoDeviceResolution, enPicoDeviceResolution_PICO_DR_8BIT,
-    enPicoRatioMode_PICO_RATIO_MODE_RAW, PSOSPALoader, PICO_POINTER, PICO_STREAMING_DATA_INFO,
-    PICO_STREAMING_DATA_TRIGGER_INFO, PICO_TEXT_FORMAT_JSON,
+    enPicoRatioMode_PICO_RATIO_MODE_RAW, enPicoTextFormat_PICO_JSON_DATA, PSOSPALoader,
+    PICO_POINTER, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
+    PICO_USB_POWER_DETAILS,
 };
 use std::{collections::HashMap, mem::MaybeUninit, sync::Arc};
 use tinyjson::JsonValue;
@@ -67,6 +71,55 @@ fn default_resolution(details: &JsonValue) -> Option<enPicoDeviceResolution> {
         .map(|r| *r as enPicoDeviceResolution)
 }
 
+/// The number of analog channels the variant has.
+fn analogue_channels(details: &JsonValue) -> Option<u8> {
+    type Object = HashMap<String, JsonValue>;
+    let details: &Object = details.get()?;
+    let count = details.get("NumberOfAnalogueChannels")?.get::<f64>()?;
+    Some(*count as u8)
+}
+
+/// Where a unit takes its power from, by what open reports of its USB-C
+/// ports (psospa guide psospa-3, 3.29.1 and 3.29.2): a USB-C supply on
+/// the power port, else the data port.
+fn power_from_details(details: &PICO_USB_POWER_DETAILS) -> Option<PowerSource> {
+    let power_port = details.powerPort_;
+    let data_port = details.dataPort_;
+    if power_port.valid_ != 0 && power_port.partnerConnected_ != 0 {
+        Some(PowerSource::External)
+    } else if data_port.valid_ != 0 {
+        Some(PowerSource::Usb)
+    } else {
+        None
+    }
+}
+
+/// The fastest rate with one channel on at each resolution the variant
+/// lists (`MaxSampleRateHz`). The JSON gives no rate for more channels.
+fn json_rate_limits(details: &JsonValue) -> Vec<RateLimit> {
+    type Object = HashMap<String, JsonValue>;
+    let listed = || -> Option<Vec<RateLimit>> {
+        let details: &Object = details.get()?;
+        let listed: &Vec<JsonValue> = details.get("VerticalResolutions")?.get()?;
+        Some(
+            listed
+                .iter()
+                .filter_map(|r| {
+                    let r: &Object = r.get()?;
+                    let value = *r.get("Resolution")?.get::<f64>()? as u32;
+                    let rate = *r.get("MaxSampleRateHz")?.get::<f64>()?;
+                    Some(RateLimit {
+                        resolution: Some(PicoResolution::from_driver_value(value)?),
+                        channels: 1,
+                        max_samples_per_second: rate,
+                    })
+                })
+                .collect(),
+        )
+    };
+    listed().unwrap_or_default()
+}
+
 /// Every resolution the variant lists, in the listed order.
 fn listed_resolutions(details: &JsonValue) -> Vec<enPicoDeviceResolution> {
     type Object = HashMap<String, JsonValue>;
@@ -96,6 +149,10 @@ pub struct PSOSPADriver {
     resolutions: RwLock<HashMap<i16, enPicoDeviceResolution>>,
     /// Parsed `psospaGetVariantDetails` output, by variant name.
     variant_details: RwLock<HashMap<String, Arc<JsonValue>>>,
+    /// The ratio mode and data type of each handle's buffers.
+    streams: RwLock<HashMap<i16, PicoStreamMode>>,
+    /// The power each handle reported at open.
+    power: RwLock<HashMap<i16, PowerSource>>,
 }
 
 impl std::fmt::Debug for PSOSPADriver {
@@ -116,6 +173,8 @@ impl PSOSPADriver {
             _dependencies: dependencies,
             resolutions: RwLock::new(HashMap::new()),
             variant_details: RwLock::new(HashMap::new()),
+            streams: RwLock::new(HashMap::new()),
+            power: RwLock::new(HashMap::new()),
         })
     }
 
@@ -142,7 +201,7 @@ impl PSOSPADriver {
                     variant_buf.len() as i16,
                     json_buf.as_mut_ptr(),
                     &mut json_buf_len,
-                    PICO_TEXT_FORMAT_JSON,
+                    enPicoTextFormat_PICO_JSON_DATA,
                 )
             });
             match status {
@@ -168,6 +227,16 @@ impl PSOSPADriver {
 }
 
 impl OscilloscopeDriverInternal for PSOSPADriver {
+    // SUM streaming is refused by the driver (RATIO_MODE_NOT_SUPPORTED
+    // on a 5464E, 2026-10-14), though the header lists the mode.
+    fn downsample_modes(&self) -> &'static [DownsampleKind] {
+        &[DownsampleKind::Average]
+    }
+
+    fn sample_types(&self) -> &'static [SampleType] {
+        &[SampleType::I8, SampleType::I16, SampleType::I32]
+    }
+
     fn get_driver(&self) -> Driver {
         Driver::PS3000A
     }
@@ -223,21 +292,38 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
 
         let mut serial = unit.serial.as_str().into_pico_i8_string();
         let mut handle = -1i16;
+        let mut details = MaybeUninit::<PICO_USB_POWER_DETAILS>::zeroed();
         let status = PicoStatus::from(unsafe {
             self.bindings.psospaOpenUnit(
                 &mut handle,
                 serial.as_mut_ptr(),
                 resolution,
-                std::ptr::null_mut(),
+                details.as_mut_ptr(),
             )
         });
+        // Zeroed, and the driver fills it on open, so it is always valid.
+        let details = unsafe { details.assume_init() };
 
         match status {
             PicoStatus::OK => {
                 self.resolutions.write().insert(handle, resolution);
+                if let Some(power) = power_from_details(&details) {
+                    self.power.write().insert(handle, power);
+                }
+                tracing::debug!(
+                    power = ?power_from_details(&details),
+                    data_port_mv = { details.dataPort_.busVoltagemV_ },
+                    power_port_mv = { details.powerPort_.busVoltagemV_ },
+                    "unit opened"
+                );
                 Ok(handle)
             }
-            x => Err(PicoError::from_status(x, "open_unit")),
+            x => {
+                if details.powerErrorLikely_ != 0 {
+                    tracing::warn!(status = ?x, "open failed, likely for lack of power");
+                }
+                Err(PicoError::from_status(x, "open_unit"))
+            }
         }
     }
 
@@ -263,7 +349,9 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn close(&self, handle: i16) -> PicoResult<()> {
+        self.streams.write().remove(&handle);
         self.resolutions.write().remove(&handle);
+        self.power.write().remove(&handle);
         PicoStatus::from(unsafe { self.bindings.psospaCloseUnit(handle) })
             .to_result((), "close_unit")
     }
@@ -315,8 +403,55 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
             .collect()
     }
 
+    // Every resolution allows every channel; only the fastest rate
+    // falls as channels go on (psospa-3, 2.7; 5000E and 3000E data
+    // sheets, "Maximum sampling rate").
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn get_rate_limits(&self, handle: i16) -> Vec<RateLimit> {
+        let Ok(variant) = self.get_unit_info(handle, PicoInfo::VARIANT_INFO) else {
+            return Vec::new();
+        };
+        let Ok(details) = self.variant_details(&variant) else {
+            return Vec::new();
+        };
+        let resolutions: Vec<PicoResolution> = listed_resolutions(&details)
+            .into_iter()
+            .filter_map(PicoResolution::from_driver_value)
+            .collect();
+        if self.bindings.psospaGetMinimumTimebaseStateless.is_err() {
+            return json_rate_limits(&details);
+        }
+        let channels = analogue_channels(&details).unwrap_or(0);
+        rate_limits(&resolutions, channels, |flags, resolution| {
+            let mut timebase = 0u32;
+            let mut interval = 0f64;
+            let status = PicoStatus::from(unsafe {
+                self.bindings.psospaGetMinimumTimebaseStateless(
+                    handle,
+                    flags,
+                    &mut timebase,
+                    &mut interval,
+                    resolution.to_driver_value(),
+                )
+            });
+            (status == PicoStatus::OK).then_some(interval)
+        })
+    }
+
+    fn get_power_source(&self, handle: i16) -> Option<PowerSource> {
+        self.power.read().get(&handle).copied()
+    }
+
     fn get_resolution(&self, handle: i16) -> Option<PicoResolution> {
-        PicoResolution::from_driver_value(self.resolution(handle))
+        let mut value = 0;
+        let status = PicoStatus::from(unsafe {
+            self.bindings.psospaGetDeviceResolution(handle, &mut value)
+        });
+        if status == PicoStatus::OK {
+            PicoResolution::from_driver_value(value)
+        } else {
+            PicoResolution::from_driver_value(self.resolution(handle))
+        }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -378,20 +513,22 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()> {
-        let mut buffer = buffer.write();
+        let stream = PicoStreamMode::new(downsample, buffer.sample_type())?;
+        self.streams.write().insert(handle, stream);
 
         PicoStatus::from(unsafe {
             self.bindings.psospaSetDataBuffer(
                 handle,
                 channel.into(),
-                buffer.as_mut_ptr() as PICO_POINTER,
-                buffer_len as i32,
-                enPicoDataType_PICO_INT16_T,
+                buffer_pointer(&buffer),
+                buffer_len as u64,
+                stream.data_type,
                 0,
-                enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                stream.mode,
                 enPicoAction_PICO_ADD,
             )
         })
@@ -405,7 +542,13 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
         _buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig> {
+        let sample_type = match downsample.map(|d| d.mode) {
+            Some(DownsampleKind::Sum) => SampleType::I32,
+            _ => SampleType::I16,
+        };
+        let stream = PicoStreamMode::new(downsample, sample_type)?;
         let status = PicoStatus::from(unsafe {
             self.bindings
                 .psospaSetDeviceResolution(handle, self.resolution(handle))
@@ -428,8 +571,8 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
                 0,
                 sample_config.samples_per_second() as u64,
                 (false).into(),
-                1,
-                enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                stream.ratio,
+                stream.mode,
             )
         })
         .to_result(
@@ -445,16 +588,22 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
+        let stream = self.streams.read().get(&handle).copied().ok_or_else(|| {
+            PicoError::from_status(
+                PicoStatus::NO_SAMPLES_AVAILABLE,
+                "get_latest_streaming_values",
+            )
+        })?;
         let mut info: Vec<PICO_STREAMING_DATA_INFO> = channels
             .iter()
             .map(|ch| PICO_STREAMING_DATA_INFO {
                 bufferIndex_: 0,
                 channel_: (*ch).into(),
-                mode_: enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                mode_: stream.mode,
                 noOfSamples_: 0,
                 overflow_: 0,
                 startIndex_: 0,
-                type_: enPicoDataType_PICO_INT16_T,
+                type_: stream.data_type,
             })
             .collect();
 
@@ -483,5 +632,124 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn stop(&self, handle: i16) -> PicoResult<()> {
         PicoStatus::from(unsafe { self.bindings.psospaStop(handle) }).to_result((), "stop")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pico_sys_dynamic::psospa::{enPicoDeviceResolution_PICO_DR_16BIT, PICO_USB_POWER_DELIVERY};
+
+    /// What psospaGetVariantDetails gave for the 5464E MSO (serial
+    /// 13474/0004) on 2026-10-14.
+    fn ps5464e_mso() -> JsonValue {
+        include_str!("fixtures/psospa-5464E+MSO.json")
+            .parse()
+            .unwrap()
+    }
+
+    #[test]
+    fn the_5464e_lists_8_and_16_bit_on_four_channels() {
+        let details = ps5464e_mso();
+        assert_eq!(
+            listed_resolutions(&details),
+            vec![
+                enPicoDeviceResolution_PICO_DR_8BIT,
+                enPicoDeviceResolution_PICO_DR_16BIT
+            ]
+        );
+        assert_eq!(
+            default_resolution(&details),
+            Some(enPicoDeviceResolution_PICO_DR_16BIT)
+        );
+        assert_eq!(analogue_channels(&details), Some(4));
+        assert_eq!(parse_device_json(&details).len(), 24);
+    }
+
+    /// The JSON gives each resolution's fastest rate with one channel
+    /// and no limit on channels.
+    #[test]
+    fn the_5464e_json_gives_one_channel_rates() {
+        let limits = json_rate_limits(&ps5464e_mso());
+        assert_eq!(
+            limits,
+            vec![
+                RateLimit {
+                    resolution: Some(PicoResolution::DR_8BIT),
+                    channels: 1,
+                    max_samples_per_second: 5e9,
+                },
+                RateLimit {
+                    resolution: Some(PicoResolution::DR_16BIT),
+                    channels: 1,
+                    max_samples_per_second: 2.5e9,
+                },
+            ]
+        );
+    }
+
+    /// The driver's shortest intervals on the 5464E MSO, 2026-10-14:
+    /// halved with each doubling of channels, as the data sheet lists.
+    #[test]
+    fn rate_limits_halve_as_channels_go_on() {
+        let intervals = |flags: u32, resolution: PicoResolution| {
+            let base = match resolution {
+                PicoResolution::DR_8BIT => 0.2e-9,
+                _ => 0.4e-9,
+            };
+            Some(match flags.count_ones() {
+                1 => base,
+                2 => base * 2.0,
+                _ => base * 4.0,
+            })
+        };
+        let limits = rate_limits(
+            &[PicoResolution::DR_8BIT, PicoResolution::DR_16BIT],
+            4,
+            intervals,
+        );
+        let rate = |r, n| {
+            limits
+                .iter()
+                .find(|l| l.resolution == Some(r) && l.channels == n)
+                .map(|l| l.max_samples_per_second.round())
+        };
+        assert_eq!(rate(PicoResolution::DR_8BIT, 1), Some(5e9));
+        assert_eq!(rate(PicoResolution::DR_8BIT, 2), Some(2.5e9));
+        assert_eq!(rate(PicoResolution::DR_8BIT, 4), Some(1.25e9));
+        assert_eq!(rate(PicoResolution::DR_16BIT, 3), Some(625e6));
+        assert_eq!(limits.len(), 8);
+    }
+
+    fn port(valid: u8, partner: u8) -> PICO_USB_POWER_DELIVERY {
+        PICO_USB_POWER_DELIVERY {
+            valid_: valid,
+            busVoltagemV_: 5000,
+            rpCurrentLimitmA_: 3000,
+            partnerConnected_: partner,
+            ccPolarity_: 0,
+            attachedDevice_: 0,
+            contractExists_: 0,
+            currentPdo_: 0,
+            currentRdo_: 0,
+        }
+    }
+
+    #[test]
+    fn power_follows_the_usb_c_ports() {
+        let details = |data, power| PICO_USB_POWER_DETAILS {
+            powerErrorLikely_: 0,
+            dataPort_: data,
+            powerPort_: power,
+        };
+        assert_eq!(
+            power_from_details(&details(port(1, 1), port(1, 1))),
+            Some(PowerSource::External)
+        );
+        assert_eq!(
+            power_from_details(&details(port(1, 1), port(0, 0))),
+            Some(PowerSource::Usb)
+        );
+        assert_eq!(power_from_details(&details(port(0, 0), port(0, 0))), None);
     }
 }

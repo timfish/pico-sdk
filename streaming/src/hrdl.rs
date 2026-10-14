@@ -58,7 +58,9 @@ pub struct HRDLStreamingEvent {
     pub over_range: Vec<HRDLChannel>,
 }
 
-impl IntoStreamingDevice<HRDLDevice, HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for HRDLDevice {
+impl IntoStreamingDevice<HRDLDevice, HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent>
+    for HRDLDevice
+{
     fn into_streaming_device(
         self,
     ) -> StreamingRunner<Self, HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> {
@@ -80,7 +82,11 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &HRDLInfo) -> Current<HRDLInfo, HRDLStreamState> {
+    fn ping(
+        &self,
+        info: &HRDLInfo,
+        _notices: &super::state::Notices,
+    ) -> Current<HRDLInfo, HRDLStreamState> {
         if self.driver.ping_unit(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
             Current::Closed
@@ -90,7 +96,12 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &HRDLInfo, config: &HRDLConfig) -> PicoResult<Current<HRDLInfo, HRDLStreamState>> {
+    fn start(
+        &self,
+        info: &HRDLInfo,
+        config: &HRDLConfig,
+        _notices: &super::state::Notices,
+    ) -> PicoResult<Current<HRDLInfo, HRDLStreamState>> {
         let min_interval_ms = config.min_interval_ms();
         if config.sample_interval_ms < min_interval_ms {
             warn!(
@@ -103,7 +114,8 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
             ));
         }
 
-        self.driver.set_mains_rejection(*info.handle, config.mains_rejection)?;
+        self.driver
+            .set_mains_rejection(*info.handle, config.mains_rejection)?;
 
         for (channel, range, single_ended) in config.enabled_channels() {
             self.driver
@@ -116,12 +128,19 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
             channels.insert(channel, HRDLChannelScale { range, max_count });
         }
 
-        self.driver
-            .set_interval(*info.handle, config.sample_interval_ms, config.conversion_time)?;
+        self.driver.set_interval(
+            *info.handle,
+            config.sample_interval_ms,
+            config.conversion_time,
+        )?;
 
         self.driver.run(*info.handle, RUN_BUFFER_SAMPLES, true)?;
 
-        debug!(interval_ms = config.sample_interval_ms, ?channels, "HRDL stream started");
+        debug!(
+            interval_ms = config.sample_interval_ms,
+            ?channels,
+            "HRDL stream started"
+        );
 
         Ok(Current::Streaming(
             info.clone(),
@@ -139,8 +158,12 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
         config: &HRDLConfig,
         state: &HRDLStreamState,
         events: &EventEmitter<HRDLStreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<HRDLInfo, HRDLStreamState> {
-        let channels: Vec<HRDLChannel> = config.enabled_channels().map(|(channel, _, _)| channel).collect();
+        let channels: Vec<HRDLChannel> = config
+            .enabled_channels()
+            .map(|(channel, _, _)| channel)
+            .collect();
 
         if channels.is_empty() {
             sleep_ms(200);
@@ -160,7 +183,10 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
 
             for set in values.chunks_exact(channels.len()) {
                 for (i, &channel) in channels.iter().enumerate() {
-                    per_channel.get_mut(&channel).expect("channel just inserted").push(set[i]);
+                    per_channel
+                        .get_mut(&channel)
+                        .expect("channel just inserted")
+                        .push(set[i]);
                 }
             }
 

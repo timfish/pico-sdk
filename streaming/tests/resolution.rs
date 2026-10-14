@@ -2,18 +2,18 @@
 //! a ps5000a (5000D) or ps6000a (6000E) unit.
 
 use mockall::{mock, Sequence};
-use parking_lot::RwLock;
 use pico_common::{
-    Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel, PicoCoupling,
-    PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
+    Downsample, Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
+    PicoCoupling, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
 };
 use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
 use pico_driver::{
-    oscilloscope::{EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal},
+    oscilloscope::{
+        EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal, SampleBuffer,
+    },
     DriverLoadError,
 };
 use pico_streaming::IntoStreamingDevice;
-use std::sync::Arc;
 use PicoResolution::*;
 
 mock! {
@@ -45,15 +45,17 @@ mock! {
             &self,
             handle: i16,
             channel: PicoChannel,
-            buffer: Arc<RwLock<Vec<i16>>>,
+            buffer: SampleBuffer,
             buffer_len: usize,
+            downsample: Option<Downsample>,
         ) -> PicoResult<()>;
         fn start_streaming(
             &self,
             handle: i16,
             sample_config: &OscilloscopeSampleConfig,
             enabled_channels: u8,
-            buffer_len: usize
+            buffer_len: usize,
+            downsample: Option<Downsample>,
         ) -> PicoResult<OscilloscopeSampleConfig>;
         fn get_latest_streaming_values<'a>(
             &self,
@@ -203,7 +205,7 @@ fn no_resolution_streams_at_the_highest_the_channels_allow() {
             .in_sequence(&mut seq)
             .return_const(Ok(()));
         m.expect_start_streaming()
-            .withf(|_, _, on, _| *on == 2)
+            .withf(|_, _, on, _, _| *on == 2)
             .times(1)
             .in_sequence(&mut seq)
             .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));

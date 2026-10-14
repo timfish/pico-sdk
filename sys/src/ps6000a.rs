@@ -1,115 +1,8 @@
 pub const DIGITAL_PORT_SERIAL_LENGTH: u32 = 10;
 pub const DIGITAL_PORT_CALIBRATION_DATE_LENGTH: u32 = 8;
-
 pub type PICO_POINTER = *mut ::std::os::raw::c_void;
 pub type PICO_INFO = u32;
 pub type PICO_STATUS = u32;
-pub const enPicoStringValue_PICO_SV_MEMORY: enPicoStringValue = 0;
-pub const enPicoStringValue_PICO_SV_MEMORY_NO_OF_SEGMENTS: enPicoStringValue = 1;
-pub const enPicoStringValue_PICO_SV_MEMORY_MAX_SAMPLES: enPicoStringValue = 2;
-pub const enPicoStringValue_PICO_SV_NO_OF_CHANNELS: enPicoStringValue = 3;
-pub const enPicoStringValue_PICO_SV_ARRAY_OF_CHANNELS: enPicoStringValue = 4;
-pub const enPicoStringValue_PICO_SV_CHANNEL: enPicoStringValue = 5;
-pub const enPicoStringValue_PICO_SV_CHANNEL_NAME: enPicoStringValue = 6;
-pub const enPicoStringValue_PICO_SV_CHANNEL_RANGE: enPicoStringValue = 7;
-pub const enPicoStringValue_PICO_SV_CHANNEL_COUPLING: enPicoStringValue = 8;
-pub const enPicoStringValue_PICO_SV_CHANNEL_ENABLED: enPicoStringValue = 9;
-pub const enPicoStringValue_PICO_SV_CHANNEL_ANALOGUE_OFFSET: enPicoStringValue = 10;
-pub const enPicoStringValue_PICO_SV_CHANNEL_FILTER: enPicoStringValue = 11;
-pub const enPicoStringValue_PICO_SV_TRIGGER: enPicoStringValue = 12;
-pub const enPicoStringValue_PICO_SV_TRIGGER_AUXIO_OUTPUT_ENABLED: enPicoStringValue = 13;
-pub const enPicoStringValue_PICO_SV_TRIGGER_AUTO_TRIGGER_MICROSECONDS: enPicoStringValue = 14;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES: enPicoStringValue = 15;
-pub const enPicoStringValue_PICO_SV_NO_OF_TRIGGER_PROPERTIES: enPicoStringValue = 16;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_CHANNEL: enPicoStringValue = 17;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_UPPER: enPicoStringValue = 18;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_UPPER_HYSTERESIS:
-    enPicoStringValue = 19;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_LOWER: enPicoStringValue = 20;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_LOWER_HYSTERESIS:
-    enPicoStringValue = 21;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_MODE: enPicoStringValue = 22;
-pub const enPicoStringValue_PICO_SV_TRIGGER_ARRAY_OF_BLOCK_CONDITIONS: enPicoStringValue = 23;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_BLOCK_CONDITIONS: enPicoStringValue = 24;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITIONS: enPicoStringValue = 25;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_CONDITIONS: enPicoStringValue = 26;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITION_SOURCE: enPicoStringValue = 27;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITION_STATE: enPicoStringValue = 28;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION: enPicoStringValue = 29;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_DIRECTIONS: enPicoStringValue = 30;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION_CHANNEL: enPicoStringValue = 31;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION_DIRECTION: enPicoStringValue = 32;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DELAY: enPicoStringValue = 33;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DELAY_MS: enPicoStringValue = 34;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER: enPicoStringValue = 35;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_ENABLED: enPicoStringValue = 36;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_CHANNEL: enPicoStringValue = 37;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_RANGE: enPicoStringValue = 38;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_TRESHOLDMAJOR: enPicoStringValue = 39;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_TRESHOLDMINOR: enPicoStringValue = 40;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES: enPicoStringValue = 41;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_DIRECTION: enPicoStringValue = 42;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_LOWER: enPicoStringValue = 43;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_UPPER: enPicoStringValue = 44;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_TYPE: enPicoStringValue = 45;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_ARRAY_OF_BLOCK_CONDITIONS: enPicoStringValue = 46;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_NO_OF_BLOCK_CONDITIONS: enPicoStringValue = 47;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS: enPicoStringValue = 48;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_NO_OF_CONDITIONS: enPicoStringValue = 49;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS_SOURCE: enPicoStringValue = 50;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS_STATE: enPicoStringValue = 51;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES: enPicoStringValue = 52;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_PRE_TRIGGER_SAMPLES: enPicoStringValue = 53;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_POST_TRIGGER_SAMPLES: enPicoStringValue = 54;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_TIMEBASE: enPicoStringValue = 55;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_NO_OF_CAPTURES: enPicoStringValue = 56;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_RESOLUTION: enPicoStringValue = 57;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED: enPicoStringValue = 58;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_DOWN_SAMPLE_RATIO:
-    enPicoStringValue = 59;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_DOWN_SAMPLE_RATIO_MODE:
-    enPicoStringValue = 60;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_REQUERSTED_NO_OF_SAMPLES:
-    enPicoStringValue = 61;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_SEGMENT_INDEX_FROM:
-    enPicoStringValue = 62;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_SEGMENT_INDEX_TO:
-    enPicoStringValue = 63;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR: enPicoStringValue = 64;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN: enPicoStringValue = 65;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_WAVE_TYPE: enPicoStringValue = 66;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_START_FREQUENCY: enPicoStringValue =
-    67;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_STOP_FREQUENCY: enPicoStringValue =
-    68;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_INCREMENT: enPicoStringValue = 69;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_DWELL_TIME: enPicoStringValue = 70;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG: enPicoStringValue = 71;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_START_DELTA_PHASE: enPicoStringValue = 72;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_STOP_DELTA_PHASE: enPicoStringValue = 73;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_DELTA_PHASE_INCREMENT: enPicoStringValue =
-    74;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_DWELL_COUNT: enPicoStringValue = 75;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_INDEX_MODE: enPicoStringValue = 76;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_WAVEFORM_SIZE: enPicoStringValue = 77;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_ARRAY_OF_AWG_WAVEFORM_VALUES:
-    enPicoStringValue = 78;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_OFFSET_VOLTAGE: enPicoStringValue = 79;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_PK_TO_PK: enPicoStringValue = 80;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_OPERATION: enPicoStringValue = 81;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SHOTS: enPicoStringValue = 82;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SWEEPS: enPicoStringValue = 83;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SWEEP_TYPE: enPicoStringValue = 84;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_TRIGGER_TYPE: enPicoStringValue = 85;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_TRIGGER_SOURCE: enPicoStringValue = 86;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_EXT_IN_THRESHOLD: enPicoStringValue = 87;
-pub const enPicoStringValue_PICO_SV_ETS: enPicoStringValue = 88;
-pub const enPicoStringValue_PICO_SV_ETS_STATE: enPicoStringValue = 89;
-pub const enPicoStringValue_PICO_SV_ETS_CYCLE: enPicoStringValue = 90;
-pub const enPicoStringValue_PICO_SV_ETS_INTERLEAVE: enPicoStringValue = 91;
-pub const enPicoStringValue_PICO_SV_ETS_SAMPLE_TIME_PICOSECONDS: enPicoStringValue = 92;
-pub type enPicoStringValue = ::std::os::raw::c_uint;
-pub use self::enPicoStringValue as PICO_STRING_VALUE;
 pub const enPicoRatioMode_PICO_RATIO_MODE_AGGREGATE: enPicoRatioMode = 1;
 pub const enPicoRatioMode_PICO_RATIO_MODE_DECIMATE: enPicoRatioMode = 2;
 pub const enPicoRatioMode_PICO_RATIO_MODE_AVERAGE: enPicoRatioMode = 4;
@@ -181,6 +74,7 @@ pub const enPicoBandwidthLimiterFlags_PICO_BW_20KHZ_FLAG: enPicoBandwidthLimiter
 pub const enPicoBandwidthLimiterFlags_PICO_BW_100KHZ_FLAG: enPicoBandwidthLimiterFlags = 4;
 pub const enPicoBandwidthLimiterFlags_PICO_BW_1MHZ_FLAG: enPicoBandwidthLimiterFlags = 8;
 pub const enPicoBandwidthLimiterFlags_PICO_BW_20MHZ_FLAG: enPicoBandwidthLimiterFlags = 16;
+pub const enPicoBandwidthLimiterFlags_PICO_BW_200MHZ_FLAG: enPicoBandwidthLimiterFlags = 32;
 pub type enPicoBandwidthLimiterFlags = ::std::os::raw::c_uint;
 pub use self::enPicoBandwidthLimiterFlags as PICO_BANDWIDTH_LIMITER_FLAGS;
 pub const enPicoBandwidthLimiter_PICO_BW_FULL: enPicoBandwidthLimiter = 0;
@@ -190,8 +84,12 @@ pub const enPicoBandwidthLimiter_PICO_BW_1MHZ: enPicoBandwidthLimiter = 1000000;
 pub const enPicoBandwidthLimiter_PICO_BW_20MHZ: enPicoBandwidthLimiter = 20000000;
 pub const enPicoBandwidthLimiter_PICO_BW_25MHZ: enPicoBandwidthLimiter = 25000000;
 pub const enPicoBandwidthLimiter_PICO_BW_50MHZ: enPicoBandwidthLimiter = 50000000;
+pub const enPicoBandwidthLimiter_PICO_BW_60MHZ: enPicoBandwidthLimiter = 60000000;
+pub const enPicoBandwidthLimiter_PICO_BW_100MHZ: enPicoBandwidthLimiter = 100000000;
 pub const enPicoBandwidthLimiter_PICO_BW_200MHZ: enPicoBandwidthLimiter = 200000000;
 pub const enPicoBandwidthLimiter_PICO_BW_250MHZ: enPicoBandwidthLimiter = 250000000;
+pub const enPicoBandwidthLimiter_PICO_BW_300MHZ: enPicoBandwidthLimiter = 300000000;
+pub const enPicoBandwidthLimiter_PICO_BW_350MHZ: enPicoBandwidthLimiter = 350000000;
 pub const enPicoBandwidthLimiter_PICO_BW_500MHZ: enPicoBandwidthLimiter = 500000000;
 pub type enPicoBandwidthLimiter = ::std::os::raw::c_uint;
 pub use self::enPicoBandwidthLimiter as PICO_BANDWIDTH_LIMITER;
@@ -271,8 +169,6 @@ pub const enPicoThresholdDirection_PICO_EXIT: enPicoThresholdDirection = 3;
 pub const enPicoThresholdDirection_PICO_ENTER_OR_EXIT: enPicoThresholdDirection = 4;
 pub const enPicoThresholdDirection_PICO_POSITIVE_RUNT: enPicoThresholdDirection = 9;
 pub const enPicoThresholdDirection_PICO_NEGATIVE_RUNT: enPicoThresholdDirection = 10;
-pub const enPicoThresholdDirection_PICO_LOGIC_LOWER: enPicoThresholdDirection = 1000;
-pub const enPicoThresholdDirection_PICO_LOGIC_UPPER: enPicoThresholdDirection = 1001;
 pub const enPicoThresholdDirection_PICO_NONE: enPicoThresholdDirection = 2;
 pub type enPicoThresholdDirection = ::std::os::raw::c_uint;
 pub use self::enPicoThresholdDirection as PICO_THRESHOLD_DIRECTION;
@@ -308,6 +204,7 @@ pub const enPicoDeviceResolution_PICO_DR_14BIT: enPicoDeviceResolution = 2;
 pub const enPicoDeviceResolution_PICO_DR_15BIT: enPicoDeviceResolution = 3;
 pub const enPicoDeviceResolution_PICO_DR_16BIT: enPicoDeviceResolution = 4;
 pub const enPicoDeviceResolution_PICO_DR_10BIT: enPicoDeviceResolution = 10;
+pub const enPicoDeviceResolution_PICO_DR_10BIT_TURBO: enPicoDeviceResolution = 26;
 pub type enPicoDeviceResolution = ::std::os::raw::c_uint;
 pub use self::enPicoDeviceResolution as PICO_DEVICE_RESOLUTION;
 pub const enPicoReadSelection_PICO_READSELECTION_NONE: enPicoReadSelection = 0;
@@ -360,6 +257,54 @@ pub const enPicoDigitalPort_PICO_DIGITAL_PORT_MSO_POD: enPicoDigitalPort = 1000;
 pub const enPicoDigitalPort_PICO_DIGITAL_PORT_UNKNOWN_DEVICE: enPicoDigitalPort = -2;
 pub type enPicoDigitalPort = ::std::os::raw::c_int;
 pub use self::enPicoDigitalPort as PICO_DIGITAL_PORT;
+pub const enPicoUsbPowerDeliveryDeviceType_Nothing: enPicoUsbPowerDeliveryDeviceType = 0;
+pub const enPicoUsbPowerDeliveryDeviceType_Source: enPicoUsbPowerDeliveryDeviceType = 2;
+pub const enPicoUsbPowerDeliveryDeviceType_Debug: enPicoUsbPowerDeliveryDeviceType = 3;
+pub type enPicoUsbPowerDeliveryDeviceType = ::std::os::raw::c_uint;
+pub use self::enPicoUsbPowerDeliveryDeviceType as PICO_USB_POWER_DELIVERY_DEVICE_TYPE;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_A: enPicoLedSelect = 0;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_B: enPicoLedSelect = 1;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_C: enPicoLedSelect = 2;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_D: enPicoLedSelect = 3;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_E: enPicoLedSelect = 4;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_F: enPicoLedSelect = 5;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_G: enPicoLedSelect = 6;
+pub const enPicoLedSelect_PICO_LED_CHANNEL_H: enPicoLedSelect = 7;
+pub const enPicoLedSelect_PICO_LED_AWG: enPicoLedSelect = 65536;
+pub const enPicoLedSelect_PICO_LED_AUX: enPicoLedSelect = 131072;
+pub type enPicoLedSelect = ::std::os::raw::c_uint;
+pub use self::enPicoLedSelect as PICO_LED_SELECT;
+pub const enPicoLedState_PICO_LED_AUTO: enPicoLedState = -1;
+pub const enPicoLedState_PICO_LED_OFF: enPicoLedState = 0;
+pub const enPicoLedState_PICO_LED_ON: enPicoLedState = 1;
+pub type enPicoLedState = ::std::os::raw::c_int;
+pub use self::enPicoLedState as PICO_LED_STATE;
+pub const enPicoTextFormat_PICO_JSON_DATA: enPicoTextFormat = 0;
+pub const enPicoTextFormat_PICO_JSON_SCHEMA: enPicoTextFormat = 1;
+pub type enPicoTextFormat = ::std::os::raw::c_uint;
+pub use self::enPicoTextFormat as PICO_TEXT_FORMAT;
+pub const enPicoAuxIoMode_PICO_AUXIO_INPUT: enPicoAuxIoMode = 0;
+pub const enPicoAuxIoMode_PICO_AUXIO_HIGH_OUT: enPicoAuxIoMode = 1;
+pub const enPicoAuxIoMode_PICO_AUXIO_LOW_OUT: enPicoAuxIoMode = 2;
+pub const enPicoAuxIoMode_PICO_AUXIO_TRIGGER_OUT: enPicoAuxIoMode = 3;
+pub type enPicoAuxIoMode = ::std::os::raw::c_uint;
+pub use self::enPicoAuxIoMode as PICO_AUXIO_MODE;
+pub const enPicoAutoTriggerStatus_PICO_TRIGGER_NOT_SET: enPicoAutoTriggerStatus = 0;
+pub const enPicoAutoTriggerStatus_PICO_REAL_TRIGGER: enPicoAutoTriggerStatus = 1;
+pub const enPicoAutoTriggerStatus_PICO_AUTO_TRIGGER: enPicoAutoTriggerStatus = 2;
+pub type enPicoAutoTriggerStatus = ::std::os::raw::c_uint;
+pub use self::enPicoAutoTriggerStatus as PICO_AUTO_TRIGGER_STATUS;
+pub const enPicoScopeState_IDLE: enPicoScopeState = 0;
+pub const enPicoScopeState_PRE_TRIGGER: enPicoScopeState = 1;
+pub const enPicoScopeState_WAITING_FOR_TRIGGER: enPicoScopeState = 2;
+pub const enPicoScopeState_CAPTURING: enPicoScopeState = 3;
+pub const enPicoScopeState_READING: enPicoScopeState = 4;
+pub type enPicoScopeState = ::std::os::raw::c_uint;
+pub use self::enPicoScopeState as PICO_SCOPE_STATE;
+pub const enCalibrationType_PICO_CAL_HOUSE: enCalibrationType = 0;
+pub const enCalibrationType_PICO_USER_CAL: enCalibrationType = 1;
+pub type enCalibrationType = ::std::os::raw::c_uint;
+pub use self::enCalibrationType as PICO_CAL_TYPE;
 pub type PicoConnectProbe = i32;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_NONE: enPicoConnectProbe = 0;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_D9_BNC: enPicoConnectProbe = 4000;
@@ -384,7 +329,13 @@ pub const enPicoConnectProbe_PICO_BNC_PLUS_RESISTANCE_LEAD: enPicoConnectProbe =
 pub const enPicoConnectProbe_PICO_BNC_PLUS_60A_CURRENT_CLAMP: enPicoConnectProbe = 5010;
 pub const enPicoConnectProbe_PICO_BNC_PLUS_OPTICAL_SENSOR: enPicoConnectProbe = 5011;
 pub const enPicoConnectProbe_PICO_BNC_PLUS_60A_CURRENT_CLAMP_V2: enPicoConnectProbe = 5012;
+pub const enPicoConnectProbe_PICO_BNC_PLUS_HIGH_VOLTAGE_DIFFERENTIAL: enPicoConnectProbe = 5013;
+pub const enPicoConnectProbe_PICO_BNC_PLUS_TRI_AXIAL_ACCELEROMETER: enPicoConnectProbe = 5014;
+pub const enPicoConnectProbe_PICO_BNC_PLUS_MICROPHONE: enPicoConnectProbe = 5015;
 pub const enPicoConnectProbe_PICO_PASSIVE_PROBE_X10: enPicoConnectProbe = 6000;
+pub const enPicoConnectProbe_PICO_ACTIVE_X10_750MHZ: enPicoConnectProbe = 6001;
+pub const enPicoConnectProbe_PICO_ACTIVE_X10_1_3GHZ: enPicoConnectProbe = 6002;
+pub const enPicoConnectProbe_PICO_PASSIVE_PROBE_X10_50OHM: enPicoConnectProbe = 6003;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_INTELLIGENT: enPicoConnectProbe = -3;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_UNKNOWN_PROBE: enPicoConnectProbe = -2;
 pub const enPicoConnectProbe_PICO_CONNECT_PROBE_FAULT_PROBE: enPicoConnectProbe = -1;
@@ -539,6 +490,7 @@ pub const enPicoConnectProbeRange_PICO_HT_NEG5_TO_50KV_INVERTED: enPicoConnectPr
 pub const enPicoConnectProbeRange_PICO_HT_NEG5_TO_100KV_INVERTED: enPicoConnectProbeRange = 8959;
 pub const enPicoConnectProbeRange_PICO_MAX_HT_RANGES: enPicoConnectProbeRange = 10;
 pub const enPicoConnectProbeRange_PICO_TEMPERATURE_NEG50_TO_150DEGC: enPicoConnectProbeRange = 9000;
+pub const enPicoConnectProbeRange_PICO_TEMPERATURE_NEG4_TO_125DEGC: enPicoConnectProbeRange = 9001;
 pub const enPicoConnectProbeRange_PICO_PRESSURE_SENSOR_NEG100000_TO_150000_PASCALS:
     enPicoConnectProbeRange = 9100;
 pub const enPicoConnectProbeRange_PICO_PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS:
@@ -572,8 +524,59 @@ pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_10A: enPicoConnectPr
 pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_20A: enPicoConnectProbeRange = 10605;
 pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_50A: enPicoConnectProbeRange = 10606;
 pub const enPicoConnectProbeRange_PICO_CURRENT_CLAMP_60A_V2_60A: enPicoConnectProbeRange = 10607;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_5V: enPicoConnectProbeRange =
+    10650;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_10V: enPicoConnectProbeRange =
+    10651;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_20V: enPicoConnectProbeRange =
+    10652;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_50V: enPicoConnectProbeRange =
+    10653;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_100V: enPicoConnectProbeRange =
+    10654;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_200V: enPicoConnectProbeRange =
+    10655;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_500V: enPicoConnectProbeRange =
+    10656;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_1000V: enPicoConnectProbeRange =
+    10657;
+pub const enPicoConnectProbeRange_PICO_HIGH_VOLTAGE_DIFFERENTIAL_1400V: enPicoConnectProbeRange =
+    10658;
+pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_100MV: enPicoConnectProbeRange = 10700;
+pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_200MV: enPicoConnectProbeRange = 10701;
+pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_500MV: enPicoConnectProbeRange = 10702;
+pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_1V: enPicoConnectProbeRange = 10703;
+pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_2V: enPicoConnectProbeRange = 10704;
+pub const enPicoConnectProbeRange_PICO_X10_ACTIVE_PROBE_5V: enPicoConnectProbeRange = 10705;
+pub const enPicoConnectProbeRange_PICO_TRIAXIAL_ACCELEROMETER_5G: enPicoConnectProbeRange = 10750;
+pub const enPicoConnectProbeRange_PICO_TRIAXIAL_ACCELEROMETER_9G: enPicoConnectProbeRange = 10751;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_150MG: enPicoConnectProbeRange =
+    10752;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_300MG: enPicoConnectProbeRange =
+    10753;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_600MG: enPicoConnectProbeRange =
+    10754;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_1500MG: enPicoConnectProbeRange =
+    10755;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_3G: enPicoConnectProbeRange = 10756;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_6G: enPicoConnectProbeRange = 10757;
+pub const enPicoConnectProbeRange_PICO_SINGLEAXIS_ACCELEROMETER_9G: enPicoConnectProbeRange = 10758;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_800_MILLI_PASCAL: enPicoConnectProbeRange = 10800;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_1600_MILLI_PASCAL: enPicoConnectProbeRange =
+    10801;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_3200_MILLI_PASCAL: enPicoConnectProbeRange =
+    10802;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_8000_MILLI_PASCAL: enPicoConnectProbeRange =
+    10803;
+pub const enPicoConnectProbeRange_PICO_MICROPHONE_16000_MILLI_PASCAL: enPicoConnectProbeRange =
+    10804;
 pub type enPicoConnectProbeRange = ::std::os::raw::c_uint;
 pub use self::enPicoConnectProbeRange as PICO_CONNECT_PROBE_RANGE;
+pub const enPicoProbeRangeInfo_PICO_PROBE_NONE_NV: enPicoProbeRangeInfo = 0;
+pub const enPicoProbeRangeInfo_PICO_X1_PROBE_NV: enPicoProbeRangeInfo = 1;
+pub const enPicoProbeRangeInfo_PICO_X10_PROBE_NV: enPicoProbeRangeInfo = 10;
+pub type enPicoProbeRangeInfo = ::std::os::raw::c_uint;
+pub use self::enPicoProbeRangeInfo as PICO_PROBE_RANGE_INFO;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
 pub struct tPicoTriggerInfo {
@@ -585,7 +588,6 @@ pub struct tPicoTriggerInfo {
     pub missedTriggers: u64,
     pub timeStampCounter: u64,
 }
-
 pub type PICO_TRIGGER_INFO = tPicoTriggerInfo;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -596,7 +598,6 @@ pub struct tPicoTriggerChannelProperties {
     pub thresholdLowerHysteresis: u16,
     pub channel: PICO_CHANNEL,
 }
-
 pub type PICO_TRIGGER_CHANNEL_PROPERTIES = tPicoTriggerChannelProperties;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -604,7 +605,6 @@ pub struct tPicoCondition {
     pub source: PICO_CHANNEL,
     pub condition: PICO_TRIGGER_STATE,
 }
-
 pub type PICO_CONDITION = tPicoCondition;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -635,7 +635,6 @@ pub struct tPicoUserProbeInteractions {
     pub filterCurrent_: PICO_BANDWIDTH_LIMITER_FLAGS,
     pub defaultFilter_: PICO_BANDWIDTH_LIMITER,
 }
-
 pub type PICO_USER_PROBE_INTERACTIONS = tPicoUserProbeInteractions;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -669,7 +668,6 @@ pub struct tPicoStreamingDataTriggerInfo {
     pub triggered_: i16,
     pub autoStop_: i16,
 }
-
 pub type PICO_STREAMING_DATA_TRIGGER_INFO = tPicoStreamingDataTriggerInfo;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -679,8 +677,18 @@ pub struct tPicoScalingFactors {
     pub offset: i16,
     pub scalingFactor: f64,
 }
-
 pub type PICO_SCALING_FACTORS_VALUES = tPicoScalingFactors;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoScalingFactorsForRangeTypes {
+    pub channel: PICO_CHANNEL,
+    pub rangeMin: i64,
+    pub rangeMax: i64,
+    pub rangeType: PICO_PROBE_RANGE_INFO,
+    pub offset: i16,
+    pub scalingFactor: f64,
+}
+pub type PICO_SCALING_FACTORS_FOR_RANGE_TYPES_VALUES = tPicoScalingFactorsForRangeTypes;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
 pub struct tProbeApp {
@@ -688,7 +696,6 @@ pub struct tProbeApp {
     pub appMajorVersion_: i32,
     pub appMinorVersion_: i32,
 }
-
 pub type PROBE_APP = tProbeApp;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -696,7 +703,6 @@ pub struct tDigitalChannelDirections {
     pub channel: PICO_PORT_DIGITAL_CHANNEL,
     pub direction: PICO_DIGITAL_DIRECTION,
 }
-
 pub type PICO_DIGITAL_CHANNEL_DIRECTIONS = tDigitalChannelDirections;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -708,7 +714,6 @@ pub struct tPicoDigitalPortInteractions {
     pub serial_: [i8; 10usize],
     pub calibrationDate_: [i8; 8usize],
 }
-
 pub type PICO_DIGITAL_PORT_INTERACTIONS = tPicoDigitalPortInteractions;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -716,12 +721,48 @@ pub struct tPicoChannelOvervoltageTripped {
     pub channel_: PICO_CHANNEL,
     pub tripped_: u8,
 }
-
 pub type PICO_CHANNEL_OVERVOLTAGE_TRIPPED = tPicoChannelOvervoltageTripped;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoUsbPowerDelivery {
+    pub valid_: u8,
+    pub busVoltagemV_: u32,
+    pub rpCurrentLimitmA_: u32,
+    pub partnerConnected_: u8,
+    pub ccPolarity_: u8,
+    pub attachedDevice_: PICO_USB_POWER_DELIVERY_DEVICE_TYPE,
+    pub contractExists_: u8,
+    pub currentPdo_: u32,
+    pub currentRdo_: u32,
+}
+pub type PICO_USB_POWER_DELIVERY = tPicoUsbPowerDelivery;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoUsbPowerDetails {
+    pub powerErrorLikely_: u8,
+    pub dataPort_: PICO_USB_POWER_DELIVERY,
+    pub powerPort_: PICO_USB_POWER_DELIVERY,
+}
+pub type PICO_USB_POWER_DETAILS = tPicoUsbPowerDetails;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoLedColourProperties {
+    pub led_: PICO_LED_SELECT,
+    pub hue_: u16,
+    pub saturation_: u8,
+}
+pub type PICO_LED_COLOUR_PROPERTIES = tPicoLedColourProperties;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoLedStateProperties {
+    pub led_: PICO_LED_SELECT,
+    pub state_: PICO_LED_STATE,
+}
+pub type PICO_LED_STATE_PROPERTIES = tPicoLedStateProperties;
 pub type PicoUpdateFirmwareProgress =
-    ::std::option::Option<extern "C" fn(handle: i16, progress: u16)>;
+    ::std::option::Option<unsafe extern "C" fn(handle: i16, progress: u16)>;
 pub type PicoProbeInteractions = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         status: PICO_STATUS,
         probes: *mut PICO_USER_PROBE_INTERACTIONS,
@@ -729,7 +770,7 @@ pub type PicoProbeInteractions = ::std::option::Option<
     ),
 >;
 pub type PicoDataReadyUsingReads = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         read: PICO_READ_SELECTION,
         status: PICO_STATUS,
@@ -739,12 +780,12 @@ pub type PicoDataReadyUsingReads = ::std::option::Option<
     ),
 >;
 pub type PicoExternalReferenceInteractions = ::std::option::Option<
-    extern "C" fn(handle: i16, status: PICO_STATUS, reference: PICO_CLOCK_REFERENCE),
+    unsafe extern "C" fn(handle: i16, status: PICO_STATUS, reference: PICO_CLOCK_REFERENCE),
 >;
 pub type PicoAWGOverrangeInteractions =
-    ::std::option::Option<extern "C" fn(handle: i16, status: PICO_STATUS)>;
+    ::std::option::Option<unsafe extern "C" fn(handle: i16, status: PICO_STATUS)>;
 pub type PicoTemperatureSensorInteractions = ::std::option::Option<
-    extern "C" fn(handle: i16, temperatureStatus: PICO_TEMPERATURE_REFERENCE),
+    unsafe extern "C" fn(handle: i16, temperatureStatus: PICO_TEMPERATURE_REFERENCE),
 >;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -754,26 +795,21 @@ pub struct tPicoVersion {
     pub revision_: i16,
     pub build_: i16,
 }
-
 pub type PICO_VERSION = tPicoVersion;
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+pub struct tPicoFirmwareInfo {
+    pub firmwareType: PICO_INFO,
+    pub currentVersion: PICO_VERSION,
+    pub updateVersion: PICO_VERSION,
+    pub updateRequired: u16,
+}
+pub type PICO_FIRMWARE_INFO = tPicoFirmwareInfo;
 pub type ps6000aBlockReady = ::std::option::Option<
-    extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: PICO_POINTER),
->;
-pub type ps6000aStreamingReady = ::std::option::Option<
-    extern "C" fn(
-        handle: i16,
-        noOfSamples: i64,
-        bufferIndex: u64,
-        startIndex: u32,
-        overflow: i16,
-        triggerAt: u32,
-        triggered: i16,
-        autoStop: i16,
-        pParameter: PICO_POINTER,
-    ),
+    unsafe extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: PICO_POINTER),
 >;
 pub type ps6000aDataReady = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         status: PICO_STATUS,
         noOfSamples: u64,
@@ -782,18 +818,15 @@ pub type ps6000aDataReady = ::std::option::Option<
     ),
 >;
 pub type ps6000aProbeInteractions = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         handle: i16,
         status: PICO_STATUS,
         probes: *mut PICO_USER_PROBE_INTERACTIONS,
         nProbes: u32,
     ),
 >;
-
-extern crate libloading;
 pub struct PS6000ALoader {
     __library: ::libloading::Library,
-    pub ps6000aApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps6000aOpenUnit: Result<
         unsafe extern "C" fn(
             handle: *mut i16,
@@ -828,10 +861,27 @@ pub struct PS6000ALoader {
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
+    pub ps6000aGetAccessoryInfo: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            channel: PICO_CHANNEL,
+            string: *mut i8,
+            stringLength: i16,
+            requiredSize: *mut i16,
+            info: PICO_INFO,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
     pub ps6000aCloseUnit:
         Result<unsafe extern "C" fn(handle: i16) -> PICO_STATUS, ::libloading::Error>,
     pub ps6000aFlashLed:
         Result<unsafe extern "C" fn(handle: i16, start: i16) -> PICO_STATUS, ::libloading::Error>,
+    pub ps6000aSetAuxIoMode: Result<
+        unsafe extern "C" fn(handle: i16, auxIoMode: PICO_AUXIO_MODE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub ps6000aSetTriggerHoldoffCounterBySamples:
+        Result<unsafe extern "C" fn(handle: i16, samples: u64) -> PICO_STATUS, ::libloading::Error>,
     pub ps6000aMemorySegments: Result<
         unsafe extern "C" fn(handle: i16, nSegments: u64, nMaxSamples: *mut u64) -> PICO_STATUS,
         ::libloading::Error,
@@ -856,6 +906,10 @@ pub struct PS6000ALoader {
             nMaxSegments: *mut u64,
             resolution: PICO_DEVICE_RESOLUTION,
         ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub ps6000aGetScopeState: Result<
+        unsafe extern "C" fn(handle: i16, scopeState: *mut PICO_SCOPE_STATE) -> PICO_STATUS,
         ::libloading::Error,
     >,
     pub ps6000aSetChannelOn: Result<
@@ -1173,7 +1227,7 @@ pub struct PS6000ALoader {
             sampleInterval: *mut f64,
             sampleIntervalTimeUnits: PICO_TIME_UNITS,
             maxPreTriggerSamples: u64,
-            maxPostPreTriggerSamples: u64,
+            maxPostTriggerSamples: u64,
             autoStop: i16,
             downSampleRatio: u64,
             downSampleRatioMode: PICO_RATIO_MODE,
@@ -1282,6 +1336,15 @@ pub struct PS6000ALoader {
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
+    pub ps6000aGetAutoTriggerStatus: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            autoTriggerStatus: *mut PICO_AUTO_TRIGGER_STATUS,
+            firstSegmentIndex: u64,
+            segmentCount: u64,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
     pub ps6000aEnumerateUnits: Result<
         unsafe extern "C" fn(count: *mut i16, serials: *mut i8, serialLth: *mut i16) -> PICO_STATUS,
         ::libloading::Error,
@@ -1363,9 +1426,9 @@ pub struct PS6000ALoader {
     pub ps6000aCheckForUpdate: Result<
         unsafe extern "C" fn(
             handle: i16,
-            current: *mut PICO_VERSION,
-            update: *mut PICO_VERSION,
-            updateRequired: *mut u16,
+            firmwareInfos: *mut PICO_FIRMWARE_INFO,
+            nFirmwareInfos: *mut i16,
+            updatesRequired: *mut u16,
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
@@ -1389,20 +1452,66 @@ pub struct PS6000ALoader {
         ) -> PICO_STATUS,
         ::libloading::Error,
     >,
+    pub ps6000aRunAutomaticOffsetAdjustment: Result<
+        unsafe extern "C" fn(handle: i16, calType: PICO_CAL_TYPE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub ps6000aCommitCurrentAdjustmentSettingsToDevice: Result<
+        unsafe extern "C" fn(handle: i16, calType: PICO_CAL_TYPE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub ps6000aResetAdjustmentSettings: Result<
+        unsafe extern "C" fn(handle: i16, calType: PICO_CAL_TYPE) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub ps6000aSetAdjustmentSettingDetails: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            calType: PICO_CAL_TYPE,
+            nameString: *mut i8,
+            nameStringLength: *mut i32,
+            addressString: *mut i8,
+            addressStringLength: *mut i32,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub ps6000aGetAdjustmentSettingDetails: Result<
+        unsafe extern "C" fn(
+            handle: i16,
+            calType: PICO_CAL_TYPE,
+            detailsString: *mut i8,
+            stringLength: *mut i32,
+            textFormat: PICO_TEXT_FORMAT,
+        ) -> PICO_STATUS,
+        ::libloading::Error,
+    >,
+    pub ps6000aApplyFix: Result<unsafe extern "C" fn(arg1: u32, arg2: u16), ::libloading::Error>,
 }
 impl PS6000ALoader {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
-        let ps6000aApplyFix = __library.get(b"ps6000aApplyFix\0").map(|sym| *sym);
+        let path = path.as_ref();
+        let library = ::libloading::Library::new(path)?;
+        Self::from_library(library)
+    }
+    pub unsafe fn from_library<L>(library: L) -> Result<Self, ::libloading::Error>
+    where
+        L: Into<::libloading::Library>,
+    {
+        let __library = library.into();
         let ps6000aOpenUnit = __library.get(b"ps6000aOpenUnit\0").map(|sym| *sym);
         let ps6000aOpenUnitAsync = __library.get(b"ps6000aOpenUnitAsync\0").map(|sym| *sym);
         let ps6000aOpenUnitProgress = __library.get(b"ps6000aOpenUnitProgress\0").map(|sym| *sym);
         let ps6000aGetUnitInfo = __library.get(b"ps6000aGetUnitInfo\0").map(|sym| *sym);
+        let ps6000aGetAccessoryInfo = __library.get(b"ps6000aGetAccessoryInfo\0").map(|sym| *sym);
         let ps6000aCloseUnit = __library.get(b"ps6000aCloseUnit\0").map(|sym| *sym);
         let ps6000aFlashLed = __library.get(b"ps6000aFlashLed\0").map(|sym| *sym);
+        let ps6000aSetAuxIoMode = __library.get(b"ps6000aSetAuxIoMode\0").map(|sym| *sym);
+        let ps6000aSetTriggerHoldoffCounterBySamples = __library
+            .get(b"ps6000aSetTriggerHoldoffCounterBySamples\0")
+            .map(|sym| *sym);
         let ps6000aMemorySegments = __library.get(b"ps6000aMemorySegments\0").map(|sym| *sym);
         let ps6000aMemorySegmentsBySamples = __library
             .get(b"ps6000aMemorySegmentsBySamples\0")
@@ -1413,6 +1522,7 @@ impl PS6000ALoader {
         let ps6000aQueryMaxSegmentsBySamples = __library
             .get(b"ps6000aQueryMaxSegmentsBySamples\0")
             .map(|sym| *sym);
+        let ps6000aGetScopeState = __library.get(b"ps6000aGetScopeState\0").map(|sym| *sym);
         let ps6000aSetChannelOn = __library.get(b"ps6000aSetChannelOn\0").map(|sym| *sym);
         let ps6000aSetChannelOff = __library.get(b"ps6000aSetChannelOff\0").map(|sym| *sym);
         let ps6000aSetDigitalPortOn = __library.get(b"ps6000aSetDigitalPortOn\0").map(|sym| *sym);
@@ -1507,6 +1617,9 @@ impl PS6000ALoader {
         let ps6000aStop = __library.get(b"ps6000aStop\0").map(|sym| *sym);
         let ps6000aSetNoOfCaptures = __library.get(b"ps6000aSetNoOfCaptures\0").map(|sym| *sym);
         let ps6000aGetTriggerInfo = __library.get(b"ps6000aGetTriggerInfo\0").map(|sym| *sym);
+        let ps6000aGetAutoTriggerStatus = __library
+            .get(b"ps6000aGetAutoTriggerStatus\0")
+            .map(|sym| *sym);
         let ps6000aEnumerateUnits = __library.get(b"ps6000aEnumerateUnits\0").map(|sym| *sym);
         let ps6000aPingUnit = __library.get(b"ps6000aPingUnit\0").map(|sym| *sym);
         let ps6000aGetAnalogueOffsetLimits = __library
@@ -1545,19 +1658,38 @@ impl PS6000ALoader {
         let ps6000aReportAllChannelsOvervoltageTripStatus = __library
             .get(b"ps6000aReportAllChannelsOvervoltageTripStatus\0")
             .map(|sym| *sym);
+        let ps6000aRunAutomaticOffsetAdjustment = __library
+            .get(b"ps6000aRunAutomaticOffsetAdjustment\0")
+            .map(|sym| *sym);
+        let ps6000aCommitCurrentAdjustmentSettingsToDevice = __library
+            .get(b"ps6000aCommitCurrentAdjustmentSettingsToDevice\0")
+            .map(|sym| *sym);
+        let ps6000aResetAdjustmentSettings = __library
+            .get(b"ps6000aResetAdjustmentSettings\0")
+            .map(|sym| *sym);
+        let ps6000aSetAdjustmentSettingDetails = __library
+            .get(b"ps6000aSetAdjustmentSettingDetails\0")
+            .map(|sym| *sym);
+        let ps6000aGetAdjustmentSettingDetails = __library
+            .get(b"ps6000aGetAdjustmentSettingDetails\0")
+            .map(|sym| *sym);
+        let ps6000aApplyFix = __library.get(b"ps6000aApplyFix\0").map(|sym| *sym);
         Ok(PS6000ALoader {
             __library,
-            ps6000aApplyFix,
             ps6000aOpenUnit,
             ps6000aOpenUnitAsync,
             ps6000aOpenUnitProgress,
             ps6000aGetUnitInfo,
+            ps6000aGetAccessoryInfo,
             ps6000aCloseUnit,
             ps6000aFlashLed,
+            ps6000aSetAuxIoMode,
+            ps6000aSetTriggerHoldoffCounterBySamples,
             ps6000aMemorySegments,
             ps6000aMemorySegmentsBySamples,
             ps6000aGetMaximumAvailableMemory,
             ps6000aQueryMaxSegmentsBySamples,
+            ps6000aGetScopeState,
             ps6000aSetChannelOn,
             ps6000aSetChannelOff,
             ps6000aSetDigitalPortOn,
@@ -1610,6 +1742,7 @@ impl PS6000ALoader {
             ps6000aStop,
             ps6000aSetNoOfCaptures,
             ps6000aGetTriggerInfo,
+            ps6000aGetAutoTriggerStatus,
             ps6000aEnumerateUnits,
             ps6000aPingUnit,
             ps6000aGetAnalogueOffsetLimits,
@@ -1626,14 +1759,13 @@ impl PS6000ALoader {
             ps6000aStartFirmwareUpdate,
             ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus,
             ps6000aReportAllChannelsOvervoltageTripStatus,
+            ps6000aRunAutomaticOffsetAdjustment,
+            ps6000aCommitCurrentAdjustmentSettingsToDevice,
+            ps6000aResetAdjustmentSettings,
+            ps6000aSetAdjustmentSettingDetails,
+            ps6000aGetAdjustmentSettingDetails,
+            ps6000aApplyFix,
         })
-    }
-    pub unsafe fn ps6000aApplyFix(&self, a: u32, b: u16) {
-        let sym = self
-            .ps6000aApplyFix
-            .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(a, b)
     }
     pub unsafe fn ps6000aOpenUnit(
         &self,
@@ -1641,11 +1773,10 @@ impl PS6000ALoader {
         serial: *mut i8,
         resolution: PICO_DEVICE_RESOLUTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aOpenUnit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, serial, resolution)
+            .expect("Expected function, got error."))(handle, serial, resolution)
     }
     pub unsafe fn ps6000aOpenUnitAsync(
         &self,
@@ -1653,11 +1784,10 @@ impl PS6000ALoader {
         serial: *mut i8,
         resolution: PICO_DEVICE_RESOLUTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aOpenUnitAsync
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(status, serial, resolution)
+            .expect("Expected function, got error."))(status, serial, resolution)
     }
     pub unsafe fn ps6000aOpenUnitProgress(
         &self,
@@ -1665,11 +1795,10 @@ impl PS6000ALoader {
         progressPercent: *mut i16,
         complete: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aOpenUnitProgress
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, progressPercent, complete)
+            .expect("Expected function, got error."))(handle, progressPercent, complete)
     }
     pub unsafe fn ps6000aGetUnitInfo(
         &self,
@@ -1679,25 +1808,69 @@ impl PS6000ALoader {
         requiredSize: *mut i16,
         info: PICO_INFO,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetUnitInfo
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, string, stringLength, requiredSize, info)
+            .expect("Expected function, got error."))(
+            handle,
+            string,
+            stringLength,
+            requiredSize,
+            info,
+        )
+    }
+    pub unsafe fn ps6000aGetAccessoryInfo(
+        &self,
+        handle: i16,
+        channel: PICO_CHANNEL,
+        string: *mut i8,
+        stringLength: i16,
+        requiredSize: *mut i16,
+        info: PICO_INFO,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aGetAccessoryInfo
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            channel,
+            string,
+            stringLength,
+            requiredSize,
+            info,
+        )
     }
     pub unsafe fn ps6000aCloseUnit(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aCloseUnit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps6000aFlashLed(&self, handle: i16, start: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aFlashLed
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, start)
+            .expect("Expected function, got error."))(handle, start)
+    }
+    pub unsafe fn ps6000aSetAuxIoMode(
+        &self,
+        handle: i16,
+        auxIoMode: PICO_AUXIO_MODE,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aSetAuxIoMode
+            .as_ref()
+            .expect("Expected function, got error."))(handle, auxIoMode)
+    }
+    pub unsafe fn ps6000aSetTriggerHoldoffCounterBySamples(
+        &self,
+        handle: i16,
+        samples: u64,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aSetTriggerHoldoffCounterBySamples
+            .as_ref()
+            .expect("Expected function, got error."))(handle, samples)
     }
     pub unsafe fn ps6000aMemorySegments(
         &self,
@@ -1705,11 +1878,10 @@ impl PS6000ALoader {
         nSegments: u64,
         nMaxSamples: *mut u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aMemorySegments
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nSegments, nMaxSamples)
+            .expect("Expected function, got error."))(handle, nSegments, nMaxSamples)
     }
     pub unsafe fn ps6000aMemorySegmentsBySamples(
         &self,
@@ -1717,11 +1889,10 @@ impl PS6000ALoader {
         nSamples: u64,
         nMaxSegments: *mut u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aMemorySegmentsBySamples
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nSamples, nMaxSegments)
+            .expect("Expected function, got error."))(handle, nSamples, nMaxSegments)
     }
     pub unsafe fn ps6000aGetMaximumAvailableMemory(
         &self,
@@ -1729,11 +1900,10 @@ impl PS6000ALoader {
         nMaxSamples: *mut u64,
         resolution: PICO_DEVICE_RESOLUTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetMaximumAvailableMemory
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nMaxSamples, resolution)
+            .expect("Expected function, got error."))(handle, nMaxSamples, resolution)
     }
     pub unsafe fn ps6000aQueryMaxSegmentsBySamples(
         &self,
@@ -1743,11 +1913,26 @@ impl PS6000ALoader {
         nMaxSegments: *mut u64,
         resolution: PICO_DEVICE_RESOLUTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aQueryMaxSegmentsBySamples
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nSamples, nChannelEnabled, nMaxSegments, resolution)
+            .expect("Expected function, got error."))(
+            handle,
+            nSamples,
+            nChannelEnabled,
+            nMaxSegments,
+            resolution,
+        )
+    }
+    pub unsafe fn ps6000aGetScopeState(
+        &self,
+        handle: i16,
+        scopeState: *mut PICO_SCOPE_STATE,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aGetScopeState
+            .as_ref()
+            .expect("Expected function, got error."))(handle, scopeState)
     }
     pub unsafe fn ps6000aSetChannelOn(
         &self,
@@ -1758,18 +1943,23 @@ impl PS6000ALoader {
         analogueOffset: f64,
         bandwidth: PICO_BANDWIDTH_LIMITER,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetChannelOn
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, coupling, range, analogueOffset, bandwidth)
+            .expect("Expected function, got error."))(
+            handle,
+            channel,
+            coupling,
+            range,
+            analogueOffset,
+            bandwidth,
+        )
     }
     pub unsafe fn ps6000aSetChannelOff(&self, handle: i16, channel: PICO_CHANNEL) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetChannelOff
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel)
+            .expect("Expected function, got error."))(handle, channel)
     }
     pub unsafe fn ps6000aSetDigitalPortOn(
         &self,
@@ -1779,11 +1969,10 @@ impl PS6000ALoader {
         logicThresholdLevelLength: i16,
         hysteresis: PICO_DIGITAL_PORT_HYSTERESIS,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetDigitalPortOn
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             port,
             logicThresholdLevel,
@@ -1792,11 +1981,10 @@ impl PS6000ALoader {
         )
     }
     pub unsafe fn ps6000aSetDigitalPortOff(&self, handle: i16, port: PICO_CHANNEL) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetDigitalPortOff
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, port)
+            .expect("Expected function, got error."))(handle, port)
     }
     pub unsafe fn ps6000aGetTimebase(
         &self,
@@ -1807,11 +1995,10 @@ impl PS6000ALoader {
         maxSamples: *mut u64,
         segmentIndex: u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetTimebase
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             timebase,
             noSamples,
@@ -1827,11 +2014,10 @@ impl PS6000ALoader {
         buffer: *mut i16,
         bufferLength: u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenWaveform
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, waveType, buffer, bufferLength)
+            .expect("Expected function, got error."))(handle, waveType, buffer, bufferLength)
     }
     pub unsafe fn ps6000aSigGenRange(
         &self,
@@ -1839,22 +2025,20 @@ impl PS6000ALoader {
         peakToPeakVolts: f64,
         offsetVolts: f64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenRange
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, peakToPeakVolts, offsetVolts)
+            .expect("Expected function, got error."))(handle, peakToPeakVolts, offsetVolts)
     }
     pub unsafe fn ps6000aSigGenWaveformDutyCycle(
         &self,
         handle: i16,
         dutyCyclePercent: f64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenWaveformDutyCycle
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, dutyCyclePercent)
+            .expect("Expected function, got error."))(handle, dutyCyclePercent)
     }
     pub unsafe fn ps6000aSigGenTrigger(
         &self,
@@ -1864,11 +2048,10 @@ impl PS6000ALoader {
         cycles: u64,
         autoTriggerPicoSeconds: u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenTrigger
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             triggerType,
             triggerSource,
@@ -1881,18 +2064,16 @@ impl PS6000ALoader {
         handle: i16,
         filterState: PICO_SIGGEN_FILTER_STATE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenFilter
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, filterState)
+            .expect("Expected function, got error."))(handle, filterState)
     }
     pub unsafe fn ps6000aSigGenFrequency(&self, handle: i16, frequencyHz: f64) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenFrequency
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, frequencyHz)
+            .expect("Expected function, got error."))(handle, frequencyHz)
     }
     pub unsafe fn ps6000aSigGenFrequencySweep(
         &self,
@@ -1902,11 +2083,10 @@ impl PS6000ALoader {
         dwellTimeSeconds: f64,
         sweepType: PICO_SWEEP_TYPE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenFrequencySweep
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             stopFrequencyHz,
             frequencyIncrement,
@@ -1915,11 +2095,10 @@ impl PS6000ALoader {
         )
     }
     pub unsafe fn ps6000aSigGenPhase(&self, handle: i16, deltaPhase: u64) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenPhase
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, deltaPhase)
+            .expect("Expected function, got error."))(handle, deltaPhase)
     }
     pub unsafe fn ps6000aSigGenPhaseSweep(
         &self,
@@ -1929,11 +2108,10 @@ impl PS6000ALoader {
         dwellCount: u64,
         sweepType: PICO_SWEEP_TYPE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenPhaseSweep
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             stopDeltaPhase,
             deltaPhaseIncrement,
@@ -1947,22 +2125,22 @@ impl PS6000ALoader {
         dacClockFrequency: f64,
         prescaleRatio: u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenClockManual
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, dacClockFrequency, prescaleRatio)
+            .expect("Expected function, got error."))(
+            handle, dacClockFrequency, prescaleRatio
+        )
     }
     pub unsafe fn ps6000aSigGenSoftwareTriggerControl(
         &self,
         handle: i16,
         triggerState: PICO_SIGGEN_TRIG_TYPE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenSoftwareTriggerControl
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, triggerState)
+            .expect("Expected function, got error."))(handle, triggerState)
     }
     pub unsafe fn ps6000aSigGenApply(
         &self,
@@ -1977,11 +2155,10 @@ impl PS6000ALoader {
         frequencyIncrement: *mut f64,
         dwellTime: *mut f64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenApply
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             sigGenEnabled,
             sweepEnabled,
@@ -2002,11 +2179,10 @@ impl PS6000ALoader {
         maximumPermissibleValue: *mut f64,
         step: *mut f64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenLimits
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             parameter,
             minimumPermissibleValue,
@@ -2029,11 +2205,10 @@ impl PS6000ALoader {
         minDwellTimeOut: *mut f64,
         maxDwellTimeOut: *mut f64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenFrequencyLimits
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             waveType,
             numSamples,
@@ -2049,18 +2224,16 @@ impl PS6000ALoader {
         )
     }
     pub unsafe fn ps6000aSigGenPause(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenPause
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps6000aSigGenRestart(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSigGenRestart
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps6000aSetSimpleTrigger(
         &self,
@@ -2072,11 +2245,10 @@ impl PS6000ALoader {
         delay: u64,
         autoTriggerMicroSeconds: u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetSimpleTrigger
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             enable,
             source,
@@ -2091,11 +2263,10 @@ impl PS6000ALoader {
         handle: i16,
         state: PICO_TRIGGER_WITHIN_PRE_TRIGGER,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aTriggerWithinPreTriggerSamples
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, state)
+            .expect("Expected function, got error."))(handle, state)
     }
     pub unsafe fn ps6000aSetTriggerChannelProperties(
         &self,
@@ -2105,11 +2276,10 @@ impl PS6000ALoader {
         auxOutputEnable: i16,
         autoTriggerMicroSeconds: u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetTriggerChannelProperties
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             channelProperties,
             nChannelProperties,
@@ -2124,11 +2294,12 @@ impl PS6000ALoader {
         nConditions: i16,
         action: PICO_ACTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetTriggerChannelConditions
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, conditions, nConditions, action)
+            .expect("Expected function, got error."))(
+            handle, conditions, nConditions, action
+        )
     }
     pub unsafe fn ps6000aSetTriggerChannelDirections(
         &self,
@@ -2136,18 +2307,16 @@ impl PS6000ALoader {
         directions: *mut PICO_DIRECTION,
         nDirections: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetTriggerChannelDirections
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, directions, nDirections)
+            .expect("Expected function, got error."))(handle, directions, nDirections)
     }
     pub unsafe fn ps6000aSetTriggerDelay(&self, handle: i16, delay: u64) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetTriggerDelay
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, delay)
+            .expect("Expected function, got error."))(handle, delay)
     }
     pub unsafe fn ps6000aSetPulseWidthQualifierProperties(
         &self,
@@ -2156,11 +2325,10 @@ impl PS6000ALoader {
         upper: u32,
         type_: PICO_PULSE_WIDTH_TYPE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetPulseWidthQualifierProperties
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, lower, upper, type_)
+            .expect("Expected function, got error."))(handle, lower, upper, type_)
     }
     pub unsafe fn ps6000aSetPulseWidthQualifierConditions(
         &self,
@@ -2169,11 +2337,12 @@ impl PS6000ALoader {
         nConditions: i16,
         action: PICO_ACTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetPulseWidthQualifierConditions
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, conditions, nConditions, action)
+            .expect("Expected function, got error."))(
+            handle, conditions, nConditions, action
+        )
     }
     pub unsafe fn ps6000aSetPulseWidthQualifierDirections(
         &self,
@@ -2181,11 +2350,10 @@ impl PS6000ALoader {
         directions: *mut PICO_DIRECTION,
         nDirections: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetPulseWidthQualifierDirections
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, directions, nDirections)
+            .expect("Expected function, got error."))(handle, directions, nDirections)
     }
     pub unsafe fn ps6000aSetTriggerDigitalPortProperties(
         &self,
@@ -2194,11 +2362,10 @@ impl PS6000ALoader {
         directions: *mut PICO_DIGITAL_CHANNEL_DIRECTIONS,
         nDirections: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetTriggerDigitalPortProperties
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, port, directions, nDirections)
+            .expect("Expected function, got error."))(handle, port, directions, nDirections)
     }
     pub unsafe fn ps6000aSetPulseWidthDigitalPortProperties(
         &self,
@@ -2207,11 +2374,10 @@ impl PS6000ALoader {
         directions: *mut PICO_DIGITAL_CHANNEL_DIRECTIONS,
         nDirections: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetPulseWidthDigitalPortProperties
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, port, directions, nDirections)
+            .expect("Expected function, got error."))(handle, port, directions, nDirections)
     }
     pub unsafe fn ps6000aGetTriggerTimeOffset(
         &self,
@@ -2220,11 +2386,10 @@ impl PS6000ALoader {
         timeUnits: *mut PICO_TIME_UNITS,
         segmentIndex: u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetTriggerTimeOffset
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, time, timeUnits, segmentIndex)
+            .expect("Expected function, got error."))(handle, time, timeUnits, segmentIndex)
     }
     pub unsafe fn ps6000aGetValuesTriggerTimeOffsetBulk(
         &self,
@@ -2234,11 +2399,16 @@ impl PS6000ALoader {
         fromSegmentIndex: u64,
         toSegmentIndex: u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetValuesTriggerTimeOffsetBulk
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, times, timeUnits, fromSegmentIndex, toSegmentIndex)
+            .expect("Expected function, got error."))(
+            handle,
+            times,
+            timeUnits,
+            fromSegmentIndex,
+            toSegmentIndex,
+        )
     }
     pub unsafe fn ps6000aSetDataBuffer(
         &self,
@@ -2251,11 +2421,10 @@ impl PS6000ALoader {
         downSampleRatioMode: PICO_RATIO_MODE,
         action: PICO_ACTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetDataBuffer
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             channel,
             buffer,
@@ -2278,11 +2447,10 @@ impl PS6000ALoader {
         downSampleRatioMode: PICO_RATIO_MODE,
         action: PICO_ACTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetDataBuffers
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             channel,
             bufferMax,
@@ -2305,11 +2473,10 @@ impl PS6000ALoader {
         lpReady: ps6000aBlockReady,
         pParameter: PICO_POINTER,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aRunBlock
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             noOfPreTriggerSamples,
             noOfPostTriggerSamples,
@@ -2321,11 +2488,10 @@ impl PS6000ALoader {
         )
     }
     pub unsafe fn ps6000aIsReady(&self, handle: i16, ready: *mut i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aIsReady
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, ready)
+            .expect("Expected function, got error."))(handle, ready)
     }
     pub unsafe fn ps6000aRunStreaming(
         &self,
@@ -2333,21 +2499,20 @@ impl PS6000ALoader {
         sampleInterval: *mut f64,
         sampleIntervalTimeUnits: PICO_TIME_UNITS,
         maxPreTriggerSamples: u64,
-        maxPostPreTriggerSamples: u64,
+        maxPostTriggerSamples: u64,
         autoStop: i16,
         downSampleRatio: u64,
         downSampleRatioMode: PICO_RATIO_MODE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aRunStreaming
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             sampleInterval,
             sampleIntervalTimeUnits,
             maxPreTriggerSamples,
-            maxPostPreTriggerSamples,
+            maxPostTriggerSamples,
             autoStop,
             downSampleRatio,
             downSampleRatioMode,
@@ -2360,22 +2525,25 @@ impl PS6000ALoader {
         nStreamingDataInfos: u64,
         triggerInfo: *mut PICO_STREAMING_DATA_TRIGGER_INFO,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetStreamingLatestValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, streamingDataInfo, nStreamingDataInfos, triggerInfo)
+            .expect("Expected function, got error."))(
+            handle,
+            streamingDataInfo,
+            nStreamingDataInfos,
+            triggerInfo,
+        )
     }
     pub unsafe fn ps6000aNoOfStreamingValues(
         &self,
         handle: i16,
         noOfValues: *mut u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aNoOfStreamingValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, noOfValues)
+            .expect("Expected function, got error."))(handle, noOfValues)
     }
     pub unsafe fn ps6000aGetValues(
         &self,
@@ -2387,11 +2555,10 @@ impl PS6000ALoader {
         segmentIndex: u64,
         overflow: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             startIndex,
             noOfSamples,
@@ -2412,11 +2579,10 @@ impl PS6000ALoader {
         downSampleRatioMode: PICO_RATIO_MODE,
         overflow: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetValuesBulk
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             startIndex,
             noOfSamples,
@@ -2438,11 +2604,10 @@ impl PS6000ALoader {
         lpDataReady: PICO_POINTER,
         pParameter: PICO_POINTER,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetValuesAsync
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             startIndex,
             noOfSamples,
@@ -2465,11 +2630,10 @@ impl PS6000ALoader {
         lpDataReady: PICO_POINTER,
         pParameter: PICO_POINTER,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetValuesBulkAsync
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             startIndex,
             noOfSamples,
@@ -2492,11 +2656,10 @@ impl PS6000ALoader {
         toSegmentIndex: u64,
         overflow: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetValuesOverlapped
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             startIndex,
             noOfSamples,
@@ -2508,43 +2671,38 @@ impl PS6000ALoader {
         )
     }
     pub unsafe fn ps6000aStopUsingGetValuesOverlapped(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aStopUsingGetValuesOverlapped
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps6000aGetNoOfCaptures(&self, handle: i16, nCaptures: *mut u64) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetNoOfCaptures
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nCaptures)
+            .expect("Expected function, got error."))(handle, nCaptures)
     }
     pub unsafe fn ps6000aGetNoOfProcessedCaptures(
         &self,
         handle: i16,
         nProcessedCaptures: *mut u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetNoOfProcessedCaptures
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nProcessedCaptures)
+            .expect("Expected function, got error."))(handle, nProcessedCaptures)
     }
     pub unsafe fn ps6000aStop(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aStop
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps6000aSetNoOfCaptures(&self, handle: i16, nCaptures: u64) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetNoOfCaptures
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nCaptures)
+            .expect("Expected function, got error."))(handle, nCaptures)
     }
     pub unsafe fn ps6000aGetTriggerInfo(
         &self,
@@ -2553,11 +2711,32 @@ impl PS6000ALoader {
         firstSegmentIndex: u64,
         segmentCount: u64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetTriggerInfo
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, triggerInfo, firstSegmentIndex, segmentCount)
+            .expect("Expected function, got error."))(
+            handle,
+            triggerInfo,
+            firstSegmentIndex,
+            segmentCount,
+        )
+    }
+    pub unsafe fn ps6000aGetAutoTriggerStatus(
+        &self,
+        handle: i16,
+        autoTriggerStatus: *mut PICO_AUTO_TRIGGER_STATUS,
+        firstSegmentIndex: u64,
+        segmentCount: u64,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aGetAutoTriggerStatus
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            autoTriggerStatus,
+            firstSegmentIndex,
+            segmentCount,
+        )
     }
     pub unsafe fn ps6000aEnumerateUnits(
         &self,
@@ -2565,18 +2744,16 @@ impl PS6000ALoader {
         serials: *mut i8,
         serialLth: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aEnumerateUnits
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(count, serials, serialLth)
+            .expect("Expected function, got error."))(count, serials, serialLth)
     }
     pub unsafe fn ps6000aPingUnit(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aPingUnit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps6000aGetAnalogueOffsetLimits(
         &self,
@@ -2586,11 +2763,16 @@ impl PS6000ALoader {
         maximumVoltage: *mut f64,
         minimumVoltage: *mut f64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetAnalogueOffsetLimits
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, range, coupling, maximumVoltage, minimumVoltage)
+            .expect("Expected function, got error."))(
+            handle,
+            range,
+            coupling,
+            maximumVoltage,
+            minimumVoltage,
+        )
     }
     pub unsafe fn ps6000aGetMinimumTimebaseStateless(
         &self,
@@ -2600,11 +2782,10 @@ impl PS6000ALoader {
         timeInterval: *mut f64,
         resolution: PICO_DEVICE_RESOLUTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetMinimumTimebaseStateless
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             enabledChannelFlags,
             timebase,
@@ -2621,11 +2802,10 @@ impl PS6000ALoader {
         timebase: *mut u32,
         timeIntervalAvailable: *mut f64,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aNearestSampleIntervalStateless
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             enabledChannelFlags,
             timeIntervalRequested,
@@ -2642,11 +2822,10 @@ impl PS6000ALoader {
         resolution: PICO_DEVICE_RESOLUTION,
         timebase: u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aChannelCombinationsStateless
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             channelFlagsCombinations,
             nChannelCombinations,
@@ -2659,36 +2838,32 @@ impl PS6000ALoader {
         handle: i16,
         resolution: PICO_DEVICE_RESOLUTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetDeviceResolution
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, resolution)
+            .expect("Expected function, got error."))(handle, resolution)
     }
     pub unsafe fn ps6000aGetDeviceResolution(
         &self,
         handle: i16,
         resolution: *mut PICO_DEVICE_RESOLUTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetDeviceResolution
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, resolution)
+            .expect("Expected function, got error."))(handle, resolution)
     }
     pub unsafe fn ps6000aQueryOutputEdgeDetect(&self, handle: i16, state: *mut i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aQueryOutputEdgeDetect
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, state)
+            .expect("Expected function, got error."))(handle, state)
     }
     pub unsafe fn ps6000aSetOutputEdgeDetect(&self, handle: i16, state: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aSetOutputEdgeDetect
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, state)
+            .expect("Expected function, got error."))(handle, state)
     }
     pub unsafe fn ps6000aGetScalingValues(
         &self,
@@ -2696,11 +2871,10 @@ impl PS6000ALoader {
         scalingValues: *mut PICO_SCALING_FACTORS_VALUES,
         nChannels: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetScalingValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, scalingValues, nChannels)
+            .expect("Expected function, got error."))(handle, scalingValues, nChannels)
     }
     pub unsafe fn ps6000aGetAdcLimits(
         &self,
@@ -2709,35 +2883,37 @@ impl PS6000ALoader {
         minValue: *mut i16,
         maxValue: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aGetAdcLimits
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, resolution, minValue, maxValue)
+            .expect("Expected function, got error."))(handle, resolution, minValue, maxValue)
     }
     pub unsafe fn ps6000aCheckForUpdate(
         &self,
         handle: i16,
-        current: *mut PICO_VERSION,
-        update: *mut PICO_VERSION,
-        updateRequired: *mut u16,
+        firmwareInfos: *mut PICO_FIRMWARE_INFO,
+        nFirmwareInfos: *mut i16,
+        updatesRequired: *mut u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aCheckForUpdate
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, current, update, updateRequired)
+            .expect("Expected function, got error."))(
+            handle,
+            firmwareInfos,
+            nFirmwareInfos,
+            updatesRequired,
+        )
     }
     pub unsafe fn ps6000aStartFirmwareUpdate(
         &self,
         handle: i16,
         progress: PicoUpdateFirmwareProgress,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aStartFirmwareUpdate
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, progress)
+            .expect("Expected function, got error."))(handle, progress)
     }
     pub unsafe fn ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus(
         &self,
@@ -2745,11 +2921,14 @@ impl PS6000ALoader {
         allChannelsTrippedStatus: *mut PICO_CHANNEL_OVERVOLTAGE_TRIPPED,
         nChannelTrippedStatus: u8,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, allChannelsTrippedStatus, nChannelTrippedStatus)
+            .expect("Expected function, got error."))(
+            handle,
+            allChannelsTrippedStatus,
+            nChannelTrippedStatus,
+        )
     }
     pub unsafe fn ps6000aReportAllChannelsOvervoltageTripStatus(
         &self,
@@ -2757,10 +2936,89 @@ impl PS6000ALoader {
         allChannelsTrippedStatus: *mut PICO_CHANNEL_OVERVOLTAGE_TRIPPED,
         nChannelTrippedStatus: u8,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps6000aReportAllChannelsOvervoltageTripStatus
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, allChannelsTrippedStatus, nChannelTrippedStatus)
+            .expect("Expected function, got error."))(
+            handle,
+            allChannelsTrippedStatus,
+            nChannelTrippedStatus,
+        )
+    }
+    pub unsafe fn ps6000aRunAutomaticOffsetAdjustment(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aRunAutomaticOffsetAdjustment
+            .as_ref()
+            .expect("Expected function, got error."))(handle, calType)
+    }
+    pub unsafe fn ps6000aCommitCurrentAdjustmentSettingsToDevice(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aCommitCurrentAdjustmentSettingsToDevice
+            .as_ref()
+            .expect("Expected function, got error."))(handle, calType)
+    }
+    pub unsafe fn ps6000aResetAdjustmentSettings(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aResetAdjustmentSettings
+            .as_ref()
+            .expect("Expected function, got error."))(handle, calType)
+    }
+    pub unsafe fn ps6000aSetAdjustmentSettingDetails(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+        nameString: *mut i8,
+        nameStringLength: *mut i32,
+        addressString: *mut i8,
+        addressStringLength: *mut i32,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aSetAdjustmentSettingDetails
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            calType,
+            nameString,
+            nameStringLength,
+            addressString,
+            addressStringLength,
+        )
+    }
+    pub unsafe fn ps6000aGetAdjustmentSettingDetails(
+        &self,
+        handle: i16,
+        calType: PICO_CAL_TYPE,
+        detailsString: *mut i8,
+        stringLength: *mut i32,
+        textFormat: PICO_TEXT_FORMAT,
+    ) -> PICO_STATUS {
+        (self
+            .ps6000aGetAdjustmentSettingDetails
+            .as_ref()
+            .expect("Expected function, got error."))(
+            handle,
+            calType,
+            detailsString,
+            stringLength,
+            textFormat,
+        )
+    }
+    pub unsafe fn ps6000aApplyFix(&self, arg1: u32, arg2: u16) {
+        (self
+            .ps6000aApplyFix
+            .as_ref()
+            .expect("Expected function, got error."))(arg1, arg2)
     }
 }

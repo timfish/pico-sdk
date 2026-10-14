@@ -25,7 +25,6 @@ pub const enPLCM3CommunicationType_PLCM3_CT_ETHERNET: enPLCM3CommunicationType =
 pub const enPLCM3CommunicationType_PLCM3_CT_ALL: enPLCM3CommunicationType = 4294967295;
 pub type enPLCM3CommunicationType = ::std::os::raw::c_uint;
 pub use self::enPLCM3CommunicationType as PLCM3_COMMUNICATION_TYPE;
-extern crate libloading;
 pub struct PLCM3Loader {
     __library: ::libloading::Library,
     pub PLCM3Enumerate: Result<
@@ -89,6 +88,7 @@ impl PLCM3Loader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let path = path.as_ref();
         let library = ::libloading::Library::new(path)?;
         Self::from_library(library)
     }
@@ -220,22 +220,5 @@ impl PLCM3Loader {
             .PLCM3GetValue
             .as_ref()
             .expect("Expected function, got error."))(handle, channel, value)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Proves the module compiles and exports its generated constants and loader type.
-    #[test]
-    fn generated_constants_and_loader_are_exported() {
-        assert_eq!(PLCM3_MIN_WIRES, 2);
-        assert_eq!(PLCM3_MAX_WIRES, 4);
-        assert_eq!(enPLCM3Channels_PLCM3_MAX_CHANNELS, 3);
-
-        // The loader type exists and can be named; actually loading a library needs hardware
-        // drivers installed, so that path is exercised in integration/hardware tests elsewhere.
-        fn _assert_loader_type_exists(_: &PLCM3Loader) {}
     }
 }

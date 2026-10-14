@@ -13,13 +13,10 @@
 
 use crate::LibraryResolution;
 use pico_common::{
-    Driver, LoggerReading, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, PT104Channel,
-    PT104DataType, PT104Info, PT104Wires,
+    Driver, LoggerReading, MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info, PT104Wires,
+    PicoError, PicoInfo, PicoResult, PicoStatus,
 };
-use pico_sys_dynamic::pt104::{
-    PT104Loader, PICO_BATCH_AND_SERIAL, PICO_FIRMWARE_VERSION_1, PICO_HARDWARE_VERSION,
-    PICO_NO_SAMPLES_AVAILABLE, PICO_OK, PICO_WARNING_REPEAT_VALUE,
-};
+use pico_sys_dynamic::pt104::PT104Loader;
 use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
 
 pub struct PT104DriverInternal {
@@ -47,8 +44,11 @@ impl PT104DriverInternal {
             )
         };
 
-        if status != PICO_OK {
-            return Err(PicoError::from_status(PicoStatus::from(status), "get_info_string"));
+        if PicoStatus::from(status) != PicoStatus::OK {
+            return Err(PicoError::from_status(
+                PicoStatus::from(status),
+                "get_info_string",
+            ));
         }
 
         // Truncate to the actual length (C string may be shorter than buffer)
@@ -69,9 +69,12 @@ impl PT104DriverInternal {
     pub fn open_next_unit(&self) -> Result<i16, PicoStatus> {
         let mut handle: i16 = 0;
 
-        let status = unsafe { self.bindings.UsbPt104OpenUnit(&mut handle as *mut i16, std::ptr::null_mut()) };
+        let status = unsafe {
+            self.bindings
+                .UsbPt104OpenUnit(&mut handle as *mut i16, std::ptr::null_mut())
+        };
 
-        if status != PICO_OK {
+        if PicoStatus::from(status) != PicoStatus::OK {
             Err(PicoStatus::from(status))
         } else if handle <= 0 {
             Err(PicoStatus::NOT_FOUND)
@@ -103,16 +106,16 @@ impl PT104DriverInternal {
             match self.open_next_unit() {
                 Ok(handle) => match serial {
                     None => break Ok(handle),
-                    Some(serial) => match self.get_info_string(handle, PICO_BATCH_AND_SERIAL) {
-                        Ok(info_serial) if info_serial.contains(serial) => {
-                            break Ok(handle)
+                    Some(serial) => {
+                        match self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL)) {
+                            Ok(info_serial) if info_serial.contains(serial) => break Ok(handle),
+                            Ok(_) => handles_to_close.push(handle),
+                            Err(error) => {
+                                handles_to_close.push(handle);
+                                break Err(error);
+                            }
                         }
-                        Ok(_) => handles_to_close.push(handle),
-                        Err(error) => {
-                            handles_to_close.push(handle);
-                            break Err(error);
-                        }
-                    },
+                    }
                 },
                 Err(status) => break Err(PicoError::from_status(status, "open_unit")),
             }
@@ -127,13 +130,17 @@ impl PT104DriverInternal {
 
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<PT104Info> {
-        let serial = self.get_info_string(handle, PICO_BATCH_AND_SERIAL)?;
+        let serial = self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL))?;
 
         Ok(PT104Info {
             handle: Arc::new(handle),
             serial,
-            hardware_version: self.get_info_string(handle, PICO_HARDWARE_VERSION).unwrap_or_default(),
-            firmware_version: self.get_info_string(handle, PICO_FIRMWARE_VERSION_1).unwrap_or_default(),
+            hardware_version: self
+                .get_info_string(handle, u32::from(PicoInfo::HARDWARE_VERSION))
+                .unwrap_or_default(),
+            firmware_version: self
+                .get_info_string(handle, u32::from(PicoInfo::FIRMWARE_VERSION_1))
+                .unwrap_or_default(),
         })
     }
 
@@ -147,8 +154,11 @@ impl PT104DriverInternal {
 
         let status = unsafe { self.bindings.UsbPt104SetMains(handle, sixty_hertz) };
 
-        if status != PICO_OK {
-            Err(PicoError::from_status(PicoStatus::from(status), "set_mains"))
+        if PicoStatus::from(status) != PicoStatus::OK {
+            Err(PicoError::from_status(
+                PicoStatus::from(status),
+                "set_mains",
+            ))
         } else {
             Ok(())
         }
@@ -172,8 +182,11 @@ impl PT104DriverInternal {
             )
         };
 
-        if status != PICO_OK {
-            Err(PicoError::from_status(PicoStatus::from(status), "set_channel"))
+        if PicoStatus::from(status) != PicoStatus::OK {
+            Err(PicoError::from_status(
+                PicoStatus::from(status),
+                "set_channel",
+            ))
         } else {
             Ok(())
         }
@@ -202,11 +215,11 @@ impl PT104DriverInternal {
             )
         };
 
-        match status {
-            PICO_OK => Ok(LoggerReading::New(value)),
-            PICO_WARNING_REPEAT_VALUE => Ok(LoggerReading::Repeat(value)),
-            PICO_NO_SAMPLES_AVAILABLE => Ok(LoggerReading::NotReady),
-            _ => Err(PicoError::from_status(PicoStatus::from(status), "get_value")),
+        match PicoStatus::from(status) {
+            PicoStatus::OK => Ok(LoggerReading::New(value)),
+            PicoStatus::WARNING_REPEAT_VALUE => Ok(LoggerReading::Repeat(value)),
+            PicoStatus::NO_SAMPLES_AVAILABLE => Ok(LoggerReading::NotReady),
+            status => Err(PicoError::from_status(status, "get_value")),
         }
     }
 
@@ -214,8 +227,11 @@ impl PT104DriverInternal {
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
         let status = unsafe { self.bindings.UsbPt104CloseUnit(handle) };
 
-        if status != PICO_OK {
-            Err(PicoError::from_status(PicoStatus::from(status), "close_unit"))
+        if PicoStatus::from(status) != PicoStatus::OK {
+            Err(PicoError::from_status(
+                PicoStatus::from(status),
+                "close_unit",
+            ))
         } else {
             Ok(())
         }

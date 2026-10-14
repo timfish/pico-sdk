@@ -5,10 +5,8 @@
 //! `get_value()` once per round of conversions and reports only new conversions.
 
 use super::poll::LoggerPollState;
-use super::state::{
-    Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
-};
-use pico_common::{PicoError, PicoResult, PT104Channel, PT104DataType, PT104Info};
+use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
+use pico_common::{PT104Channel, PT104DataType, PT104Info, PicoError, PicoResult};
 use pico_device::pt104::{PT104Config, PT104Device};
 use std::collections::BTreeMap;
 use tracing::{debug, warn};
@@ -23,7 +21,9 @@ pub struct PT104StreamingEvent {
     pub channels: BTreeMap<PT104Channel, Option<i32>>,
 }
 
-impl IntoStreamingDevice<PT104Device, PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> for PT104Device {
+impl IntoStreamingDevice<PT104Device, PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent>
+    for PT104Device
+{
     fn into_streaming_device(
         self,
     ) -> StreamingRunner<Self, PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> {
@@ -45,7 +45,11 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &PT104Info) -> Current<PT104Info, LoggerPollState> {
+    fn ping(
+        &self,
+        info: &PT104Info,
+        _notices: &super::state::Notices,
+    ) -> Current<PT104Info, LoggerPollState> {
         // There is no ping call for PT-104, so just check if we can read unit info
         if self.driver.get_unit_info(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
@@ -56,9 +60,15 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &PT104Info, config: &PT104Config) -> PicoResult<Current<PT104Info, LoggerPollState>> {
+    fn start(
+        &self,
+        info: &PT104Info,
+        config: &PT104Config,
+        _notices: &super::state::Notices,
+    ) -> PicoResult<Current<PT104Info, LoggerPollState>> {
         // Set mains rejection
-        self.driver.set_mains(*info.handle, config.mains_rejection)?;
+        self.driver
+            .set_mains(*info.handle, config.mains_rejection)?;
 
         // Configure all enabled channels
         for (channel, data_type, wires) in config.enabled_channels() {
@@ -69,7 +79,10 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         // The PT-104 has no start call: it converts the channels that are on in turn, so poll
         // once a round of conversions.
         let state = LoggerPollState::new(config.poll_interval_ms());
-        debug!(poll_interval_ms = state.poll_interval_ms, "PT-104 polls started");
+        debug!(
+            poll_interval_ms = state.poll_interval_ms,
+            "PT-104 polls started"
+        );
 
         Ok(Current::Streaming(info.clone(), state))
     }
@@ -81,6 +94,7 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         config: &PT104Config,
         state: &LoggerPollState,
         events: &EventEmitter<PT104StreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<PT104Info, LoggerPollState> {
         if !state.due() {
             return Current::Streaming(info.clone(), state.clone());

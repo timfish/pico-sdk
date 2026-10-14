@@ -31,7 +31,9 @@ pub struct DrDAQStreamingEvent {
     pub over_range: Vec<DrDAQChannel>,
 }
 
-impl IntoStreamingDevice<DrDAQDevice, DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> for DrDAQDevice {
+impl IntoStreamingDevice<DrDAQDevice, DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent>
+    for DrDAQDevice
+{
     fn into_streaming_device(
         self,
     ) -> StreamingRunner<Self, DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> {
@@ -53,7 +55,7 @@ impl StreamDevice<DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> for DrDAQDev
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &DrDAQInfo) -> Current<DrDAQInfo, u32> {
+    fn ping(&self, info: &DrDAQInfo, _notices: &super::state::Notices) -> Current<DrDAQInfo, u32> {
         if self.driver.ping_unit(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
             Current::Closed
@@ -63,7 +65,12 @@ impl StreamDevice<DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> for DrDAQDev
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &DrDAQInfo, config: &DrDAQConfig) -> PicoResult<Current<DrDAQInfo, u32>> {
+    fn start(
+        &self,
+        info: &DrDAQInfo,
+        config: &DrDAQConfig,
+        _notices: &super::state::Notices,
+    ) -> PicoResult<Current<DrDAQInfo, u32>> {
         let channels: Vec<DrDAQChannel> = config.enabled_channels().collect();
 
         let interval_us = self.driver.set_interval(
@@ -85,6 +92,7 @@ impl StreamDevice<DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> for DrDAQDev
         config: &DrDAQConfig,
         interval_us: &u32,
         events: &EventEmitter<DrDAQStreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<DrDAQInfo, u32> {
         let channels: Vec<DrDAQChannel> = config.enabled_channels().collect();
 
@@ -106,7 +114,10 @@ impl StreamDevice<DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> for DrDAQDev
 
                 for set in values.chunks_exact(channels.len()) {
                     for (i, &channel) in channels.iter().enumerate() {
-                        per_channel.get_mut(&channel).expect("channel just inserted").push(set[i]);
+                        per_channel
+                            .get_mut(&channel)
+                            .expect("channel just inserted")
+                            .push(set[i]);
                     }
                 }
 
