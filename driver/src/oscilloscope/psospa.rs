@@ -13,8 +13,8 @@ use pico_common::{
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL,
     enPicoDataType_PICO_INT16_T, enPicoDeviceResolution, enPicoDeviceResolution_PICO_DR_8BIT,
-    enPicoRatioMode_PICO_RATIO_MODE_RAW, PSOSPALoader, PICO_POINTER, PICO_STREAMING_DATA_INFO,
-    PICO_STREAMING_DATA_TRIGGER_INFO, PICO_TEXT_FORMAT_JSON,
+    enPicoRatioMode_PICO_RATIO_MODE_RAW, enPicoTextFormat_PICO_JSON_DATA, PSOSPALoader,
+    PICO_POINTER, PICO_STREAMING_DATA_INFO, PICO_STREAMING_DATA_TRIGGER_INFO,
 };
 use std::{collections::HashMap, mem::MaybeUninit, sync::Arc};
 use tinyjson::JsonValue;
@@ -148,7 +148,7 @@ impl PSOSPADriver {
                     variant_buf.len() as i16,
                     json_buf.as_mut_ptr(),
                     &mut json_buf_len,
-                    PICO_TEXT_FORMAT_JSON,
+                    enPicoTextFormat_PICO_JSON_DATA,
                 )
             });
             match status {
@@ -415,7 +415,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
                 handle,
                 channel.into(),
                 buffer_pointer(&buffer),
-                buffer_len as i32,
+                buffer_len as u64,
                 stream.data_type,
                 0,
                 stream.mode,

@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Makes sys/src/<module>.rs again from Pico Technology's published headers.
+#
+# Headers come from Pico's Linux driver packages (the "picoscope" apt
+# repository at labs.picotech.com), pinned by version and SHA-256 below.
+# The packages are fetched to a cache and never committed.
+#
+# Needs: curl, bsdtar (tar on macOS), bindgen-cli 0.73
+# (`cargo install bindgen-cli`), rustfmt.
+#
+# Usage: sys/generate-bindings.sh [cache dir]
+set -euo pipefail
+
+REPO="https://labs.picotech.com/picoscope7/debian"
+SYS="$(cd "$(dirname "$0")" && pwd)"
+CACHE="${1:-${TMPDIR:-/tmp}/pico-headers}"
+BINDGEN="${BINDGEN:-bindgen}"
+
+# module | loader | package | version | header | sha256 of the .deb
+PACKAGES="
+ps2000|PS2000Loader|libps2000|3.0.152-3r6217|ps2000.h|37a41422f85f3fe2fe5cf9b2bcdc99bbf43e57d2e4cdd4e15e47015022a11d25
+ps2000a|PS2000ALoader|libps2000a|2.2.158-5r6596|ps2000aApi.h|17299e79d96853d3eecd574471a14cf926c1a79b860f5842833e1dd4a1eb1bc8
+ps3000|PS3000Loader|libps3000|4.0.151-3r6217|ps3000.h|e6c3693e91b6b529a8f8d4788e582e1e146e8790c8d51e686b3a6acb801dc944
+ps3000a|PS3000ALoader|libps3000a|2.2.160-6r7569|ps3000aApi.h|a31fdb0c0672cb6c5242ae5f97f9394de15e2b4bbff32fc6b8528d55bd894df7
+ps4000|PS4000Loader|libps4000|2.1.153-2r6217|ps4000Api.h|10fd56d7a43dd4593ccaa2e2598bac606ad5e71772d76fc104384529a48ae614
+ps4000a|PS4000ALoader|libps4000a|2.2.257-2r7890|ps4000aApi.h|1f2743fc24a65c2caabfc9d770ae746b8355a97277ea79b8714e9a135ae3c36f
+ps5000|PS5000Loader|libps5000|2.1.152-3r6217|ps5000Api.h|e8d73bcc0205143fd5d9c64df74b3a2295ff8f4459de57d6cb307707513375ca
+ps5000a|PS5000ALoader|libps5000a|2.2.16-5r5110|ps5000aApi.h|9e90517e1639077c12db72a5529af2d7094570486a254f766e738cf3d3559df9
+ps6000|PS6000Loader|libps6000|2.1.152-6r6217|ps6000Api.h|c72a2904822cdb78cbc10b2a82094dcd9e329ae331a131e2680a3d5204921993
+ps6000a|PS6000ALoader|libps6000a|2.1.1-0r227|ps6000aApi.h|64d9110419a617cdcd0c131480eb5cc35da3cddd72cdb67d8bcbc3e06e0e20b1
+psospa|PSOSPALoader|libpsospa|1.1.7-0r5994|psospaApi.h|d26636136cdbe1ac389243a1a014951f5f838f57e77d64cbed37bbb00a137473
+tc08|TC08Loader|libusbtc08|2.0.151-1r6217|usbtc08.h|164c92be12b7894cce4c86d528f2b0906f4ec0d762995278ebc5a2a2bb707466
+pt104|PT104Loader|libusbpt104|2.0.151-1r6217|UsbPT104Api.h|51980918cb3a814737a51d7295ceb7996d02b87fd888389a2fd5e04cd0c6c592
+plcm3|PLCM3Loader|libplcm3|2.0.151-1r6217|PLCM3Api.h|74076a7e72b85c99ab9fec3048eef6c3f8ab75714e631d52c492e3a1938293fb
+drdaq|DrDAQLoader|libusbdrdaq|2.0.151-1r6217|usbDrDaqApi.h|a148d1fe581db5f0e32eabf69a2d4b90f0f7124468c408f75c676407a0eff110
+pl1000|PL1000Loader|libpl1000|2.0.151-1r6217|pl1000Api.h|e4348b5ff9c0d68d1919af14f1893e1e877a78e1973ba9261e8777a285885f27
+picohrdl|HRDLLoader|libpicohrdl|2.0.151-1r6217|HRDL.h|8d9437646f2cd2d42333ce96c7f15a639c7cb966469e4247e5841fc1bff0fed2
+"
+
+mkdir -p "$CACHE"
+CACHE="$(cd "$CACHE" && pwd)"
+
+packages() { echo "$PACKAGES" | grep -v '^$'; }
+
+packages | while IFS='|' read -r module loader package version header sha; do
+    deb="${package}_${version}_amd64.deb"
+    if [ ! -f "$CACHE/$deb" ]; then
+        curl -sfL -o "$CACHE/$deb.part" "$REPO/pool/main/${package:0:4}/$package/$deb"
+        mv "$CACHE/$deb.part" "$CACHE/$deb"
+    fi
+    echo "$sha  $CACHE/$deb" | shasum -a 256 -c --quiet
+    dir="$CACHE/$package-$version"
+    if [ ! -d "$dir" ]; then
+        mkdir -p "$dir"
+        (cd "$dir" && tar -xf "$CACHE/$deb" && tar -xf data.tar.*)
+    fi
+done
+
+include() { echo "$CACHE/$1-$2/opt/picoscope/include/$1"; }
+
+# libps3000a includes PicoConnectProbes.h but does not ship it. Missing
+# shared headers are taken from libps4000a, whose copies are the same
+# as in every other package that ships them.
+shared="$(include libps4000a "$(packages | grep '|libps4000a|' | cut -d'|' -f4)")"
+
+# The scope drivers export an ApplyFix function that the current headers
+# no longer declare; the driver crate calls it once a library is loaded.
+apply_fix() {
+    case "$1" in
+    ps2000 | ps3000) echo "void ${1}_apply_fix(uint32_t, uint16_t);" ;;
+    ps2000a | ps3000a | ps4000 | ps4000a | ps5000 | ps5000a | ps6000 | ps6000a)
+        echo "void ${1}ApplyFix(uint32_t, uint16_t);" ;;
+    esac
+}
+
+mkdir -p "$CACHE/wrap"
+
+packages | while IFS='|' read -r module loader package version header sha; do
+    inc="$(include "$package" "$version")"
+    wrap="$CACHE/wrap/$module-wrap.h"
+    printf '#include <stdint.h>\n#include "%s"\n%s\n' "$header" "$(apply_fix "$module")" > "$wrap"
+
+    # PicoStatus.h is left out, so PICO_STATUS and PICO_INFO come
+    # through as plain u32 types and `common` keeps the status codes.
+    # The experimental headers of ps6000a are left out too.
+    "$BINDGEN" "$wrap" \
+        --dynamic-loading "$loader" \
+        --no-layout-tests \
+        --no-doc-comments \
+        --allowlist-file ".*/(${header%.h}|$module-wrap|PicoCallback|PicoConnectProbes|PicoDeviceEnums|PicoDeviceStructs|PicoVersion)\.h" \
+        -- -I"$inc" -idirafter "$shared" \
+        | grep -v '^/\* automatically generated by rust-bindgen' \
+        | grep -v '^extern crate libloading;$' \
+        > "$SYS/src/$module.rs"
+    rustfmt --edition 2021 "$SYS/src/$module.rs"
+    echo "$module: $package $version ($header)"
+done

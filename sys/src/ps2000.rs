@@ -23,7 +23,6 @@ pub const PS2000_MAX_SIGGEN_FREQ: f64 = 100000.0;
 pub const PS2000_MAX_VALUE: u32 = 32767;
 pub const PS2000_MIN_VALUE: i32 = -32767;
 pub const PS2000_LOST_DATA: i32 = -32768;
-
 pub const enPS2000Channel_PS2000_CHANNEL_A: enPS2000Channel = 0;
 pub const enPS2000Channel_PS2000_CHANNEL_B: enPS2000Channel = 1;
 pub const enPS2000Channel_PS2000_CHANNEL_C: enPS2000Channel = 2;
@@ -119,7 +118,7 @@ pub const enPS2000WaveType_PS2000_HALF_SINE: enPS2000WaveType = 8;
 pub type enPS2000WaveType = ::std::os::raw::c_uint;
 pub use self::enPS2000WaveType as PS2000_WAVE_TYPE;
 pub type GetOverviewBuffersMaxMin = ::std::option::Option<
-    extern "C" fn(
+    unsafe extern "C" fn(
         overviewBuffers: *mut *mut i16,
         overflow: i16,
         triggeredAt: u32,
@@ -167,7 +166,6 @@ pub struct tPS2000TriggerChannelProperties {
     pub channel: i16,
     pub thresholdMode: PS2000_THRESHOLD_MODE,
 }
-
 pub type PS2000_TRIGGER_CHANNEL_PROPERTIES = tPS2000TriggerChannelProperties;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -179,7 +177,6 @@ pub struct tPS2000TriggerConditions {
     pub external: PS2000_TRIGGER_STATE,
     pub pulseWidthQualifier: PS2000_TRIGGER_STATE,
 }
-
 pub type PS2000_TRIGGER_CONDITIONS = tPS2000TriggerConditions;
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -190,13 +187,9 @@ pub struct tPS2000PwqConditions {
     pub channelD: PS2000_TRIGGER_STATE,
     pub external: PS2000_TRIGGER_STATE,
 }
-
 pub type PS2000_PWQ_CONDITIONS = tPS2000PwqConditions;
-
-extern crate libloading;
 pub struct PS2000Loader {
     __library: ::libloading::Library,
-    pub ps2000_apply_fix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps2000_open_unit: Result<unsafe extern "C" fn() -> i16, ::libloading::Error>,
     pub ps2000_get_unit_info: Result<
         unsafe extern "C" fn(handle: i16, string: *mut i8, string_length: i16, line: i16) -> i16,
@@ -435,14 +428,22 @@ pub struct PS2000Loader {
         ::libloading::Error,
     >,
     pub ps2000PingUnit: Result<unsafe extern "C" fn(handle: i16) -> i16, ::libloading::Error>,
+    pub ps2000_apply_fix: Result<unsafe extern "C" fn(arg1: u32, arg2: u16), ::libloading::Error>,
 }
 impl PS2000Loader {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
-        let ps2000_apply_fix = __library.get(b"ps2000_apply_fix\0").map(|sym| *sym);
+        let path = path.as_ref();
+        let library = ::libloading::Library::new(path)?;
+        Self::from_library(library)
+    }
+    pub unsafe fn from_library<L>(library: L) -> Result<Self, ::libloading::Error>
+    where
+        L: Into<::libloading::Library>,
+    {
+        let __library = library.into();
         let ps2000_open_unit = __library.get(b"ps2000_open_unit\0").map(|sym| *sym);
         let ps2000_get_unit_info = __library.get(b"ps2000_get_unit_info\0").map(|sym| *sym);
         let ps2000_flash_led = __library.get(b"ps2000_flash_led\0").map(|sym| *sym);
@@ -500,9 +501,9 @@ impl PS2000Loader {
             .map(|sym| *sym);
         let ps2000SetAdvTriggerDelay = __library.get(b"ps2000SetAdvTriggerDelay\0").map(|sym| *sym);
         let ps2000PingUnit = __library.get(b"ps2000PingUnit\0").map(|sym| *sym);
+        let ps2000_apply_fix = __library.get(b"ps2000_apply_fix\0").map(|sym| *sym);
         Ok(PS2000Loader {
             __library,
-            ps2000_apply_fix,
             ps2000_open_unit,
             ps2000_get_unit_info,
             ps2000_flash_led,
@@ -536,21 +537,14 @@ impl PS2000Loader {
             ps2000SetPulseWidthQualifier,
             ps2000SetAdvTriggerDelay,
             ps2000PingUnit,
+            ps2000_apply_fix,
         })
     }
-    pub unsafe fn ps2000_apply_fix(&self, a: u32, b: u16) {
-        let sym = self
-            .ps2000_apply_fix
-            .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(a, b)
-    }
     pub unsafe fn ps2000_open_unit(&self) -> i16 {
-        let sym = self
+        (self
             .ps2000_open_unit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)()
+            .expect("Expected function, got error."))()
     }
     pub unsafe fn ps2000_get_unit_info(
         &self,
@@ -559,25 +553,22 @@ impl PS2000Loader {
         string_length: i16,
         line: i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_get_unit_info
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, string, string_length, line)
+            .expect("Expected function, got error."))(handle, string, string_length, line)
     }
     pub unsafe fn ps2000_flash_led(&self, handle: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000_flash_led
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps2000_close_unit(&self, handle: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000_close_unit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps2000_set_channel(
         &self,
@@ -587,11 +578,10 @@ impl PS2000Loader {
         dc: i16,
         range: i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_set_channel
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, enabled, dc, range)
+            .expect("Expected function, got error."))(handle, channel, enabled, dc, range)
     }
     pub unsafe fn ps2000_get_timebase(
         &self,
@@ -603,11 +593,10 @@ impl PS2000Loader {
         oversample: i16,
         max_samples: *mut i32,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_get_timebase
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             timebase,
             no_of_samples,
@@ -626,11 +615,17 @@ impl PS2000Loader {
         delay: i16,
         auto_trigger_ms: i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_set_trigger
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, source, threshold, direction, delay, auto_trigger_ms)
+            .expect("Expected function, got error."))(
+            handle,
+            source,
+            threshold,
+            direction,
+            delay,
+            auto_trigger_ms,
+        )
     }
     pub unsafe fn ps2000_set_trigger2(
         &self,
@@ -641,11 +636,17 @@ impl PS2000Loader {
         delay: f32,
         auto_trigger_ms: i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_set_trigger2
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, source, threshold, direction, delay, auto_trigger_ms)
+            .expect("Expected function, got error."))(
+            handle,
+            source,
+            threshold,
+            direction,
+            delay,
+            auto_trigger_ms,
+        )
     }
     pub unsafe fn ps2000_run_block(
         &self,
@@ -655,11 +656,10 @@ impl PS2000Loader {
         oversample: i16,
         time_indisposed_ms: *mut i32,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_run_block
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             no_of_values,
             timebase,
@@ -674,11 +674,15 @@ impl PS2000Loader {
         max_samples: i32,
         windowed: i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_run_streaming
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, sample_interval_ms, max_samples, windowed)
+            .expect("Expected function, got error."))(
+            handle,
+            sample_interval_ms,
+            max_samples,
+            windowed,
+        )
     }
     pub unsafe fn ps2000_run_streaming_ns(
         &self,
@@ -690,11 +694,10 @@ impl PS2000Loader {
         noOfSamplesPerAggregate: u32,
         overview_buffer_size: u32,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_run_streaming_ns
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             sample_interval,
             time_units,
@@ -705,18 +708,16 @@ impl PS2000Loader {
         )
     }
     pub unsafe fn ps2000_ready(&self, handle: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000_ready
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps2000_stop(&self, handle: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000_stop
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps2000_get_values(
         &self,
@@ -728,11 +729,10 @@ impl PS2000Loader {
         overflow: *mut i16,
         no_of_values: i32,
     ) -> i32 {
-        let sym = self
+        (self
             .ps2000_get_values
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             buffer_a,
             buffer_b,
@@ -754,11 +754,10 @@ impl PS2000Loader {
         time_units: i16,
         no_of_values: i32,
     ) -> i32 {
-        let sym = self
+        (self
             .ps2000_get_times_and_values
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             times,
             buffer_a,
@@ -771,11 +770,10 @@ impl PS2000Loader {
         )
     }
     pub unsafe fn ps2000_last_button_press(&self, handle: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000_last_button_press
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps2000_set_ets(
         &self,
@@ -784,58 +782,54 @@ impl PS2000Loader {
         ets_cycles: i16,
         ets_interleave: i16,
     ) -> i32 {
-        let sym = self
+        (self
             .ps2000_set_ets
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, mode, ets_cycles, ets_interleave)
+            .expect("Expected function, got error."))(
+            handle, mode, ets_cycles, ets_interleave
+        )
     }
     pub unsafe fn ps2000_set_led(&self, handle: i16, state: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000_set_led
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, state)
+            .expect("Expected function, got error."))(handle, state)
     }
     pub unsafe fn ps2000_open_unit_async(&self) -> i16 {
-        let sym = self
+        (self
             .ps2000_open_unit_async
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)()
+            .expect("Expected function, got error."))()
     }
     pub unsafe fn ps2000_open_unit_progress(
         &self,
         handle: *mut i16,
         progress_percent: *mut i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_open_unit_progress
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, progress_percent)
+            .expect("Expected function, got error."))(handle, progress_percent)
     }
     pub unsafe fn ps2000_get_streaming_last_values(
         &self,
         handle: i16,
         arg1: GetOverviewBuffersMaxMin,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_get_streaming_last_values
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, arg1)
+            .expect("Expected function, got error."))(handle, arg1)
     }
     pub unsafe fn ps2000_overview_buffer_status(
         &self,
         handle: i16,
         previous_buffer_overrun: *mut i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_overview_buffer_status
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, previous_buffer_overrun)
+            .expect("Expected function, got error."))(handle, previous_buffer_overrun)
     }
     pub unsafe fn ps2000_get_streaming_values(
         &self,
@@ -855,11 +849,10 @@ impl PS2000Loader {
         no_of_values: u32,
         noOfSamplesPerAggregate: u32,
     ) -> u32 {
-        let sym = self
+        (self
             .ps2000_get_streaming_values
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             start_time,
             pbuffer_a_max,
@@ -890,11 +883,10 @@ impl PS2000Loader {
         trigger: *mut i16,
         no_of_values: u32,
     ) -> u32 {
-        let sym = self
+        (self
             .ps2000_get_streaming_values_no_aggregation
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             start_time,
             pbuffer_a,
@@ -908,11 +900,10 @@ impl PS2000Loader {
         )
     }
     pub unsafe fn ps2000_set_light(&self, handle: i16, state: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000_set_light
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, state)
+            .expect("Expected function, got error."))(handle, state)
     }
     pub unsafe fn ps2000_set_sig_gen_arbitrary(
         &self,
@@ -928,11 +919,10 @@ impl PS2000Loader {
         sweepType: PS2000_SWEEP_TYPE,
         sweeps: u32,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_set_sig_gen_arbitrary
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             offsetVoltage,
             pkToPk,
@@ -959,11 +949,10 @@ impl PS2000Loader {
         sweepType: PS2000_SWEEP_TYPE,
         sweeps: u32,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000_set_sig_gen_built_in
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             offsetVoltage,
             pkToPk,
@@ -983,11 +972,10 @@ impl PS2000Loader {
         nChannelProperties: i16,
         autoTriggerMilliseconds: i32,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000SetAdvTriggerChannelProperties
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             channelProperties,
             nChannelProperties,
@@ -1000,11 +988,10 @@ impl PS2000Loader {
         conditions: *mut PS2000_TRIGGER_CONDITIONS,
         nConditions: i16,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000SetAdvTriggerChannelConditions
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, conditions, nConditions)
+            .expect("Expected function, got error."))(handle, conditions, nConditions)
     }
     pub unsafe fn ps2000SetAdvTriggerChannelDirections(
         &self,
@@ -1015,11 +1002,12 @@ impl PS2000Loader {
         channelD: PS2000_THRESHOLD_DIRECTION,
         ext: PS2000_THRESHOLD_DIRECTION,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000SetAdvTriggerChannelDirections
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channelA, channelB, channelC, channelD, ext)
+            .expect("Expected function, got error."))(
+            handle, channelA, channelB, channelC, channelD, ext,
+        )
     }
     pub unsafe fn ps2000SetPulseWidthQualifier(
         &self,
@@ -1031,11 +1019,10 @@ impl PS2000Loader {
         upper: u32,
         type_: PS2000_PULSE_WIDTH_TYPE,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000SetPulseWidthQualifier
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             conditions,
             nConditions,
@@ -1051,17 +1038,21 @@ impl PS2000Loader {
         delay: u32,
         preTriggerDelay: f32,
     ) -> i16 {
-        let sym = self
+        (self
             .ps2000SetAdvTriggerDelay
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, delay, preTriggerDelay)
+            .expect("Expected function, got error."))(handle, delay, preTriggerDelay)
     }
     pub unsafe fn ps2000PingUnit(&self, handle: i16) -> i16 {
-        let sym = self
+        (self
             .ps2000PingUnit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
+    }
+    pub unsafe fn ps2000_apply_fix(&self, arg1: u32, arg2: u16) {
+        (self
+            .ps2000_apply_fix
+            .as_ref()
+            .expect("Expected function, got error."))(arg1, arg2)
     }
 }
