@@ -252,6 +252,8 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         info: &OscilloscopeInfo,
         config: &OscilloscopeConfig,
     ) -> PicoResult<Current<OscilloscopeInfo, ScopeStreamState>> {
+        info.check_resolution(config)?;
+
         let mut enabled_channel_count = 0;
 
         let mut state = ScopeStreamState::default();
@@ -260,13 +262,25 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         let buffer_size = buffer_len(config.samples_per_second, config.channels.len());
         state.buffer_len = buffer_size;
 
+        // A resolution that allows fewer channels is refused while more
+        // are on, and channels are set up after a resolution change
+        // (ps5000a guide, 4.49), so: channels off, resolution, channels on.
+        for (channel, ranges) in &info.valid_channel_ranges {
+            if !ranges.is_empty() && !config.channels.contains_key(channel) {
+                self.driver.disable_channel(*info.handle, *channel)?;
+            }
+        }
+
+        if let Some(resolution) = info.effective_resolution(config) {
+            self.driver.set_resolution(*info.handle, resolution)?;
+        }
+
         for (channel, ranges) in &info.valid_channel_ranges {
             // If there are no valid ranges, skip configuring this channel
             if ranges.is_empty() {
                 continue;
             }
 
-            // is this channel enabled?
             if let Some(config) = config.channels.get(channel) {
                 self.driver.enable_channel(*info.handle, *channel, config)?;
 
@@ -279,13 +293,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                     .set_data_buffer(*info.handle, *channel, ch_buf.clone(), buffer_size)?;
 
                 enabled_channel_count += 1;
-            } else {
-                self.driver.disable_channel(*info.handle, *channel)?;
             }
-        }
-
-        if let Some(resolution) = info.effective_resolution(config) {
-            self.driver.set_resolution(*info.handle, resolution)?;
         }
 
         let target_config =

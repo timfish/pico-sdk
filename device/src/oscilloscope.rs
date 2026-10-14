@@ -1,7 +1,7 @@
 use crate::DeviceOpen;
 use pico_common::{
-    OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResolution,
-    PicoResult,
+    OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
+    PicoResolution, PicoResult, PicoStatus,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -12,8 +12,9 @@ use std::{collections::HashMap, sync::Arc};
 pub struct OscilloscopeConfig {
     pub samples_per_second: u32,
     pub channels: HashMap<PicoChannel, OscilloscopeChannelConfig>,
-    /// `None` keeps the resolution the unit opened at. Ignored by units
-    /// with a fixed resolution.
+    /// `None` keeps the resolution the unit opened at, or, on a unit
+    /// whose resolutions limit the channel count, the highest one that
+    /// allows the channels on. Ignored by units with a fixed resolution.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -22,7 +23,12 @@ pub struct OscilloscopeConfig {
 }
 
 impl OscilloscopeConfig {
-    pub fn enable_channel(&mut self, channel: PicoChannel, range: PicoRange, coupling: PicoCoupling) {
+    pub fn enable_channel(
+        &mut self,
+        channel: PicoChannel,
+        range: PicoRange,
+        coupling: PicoCoupling,
+    ) {
         self.channels.insert(
             channel,
             OscilloscopeChannelConfig {
@@ -61,9 +67,12 @@ pub struct OscilloscopeInfo {
     pub valid_channel_ranges: HashMap<PicoChannel, Vec<PicoRange>>,
     /// The resolution the unit opened at, or `None` if it is fixed
     pub resolution: Option<PicoResolution>,
-    /// Supported resolutions, each with its maximum ADC value. Empty if
-    /// the resolution is fixed.
+    /// Supported resolutions, each with its maximum ADC value. Empty, or
+    /// the one resolution, if the resolution is fixed.
     pub resolutions: Vec<(PicoResolution, i16)>,
+    /// Resolutions that allow fewer channels than the unit has, each
+    /// with the most channels it allows
+    pub channel_limits: Vec<(PicoResolution, u8)>,
 }
 
 impl OscilloscopeInfo {
@@ -71,12 +80,45 @@ impl OscilloscopeInfo {
         self.valid_channel_ranges.keys().copied().collect()
     }
 
+    /// The most channels `resolution` allows, or `None` for no limit
+    fn channel_limit(&self, resolution: PicoResolution) -> Option<usize> {
+        self.channel_limits
+            .iter()
+            .find(|(r, _)| *r == resolution)
+            .map(|(_, most)| *most as usize)
+    }
+
     /// The resolution a stream with `config` runs at
     pub fn effective_resolution(&self, config: &OscilloscopeConfig) -> Option<PicoResolution> {
-        config
+        let asked = config
             .resolution
-            .filter(|r| self.resolutions.iter().any(|(s, _)| s == r))
+            .filter(|r| self.resolutions.iter().any(|(s, _)| s == r));
+        if asked.is_some() || self.channel_limits.is_empty() {
+            return asked.or(self.resolution);
+        }
+        let on = config.channels.len();
+        self.resolutions
+            .iter()
+            .map(|(r, _)| *r)
+            .filter(|r| self.channel_limit(*r).is_none_or(|most| on <= most))
+            .max_by_key(|r| r.bits())
             .or(self.resolution)
+    }
+
+    /// Refuses a config whose resolution allows fewer channels than it
+    /// turns on
+    pub fn check_resolution(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
+        let Some(resolution) = self.effective_resolution(config) else {
+            return Ok(());
+        };
+        let on = config.channels.len();
+        match self.channel_limit(resolution) {
+            Some(most) if on > most => Err(PicoError::from_status(
+                PicoStatus::INVALID_NUMBER_CHANNELS_FOR_RESOLUTION,
+                &format!("{resolution} allows at most {most} channels, {on} are on"),
+            )),
+            _ => Ok(()),
+        }
     }
 
     /// The maximum ADC value of a stream with `config`
@@ -141,6 +183,7 @@ impl OscilloscopeDevice {
         } else {
             driver.get_resolution(handle)
         };
+        let channel_limits = driver.get_resolution_channel_limits(handle);
 
         Ok(OscilloscopeInfo {
             handle: Arc::new(handle),
@@ -149,6 +192,7 @@ impl OscilloscopeDevice {
             valid_channel_ranges,
             resolution,
             resolutions,
+            channel_limits,
         })
     }
 }
@@ -184,6 +228,102 @@ impl DeviceOpen<OscilloscopeDevice> for OscilloscopeDriver {
             variant,
             info: Some(info),
         })
+    }
+}
+
+#[cfg(test)]
+mod resolution_tests {
+    use super::*;
+    use PicoResolution::*;
+
+    /// A 4-channel 5000D: five resolutions, 15 and 16 bit limited.
+    fn ps5000d() -> OscilloscopeInfo {
+        OscilloscopeInfo {
+            handle: Arc::new(1),
+            usb_version: "3.0".to_string(),
+            max_adc_value: 32_767,
+            valid_channel_ranges: HashMap::new(),
+            resolution: Some(DR_14BIT),
+            resolutions: vec![
+                (DR_8BIT, 32_512),
+                (DR_12BIT, 32_767),
+                (DR_14BIT, 32_767),
+                (DR_15BIT, 32_767),
+                (DR_16BIT, 32_767),
+            ],
+            channel_limits: vec![(DR_15BIT, 2), (DR_16BIT, 1)],
+        }
+    }
+
+    fn config(channels: &[PicoChannel], resolution: Option<PicoResolution>) -> OscilloscopeConfig {
+        let mut config = OscilloscopeConfig {
+            resolution,
+            ..Default::default()
+        };
+        for ch in channels {
+            config.enable_channel(*ch, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        }
+        config
+    }
+
+    #[test]
+    fn no_resolution_takes_the_highest_the_channels_allow() {
+        use PicoChannel::*;
+        let info = ps5000d();
+        let pick = |chs: &[PicoChannel]| info.effective_resolution(&config(chs, None));
+        assert_eq!(pick(&[A]), Some(DR_16BIT));
+        assert_eq!(pick(&[A, B]), Some(DR_15BIT));
+        assert_eq!(pick(&[A, B, C]), Some(DR_14BIT));
+        assert_eq!(pick(&[A, B, C, D]), Some(DR_14BIT));
+        assert!(info.check_resolution(&config(&[A, B, C], None)).is_ok());
+    }
+
+    #[test]
+    fn too_many_channels_for_a_resolution_are_refused() {
+        use PicoChannel::*;
+        let info = ps5000d();
+        let err = info
+            .check_resolution(&config(&[A, B], Some(DR_16BIT)))
+            .unwrap_err();
+        assert_eq!(
+            err.status,
+            PicoStatus::INVALID_NUMBER_CHANNELS_FOR_RESOLUTION
+        );
+        assert!(info
+            .check_resolution(&config(&[A, B], Some(DR_15BIT)))
+            .is_ok());
+        assert!(info
+            .check_resolution(&config(&[A, B, C], Some(DR_15BIT)))
+            .is_err());
+        assert!(info
+            .check_resolution(&config(&[A, B, C, D], Some(DR_8BIT)))
+            .is_ok());
+    }
+
+    #[test]
+    fn max_value_follows_the_resolution() {
+        use PicoChannel::*;
+        let info = ps5000d();
+        assert_eq!(info.max_adc_value_for(&config(&[A], Some(DR_8BIT))), 32_512);
+        assert_eq!(
+            info.max_adc_value_for(&config(&[A], Some(DR_12BIT))),
+            32_767
+        );
+        assert_eq!(info.max_adc_value_for(&config(&[A, B, C], None)), 32_767);
+    }
+
+    #[test]
+    fn units_with_no_limits_keep_the_open_resolution() {
+        use PicoChannel::*;
+        let info = OscilloscopeInfo {
+            resolution: Some(DR_12BIT),
+            channel_limits: Vec::new(),
+            ..ps5000d()
+        };
+        assert_eq!(
+            info.effective_resolution(&config(&[A], None)),
+            Some(DR_12BIT)
+        );
     }
 }
 
