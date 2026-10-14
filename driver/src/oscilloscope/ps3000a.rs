@@ -3,11 +3,11 @@ use super::{
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
-    EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
+    EnumerationResult, OscilloscopeDriverInternal, PowerStates, SampleBuffer,
 };
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
-    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, PowerSource, ToPicoStr,
 };
 use pico_sys_dynamic::ps3000a::{
     enPS3000ARatioMode_PS3000A_RATIO_MODE_AVERAGE, enPS3000ARatioMode_PS3000A_RATIO_MODE_NONE,
@@ -17,6 +17,7 @@ use pico_sys_dynamic::ps3000a::{
 pub struct PS3000ADriver {
     _dependencies: LoadedDependencies,
     bindings: PS3000ALoader,
+    power: PowerStates,
 }
 
 impl std::fmt::Debug for PS3000ADriver {
@@ -37,6 +38,7 @@ impl PS3000ADriver {
         Ok(PS3000ADriver {
             bindings,
             _dependencies: dependencies,
+            power: PowerStates::default(),
         })
     }
 }
@@ -98,15 +100,23 @@ impl OscilloscopeDriverInternal for PS3000ADriver {
             }
         });
 
-        // Handle changing power source...
+        // A unit on USB power, or a USB 3 unit on a USB 2 port, opens
+        // with a valid handle and needs ChangePowerSource with the same
+        // status to finish powering up.
         if matches!(
             status,
             PicoStatus::POWER_SUPPLY_NOT_CONNECTED | PicoStatus::USB3_0_DEVICE_NON_USB3_0_PORT
         ) {
+            self.power.opened(handle, status);
             status = PicoStatus::from(unsafe {
                 self.bindings
                     .ps3000aChangePowerSource(handle, status.into())
             })
+        } else if matches!(status, PicoStatus::OK | PicoStatus::POWER_SUPPLY_CONNECTED) {
+            // A 4444 with its supply opens with POWER_SUPPLY_CONNECTED
+            // (ps4000apg 4.37).
+            self.power.opened(handle, status);
+            status = PicoStatus::OK;
         }
 
         match status {
@@ -134,6 +144,7 @@ impl OscilloscopeDriverInternal for PS3000ADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn close(&self, handle: i16) -> PicoResult<()> {
+        self.power.closed(handle);
         PicoStatus::from(unsafe { self.bindings.ps3000aCloseUnit(handle) })
             .to_result((), "close_unit")
     }
@@ -183,6 +194,23 @@ impl OscilloscopeDriverInternal for PS3000ADriver {
                 .collect()),
             x => Err(PicoError::from_status(x, "get_channel_ranges")),
         }
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn get_power_source(&self, handle: i16) -> Option<PowerSource> {
+        let status = PicoStatus::from(unsafe { self.bindings.ps3000aCurrentPowerSource(handle) });
+        self.power.current(handle, status)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn set_power_source(&self, handle: i16, power: PowerSource) -> PicoResult<()> {
+        PicoStatus::from(unsafe {
+            self.bindings
+                .ps3000aChangePowerSource(handle, power.to_status().into())
+        })
+        .to_result((), "set_power_source")?;
+        self.power.set(handle, power);
+        Ok(())
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

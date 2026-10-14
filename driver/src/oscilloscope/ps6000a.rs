@@ -1,14 +1,14 @@
 use super::{
     buffer_pointer, check_channel_limit,
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, parse_enum_result, EnumerationResult, OscilloscopeDriverInternal,
-    PicoStreamMode, SampleBuffer,
+    get_version_string, parse_enum_result, rate_limits, variant_channel_count, EnumerationResult,
+    OscilloscopeDriverInternal, PicoStreamMode, SampleBuffer,
 };
 use parking_lot::RwLock;
 use pico_common::{
     Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
     OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution,
-    PicoResult, PicoStatus, SampleType, ToPicoStr,
+    PicoResult, PicoStatus, RateLimit, SampleType, ToPicoStr,
 };
 use pico_sys_dynamic::ps6000a::{
     enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL,
@@ -102,6 +102,35 @@ impl PS6000ADriver {
 }
 
 impl OscilloscopeDriverInternal for PS6000ADriver {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn get_rate_limits(&self, handle: i16) -> Vec<RateLimit> {
+        if self.bindings.ps6000aGetMinimumTimebaseStateless.is_err() {
+            return Vec::new();
+        }
+        let Ok(variant) = self.get_unit_info(handle, PicoInfo::VARIANT_INFO) else {
+            return Vec::new();
+        };
+        let channels = variant_channel_count(&variant).unwrap_or(0);
+        rate_limits(
+            variant_resolutions(&variant),
+            channels,
+            |flags, resolution| {
+                let mut timebase = 0u32;
+                let mut interval = 0f64;
+                let status = PicoStatus::from(unsafe {
+                    self.bindings.ps6000aGetMinimumTimebaseStateless(
+                        handle,
+                        flags,
+                        &mut timebase,
+                        &mut interval,
+                        resolution.to_driver_value(),
+                    )
+                });
+                (status == PicoStatus::OK).then_some(interval)
+            },
+        )
+    }
+
     // SUM streaming is refused by the driver (RATIO_MODE_NOT_SUPPORTED
     // on a 5464E, 2026-10-14), though the header lists the mode.
     fn downsample_modes(&self) -> &'static [DownsampleKind] {

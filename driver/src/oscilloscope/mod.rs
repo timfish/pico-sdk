@@ -35,9 +35,9 @@ use parking_lot::RwLock;
 use pico_common::{
     Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
     OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution,
-    PicoResult, PicoStatus, SampleType,
+    PicoResult, PicoStatus, PowerSource, RateLimit, SampleType,
 };
-use std::{fmt, ops::Deref, sync::Arc};
+use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
 
 /// Serial and variant pairs returned by driver enumeration
@@ -230,6 +230,28 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     fn get_resolution_channel_limits(&self, _handle: i16) -> Vec<(PicoResolution, u8)> {
         Vec::new()
     }
+    /// The fastest the unit samples with each count of analog channels
+    /// on, at each resolution. Empty where the driver cannot say.
+    fn get_rate_limits(&self, _handle: i16) -> Vec<RateLimit> {
+        Vec::new()
+    }
+    /// Where the unit takes its power from, or `None` for a unit with
+    /// no choice of power.
+    fn get_power_source(&self, _handle: i16) -> Option<PowerSource> {
+        None
+    }
+    /// Tell the driver which power to run on. Settings on the unit are
+    /// lost, so channels and streams are set up again after it.
+    fn set_power_source(&self, _handle: i16, _power: PowerSource) -> PicoResult<()> {
+        Err(PicoError::from_status(
+            PicoStatus::POWER_SUPPLY_REQUEST_INVALID,
+            "set_power_source",
+        ))
+    }
+    /// Channels that run only on the external supply.
+    fn get_supply_channels(&self, _handle: i16) -> Vec<PicoChannel> {
+        Vec::new()
+    }
     /// Set up a channel with the supplied config
     fn enable_channel(
         &self,
@@ -356,6 +378,71 @@ pub(crate) fn parse_enum_result(buffer: &[i8], len: usize) -> Vec<EnumerationRes
             })
         })
         .collect()
+}
+
+/// The power each open handle of a ps3000a, ps4000a or ps5000a driver
+/// runs on, as open and `ChangePowerSource` left it. Their
+/// `CurrentPowerSource` says `OK` where a unit has one power state,
+/// which hides a USB 3 unit on a USB 2 port, so the state from open is
+/// kept as well.
+#[derive(Default)]
+pub(crate) struct PowerStates(RwLock<HashMap<i16, PowerSource>>);
+
+impl PowerStates {
+    /// The status an open returned, before `ChangePowerSource`.
+    pub(crate) fn opened(&self, handle: i16, status: PicoStatus) {
+        let mut states = self.0.write();
+        match PowerSource::from_status(status) {
+            Some(power) => states.insert(handle, power),
+            None => states.remove(&handle),
+        };
+    }
+
+    pub(crate) fn set(&self, handle: i16, power: PowerSource) {
+        self.0.write().insert(handle, power);
+    }
+
+    pub(crate) fn closed(&self, handle: i16) {
+        self.0.write().remove(&handle);
+    }
+
+    /// The power from what `CurrentPowerSource` returned, else from
+    /// open or the last change.
+    pub(crate) fn current(&self, handle: i16, status: PicoStatus) -> Option<PowerSource> {
+        PowerSource::from_status(status).or_else(|| self.0.read().get(&handle).copied())
+    }
+}
+
+/// The fastest rate with the first 1 to `channels` analog channels on
+/// at each of `resolutions`, from `min_interval`, which gives the
+/// driver's shortest interval in seconds for a set of channel flags
+/// (bit 0 for channel A) at a resolution, or `None` where it refuses.
+pub(crate) fn rate_limits(
+    resolutions: &[PicoResolution],
+    channels: u8,
+    mut min_interval: impl FnMut(u32, PicoResolution) -> Option<f64>,
+) -> Vec<RateLimit> {
+    let mut limits = Vec::new();
+    for resolution in resolutions {
+        for on in 1..=channels.min(31) {
+            let flags = (1u32 << on) - 1;
+            match min_interval(flags, *resolution) {
+                Some(interval) if interval > 0.0 => limits.push(RateLimit {
+                    resolution: Some(*resolution),
+                    channels: on,
+                    max_samples_per_second: 1.0 / interval,
+                }),
+                _ => {}
+            }
+        }
+    }
+    limits
+}
+
+/// The number of analog channels a variant name gives: its second
+/// character on every scope family.
+pub(crate) fn variant_channel_count(variant: &str) -> Option<u8> {
+    variant.get(1..2)?.parse().ok()
 }
 
 /// Refuses a stream of `enabled` channels at `resolution` when `limits`
@@ -536,6 +623,52 @@ mod tests {
         assert_eq!((buffer.sample_type(), buffer.len()), (SampleType::I8, 10));
         assert!(buffer.as_i16("test").is_err());
         assert!(SampleBuffer::new(SampleType::I16, 1).as_i16("test").is_ok());
+    }
+
+    #[test]
+    fn power_states_keep_open_state_where_the_driver_says_ok() {
+        let states = PowerStates::default();
+        // A 4-channel unit on USB power.
+        states.opened(1, PicoStatus::POWER_SUPPLY_NOT_CONNECTED);
+        assert_eq!(states.current(1, PicoStatus::OK), Some(PowerSource::Usb));
+        assert_eq!(
+            states.current(1, PicoStatus::POWER_SUPPLY_CONNECTED),
+            Some(PowerSource::External)
+        );
+        // A 2-channel USB 3 unit on a USB 2 port reads OK later.
+        states.opened(2, PicoStatus::USB3_0_DEVICE_NON_USB3_0_PORT);
+        assert_eq!(
+            states.current(2, PicoStatus::OK),
+            Some(PowerSource::UsbNonUsb3Port)
+        );
+        // One with no choice of power.
+        states.opened(3, PicoStatus::OK);
+        assert_eq!(states.current(3, PicoStatus::OK), None);
+        states.set(3, PowerSource::External);
+        assert_eq!(
+            states.current(3, PicoStatus::OK),
+            Some(PowerSource::External)
+        );
+        states.closed(3);
+        assert_eq!(states.current(3, PicoStatus::OK), None);
+    }
+
+    #[test]
+    fn variant_names_give_their_channel_count() {
+        assert_eq!(variant_channel_count("5444D"), Some(4));
+        assert_eq!(variant_channel_count("3206D MSO"), Some(2));
+        assert_eq!(variant_channel_count("6824E"), Some(8));
+        assert_eq!(variant_channel_count(""), None);
+    }
+
+    #[test]
+    fn rate_limits_skip_refused_sets() {
+        let limits = rate_limits(&[PicoResolution::DR_12BIT], 4, |flags, _| {
+            (flags.count_ones() <= 2).then_some(1e-9)
+        });
+        assert_eq!(limits.len(), 2);
+        assert_eq!(limits[1].channels, 2);
+        assert_eq!(limits[1].max_samples_per_second.round(), 1e9);
     }
 
     #[test]

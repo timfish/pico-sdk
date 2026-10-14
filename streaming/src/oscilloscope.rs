@@ -1,9 +1,10 @@
 use super::state::{
-    sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
+    sleep_ms, AfterPowerChange, Current, DeviceNotice, EventEmitter, IntoStreamingDevice, Notices,
+    StreamDevice, StreamingRunner,
 };
 use pico_common::{
     Downsample, DownsampleKind, OscilloscopeSampleConfig, PicoChannel, PicoError, PicoResult,
-    PicoStatus, SampleType,
+    PicoStatus, PowerSource, SampleType,
 };
 use pico_device::{
     oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
@@ -19,7 +20,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// How long the stream waits between polls when it is not behind.
 const POLL: Duration = Duration::from_millis(50);
@@ -371,6 +372,171 @@ impl fmt::Debug for ScopeStreamState {
     }
 }
 
+/// Handles a power change the driver reported with `status`. The
+/// guides ask for ChangePowerSource with the new state, after which
+/// the unit's settings are gone and must be set up again (ps3000a
+/// guide 4.2, ps4000apg 4.1, ps5000apg r4 3.7). Gives the info with
+/// the new power, or `None` if `status` is no power change. A status
+/// naming the power the unit has already is a refusal, not a change.
+fn power_changed(
+    device: &OscilloscopeDevice,
+    info: &OscilloscopeInfo,
+    status: PicoStatus,
+) -> Option<(OscilloscopeInfo, PowerSource)> {
+    let to = PowerSource::from_status(status).filter(|to| info.power != Some(*to))?;
+    let handle = *info.handle;
+    let _ = device.driver.stop(handle);
+    if let Err(error) = device.driver.set_power_source(handle, to) {
+        warn!(%error, power = %to, "could not change the power source");
+    }
+    let mut changed = info.clone();
+    changed.power = device.driver.get_power_source(handle).or(Some(to));
+    Some((changed, to))
+}
+
+fn notify_power(
+    notices: &Notices,
+    before: &OscilloscopeInfo,
+    after: &OscilloscopeInfo,
+    to: PowerSource,
+    stream: AfterPowerChange,
+) {
+    let available = after.available_channels();
+    info!(
+        from = ?before.power,
+        to = %to,
+        ?available,
+        ?stream,
+        "power source changed"
+    );
+    notices.new_data(DeviceNotice::PowerChanged {
+        from: before.power,
+        to,
+        available,
+        stream,
+    });
+}
+
+fn start_stream(
+    device: &OscilloscopeDevice,
+    info: &OscilloscopeInfo,
+    config: &OscilloscopeConfig,
+) -> PicoResult<Current<OscilloscopeInfo, ScopeStreamState>> {
+    info.check_config(config)?;
+    let downsample = Downsample::effective(config.downsample)?;
+    if let Some(downsample) = downsample {
+        if !device.driver.downsample_modes().contains(&downsample.mode) {
+            return Err(PicoError::from_status(
+                PicoStatus::RATIO_MODE_NOT_SUPPORTED,
+                "start",
+            ));
+        }
+    }
+    let max_adc_value = info.max_adc_value_for(config);
+    let layout = layout(
+        eight_bit(info, config),
+        downsample,
+        device.driver.sample_types(),
+        max_adc_value,
+    );
+
+    let mut enabled_channel_count = 0;
+    let mut state = ScopeStreamState {
+        downsample,
+        layout,
+        ..ScopeStreamState::default()
+    };
+
+    device.driver.clear_data_buffers(*info.handle)?;
+    let stored_rate = config.samples_per_second as f64 / Downsample::ratio_of(downsample) as f64;
+    let buffer_size = buffer_len(stored_rate, config.channels.len(), layout.buffer.size());
+    state.buffer_len = buffer_size;
+
+    // A resolution that allows fewer channels is refused while more
+    // are on, and channels are set up after a resolution change
+    // (ps5000a guide, 4.49), so: channels off, resolution, channels on.
+    for (channel, ranges) in &info.valid_channel_ranges {
+        if !ranges.is_empty() && !config.channels.contains_key(channel) {
+            device.driver.disable_channel(*info.handle, *channel)?;
+        }
+    }
+
+    if let Some(resolution) = info.effective_resolution(config) {
+        device.driver.set_resolution(*info.handle, resolution)?;
+        debug!(asked = ?resolution, set = ?device.driver.get_resolution(*info.handle), "resolution set");
+    }
+
+    for (channel, ranges) in &info.valid_channel_ranges {
+        // If there are no valid ranges, skip configuring this channel
+        if ranges.is_empty() {
+            continue;
+        }
+
+        if let Some(config) = config.channels.get(channel) {
+            device
+                .driver
+                .enable_channel(*info.handle, *channel, config)?;
+
+            let ch_buf = state
+                .buffers
+                .entry(*channel)
+                .or_insert_with(|| SampleBuffer::new(layout.buffer, buffer_size))
+                .clone();
+            state.multipliers.insert(
+                *channel,
+                multiplier(
+                    config.range.get_max_scaled_value(),
+                    max_adc_value,
+                    layout.delivered,
+                    downsample,
+                ),
+            );
+
+            device.driver.set_data_buffer(
+                *info.handle,
+                *channel,
+                ch_buf,
+                buffer_size,
+                downsample,
+            )?;
+
+            enabled_channel_count += 1;
+        }
+    }
+
+    let target_config =
+        OscilloscopeSampleConfig::from_samples_per_second(config.samples_per_second);
+
+    state.sample_config = device.driver.start_streaming(
+        *info.handle,
+        &target_config,
+        enabled_channel_count,
+        buffer_size,
+        downsample,
+    )?;
+    tracing::debug!(
+        asked_hz = config.samples_per_second,
+        set_hz = state.device_samples_per_second(),
+        stored_hz = state.samples_per_second(),
+        ratio = Downsample::ratio_of(downsample),
+        mode = ?downsample.map(|d| d.mode),
+        buffer_type = ?layout.buffer,
+        sample_type = ?layout.delivered,
+        buffer_samples = buffer_size,
+        buffer_s = buffer_size as f64 / stored_rate.max(1.0),
+        buffer_bytes = buffer_bytes(
+            buffer_size,
+            enabled_channel_count as usize,
+            layout.buffer.size()
+        ),
+        interval = state.sample_config.interval,
+        units = ?state.sample_config.units,
+        "streaming started"
+    );
+
+    Ok(Current::Streaming(info.clone(), state))
+}
+
 impl
     IntoStreamingDevice<
         OscilloscopeDevice,
@@ -417,15 +583,28 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         })
     }
 
-    fn ping(&self, info: &OscilloscopeInfo) -> Current<OscilloscopeInfo, ScopeStreamState> {
-        if self.driver.ping_unit(*info.handle).is_err() {
-            let _ = self.driver.stop(*info.handle);
-            let _ = self.driver.close(*info.handle);
+    fn ping(
+        &self,
+        info: &OscilloscopeInfo,
+        notices: &Notices,
+    ) -> Current<OscilloscopeInfo, ScopeStreamState> {
+        match self.driver.ping_unit(*info.handle) {
+            Ok(()) => Current::Open(info.clone()),
+            Err(error) => {
+                if let Some((changed, to)) = power_changed(self, info, error.status) {
+                    notify_power(notices, info, &changed, to, AfterPowerChange::Idle);
+                    return Current::Open(changed);
+                }
+                let _ = self.driver.stop(*info.handle);
+                let _ = self.driver.close(*info.handle);
 
-            Current::Closed
-        } else {
-            Current::Open(info.clone())
+                Current::Closed
+            }
         }
+    }
+
+    fn check(&self, info: &OscilloscopeInfo, config: &OscilloscopeConfig) -> PicoResult<()> {
+        info.check_config(config)
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -433,119 +612,22 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         &self,
         info: &OscilloscopeInfo,
         config: &OscilloscopeConfig,
+        notices: &Notices,
     ) -> PicoResult<Current<OscilloscopeInfo, ScopeStreamState>> {
-        info.check_resolution(config)?;
-        let downsample = Downsample::effective(config.downsample)?;
-        if let Some(downsample) = downsample {
-            if !self.driver.downsample_modes().contains(&downsample.mode) {
-                return Err(PicoError::from_status(
-                    PicoStatus::RATIO_MODE_NOT_SUPPORTED,
-                    "start",
-                ));
-            }
+        match start_stream(self, info, config) {
+            Err(error) => match power_changed(self, info, error.status) {
+                Some((changed, to)) => {
+                    let after = match changed.check_config(config) {
+                        Ok(()) => AfterPowerChange::Restarts,
+                        Err(_) => AfterPowerChange::Stopped,
+                    };
+                    notify_power(notices, info, &changed, to, after);
+                    Ok(Current::Open(changed))
+                }
+                None => Err(error),
+            },
+            started => started,
         }
-        let max_adc_value = info.max_adc_value_for(config);
-        let layout = layout(
-            eight_bit(info, config),
-            downsample,
-            self.driver.sample_types(),
-            max_adc_value,
-        );
-
-        let mut enabled_channel_count = 0;
-        let mut state = ScopeStreamState {
-            downsample,
-            layout,
-            ..ScopeStreamState::default()
-        };
-
-        self.driver.clear_data_buffers(*info.handle)?;
-        let stored_rate =
-            config.samples_per_second as f64 / Downsample::ratio_of(downsample) as f64;
-        let buffer_size = buffer_len(stored_rate, config.channels.len(), layout.buffer.size());
-        state.buffer_len = buffer_size;
-
-        // A resolution that allows fewer channels is refused while more
-        // are on, and channels are set up after a resolution change
-        // (ps5000a guide, 4.49), so: channels off, resolution, channels on.
-        for (channel, ranges) in &info.valid_channel_ranges {
-            if !ranges.is_empty() && !config.channels.contains_key(channel) {
-                self.driver.disable_channel(*info.handle, *channel)?;
-            }
-        }
-
-        if let Some(resolution) = info.effective_resolution(config) {
-            self.driver.set_resolution(*info.handle, resolution)?;
-            debug!(asked = ?resolution, set = ?self.driver.get_resolution(*info.handle), "resolution set");
-        }
-
-        for (channel, ranges) in &info.valid_channel_ranges {
-            // If there are no valid ranges, skip configuring this channel
-            if ranges.is_empty() {
-                continue;
-            }
-
-            if let Some(config) = config.channels.get(channel) {
-                self.driver.enable_channel(*info.handle, *channel, config)?;
-
-                let ch_buf = state
-                    .buffers
-                    .entry(*channel)
-                    .or_insert_with(|| SampleBuffer::new(layout.buffer, buffer_size))
-                    .clone();
-                state.multipliers.insert(
-                    *channel,
-                    multiplier(
-                        config.range.get_max_scaled_value(),
-                        max_adc_value,
-                        layout.delivered,
-                        downsample,
-                    ),
-                );
-
-                self.driver.set_data_buffer(
-                    *info.handle,
-                    *channel,
-                    ch_buf,
-                    buffer_size,
-                    downsample,
-                )?;
-
-                enabled_channel_count += 1;
-            }
-        }
-
-        let target_config =
-            OscilloscopeSampleConfig::from_samples_per_second(config.samples_per_second);
-
-        state.sample_config = self.driver.start_streaming(
-            *info.handle,
-            &target_config,
-            enabled_channel_count,
-            buffer_size,
-            downsample,
-        )?;
-        tracing::debug!(
-            asked_hz = config.samples_per_second,
-            set_hz = state.device_samples_per_second(),
-            stored_hz = state.samples_per_second(),
-            ratio = Downsample::ratio_of(downsample),
-            mode = ?downsample.map(|d| d.mode),
-            buffer_type = ?layout.buffer,
-            sample_type = ?layout.delivered,
-            buffer_samples = buffer_size,
-            buffer_s = buffer_size as f64 / stored_rate.max(1.0),
-            buffer_bytes = buffer_bytes(
-                buffer_size,
-                enabled_channel_count as usize,
-                layout.buffer.size()
-            ),
-            interval = state.sample_config.interval,
-            units = ?state.sample_config.units,
-            "streaming started"
-        );
-
-        Ok(Current::Streaming(info.clone(), state))
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -555,6 +637,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         config: &OscilloscopeConfig,
         state: &ScopeStreamState,
         events: &EventEmitter<OscilloscopeStreamEvent>,
+        notices: &Notices,
     ) -> Current<OscilloscopeInfo, ScopeStreamState> {
         let mut returned = 0usize;
         let callback = |start_index, sample_count| {
@@ -636,6 +719,15 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 }
 
                 Current::Streaming(info.clone(), state.clone())
+            } else if let Some((changed, to)) = power_changed(self, info, error.status) {
+                // The runner starts the stream again if the new power
+                // runs its channels, and stops it if not.
+                let after = match changed.check_config(config) {
+                    Ok(()) => AfterPowerChange::Restarts,
+                    Err(_) => AfterPowerChange::Stopped,
+                };
+                notify_power(notices, info, &changed, to, after);
+                Current::Open(changed)
             } else {
                 warn!("Streaming stopped: '{:?}'", error);
 

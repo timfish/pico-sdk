@@ -82,7 +82,11 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &HRDLInfo) -> Current<HRDLInfo, HRDLStreamState> {
+    fn ping(
+        &self,
+        info: &HRDLInfo,
+        _notices: &super::state::Notices,
+    ) -> Current<HRDLInfo, HRDLStreamState> {
         if self.driver.ping_unit(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
             Current::Closed
@@ -96,6 +100,7 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
         &self,
         info: &HRDLInfo,
         config: &HRDLConfig,
+        _notices: &super::state::Notices,
     ) -> PicoResult<Current<HRDLInfo, HRDLStreamState>> {
         let min_interval_ms = config.min_interval_ms();
         if config.sample_interval_ms < min_interval_ms {
@@ -153,6 +158,7 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
         config: &HRDLConfig,
         state: &HRDLStreamState,
         events: &EventEmitter<HRDLStreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<HRDLInfo, HRDLStreamState> {
         let channels: Vec<HRDLChannel> = config
             .enabled_channels()

@@ -1,7 +1,7 @@
 use crate::DeviceOpen;
 use pico_common::{
     Downsample, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo,
-    PicoRange, PicoResolution, PicoResult, PicoStatus,
+    PicoRange, PicoResolution, PicoResult, PicoStatus, PowerSource, RateLimit,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -89,11 +89,80 @@ pub struct OscilloscopeInfo {
     /// Resolutions that allow fewer channels than the unit has, each
     /// with the most channels it allows
     pub channel_limits: Vec<(PicoResolution, u8)>,
+    /// The fastest rate with each count of channels on at each
+    /// resolution, where the driver can say. Streaming is slower.
+    pub rate_limits: Vec<RateLimit>,
+    /// Where the unit takes its power from, or `None` for a unit with
+    /// no choice of power
+    pub power: Option<PowerSource>,
+    /// Channels that run only on the external supply
+    pub supply_channels: Vec<PicoChannel>,
 }
 
 impl OscilloscopeInfo {
     pub fn get_channels(&self) -> Vec<PicoChannel> {
         self.valid_channel_ranges.keys().copied().collect()
+    }
+
+    /// Whether `channel` runs on the power the unit has now
+    pub fn channel_powered(&self, channel: PicoChannel) -> bool {
+        !self.supply_channels.contains(&channel) || self.power.is_none_or(|p| p.is_external())
+    }
+
+    /// The channels the unit can turn on with the power it has now
+    pub fn available_channels(&self) -> Vec<PicoChannel> {
+        let mut channels: Vec<_> = self
+            .valid_channel_ranges
+            .iter()
+            .filter(|(ch, ranges)| !ranges.is_empty() && self.channel_powered(**ch))
+            .map(|(ch, _)| *ch)
+            .collect();
+        channels.sort();
+        channels
+    }
+
+    /// Refuses a config that turns on a channel the power the unit has
+    /// now does not run
+    pub fn check_power(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
+        let mut unpowered: Vec<_> = config
+            .channels
+            .keys()
+            .filter(|ch| !self.channel_powered(**ch))
+            .collect();
+        if unpowered.is_empty() {
+            return Ok(());
+        }
+        unpowered.sort();
+        let names: Vec<_> = unpowered.iter().map(|ch| ch.to_string()).collect();
+        let power = self
+            .power
+            .map_or("this power".to_string(), |p| p.to_string());
+        Err(PicoError::from_status(
+            PicoStatus::CHANNEL_DISABLED_DUE_TO_USB_POWERED,
+            &format!(
+                "channel {} needs the external supply; the unit runs on {power}",
+                names.join(", ")
+            ),
+        ))
+    }
+
+    /// Refuses a config the unit cannot run: a channel its power does
+    /// not run, or more channels than its resolution allows
+    pub fn check_config(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
+        self.check_power(config)?;
+        self.check_resolution(config)
+    }
+
+    /// The fastest rate of a stream with `config`, where the driver
+    /// gave rate limits
+    pub fn max_samples_per_second_for(&self, config: &OscilloscopeConfig) -> Option<f64> {
+        let resolution = self.effective_resolution(config);
+        let on = config.channels.len().max(1);
+        self.rate_limits
+            .iter()
+            .filter(|l| l.resolution == resolution && l.channels as usize >= on)
+            .min_by_key(|l| l.channels)
+            .map(|l| l.max_samples_per_second)
     }
 
     /// The most channels `resolution` allows, or `None` for no limit
@@ -209,6 +278,18 @@ impl OscilloscopeDevice {
             driver.get_resolution(handle)
         };
         let channel_limits = driver.get_resolution_channel_limits(handle);
+        let rate_limits = driver.get_rate_limits(handle);
+        let power = driver.get_power_source(handle);
+        let supply_channels = driver.get_supply_channels(handle);
+        tracing::debug!(
+            %variant,
+            ?power,
+            ?supply_channels,
+            ?resolution,
+            ?channel_limits,
+            rate_limits = rate_limits.len(),
+            "unit info read"
+        );
 
         Ok(OscilloscopeInfo {
             handle: Arc::new(handle),
@@ -218,6 +299,9 @@ impl OscilloscopeDevice {
             resolution,
             resolutions,
             channel_limits,
+            rate_limits,
+            power,
+            supply_channels,
         })
     }
 }
@@ -277,6 +361,9 @@ mod resolution_tests {
                 (DR_16BIT, 32_767),
             ],
             channel_limits: vec![(DR_15BIT, 2), (DR_16BIT, 1)],
+            rate_limits: Vec::new(),
+            power: Some(PowerSource::External),
+            supply_channels: vec![PicoChannel::C, PicoChannel::D],
         }
     }
 
@@ -367,6 +454,103 @@ mod resolution_tests {
             info.effective_resolution(&config(&[A], None)),
             Some(DR_12BIT)
         );
+    }
+}
+
+#[cfg(test)]
+mod power_tests {
+    use super::*;
+    use PicoChannel::*;
+
+    /// A 4-channel 5000D: C and D only on the AC adaptor.
+    fn ps5444d(power: Option<PowerSource>) -> OscilloscopeInfo {
+        let ranges = vec![PicoRange::X1_PROBE_2V];
+        OscilloscopeInfo {
+            handle: Arc::new(1),
+            usb_version: "3.0".to_string(),
+            max_adc_value: 32_767,
+            valid_channel_ranges: [A, B, C, D].map(|ch| (ch, ranges.clone())).into(),
+            resolution: Some(PicoResolution::DR_8BIT),
+            resolutions: Vec::new(),
+            channel_limits: Vec::new(),
+            rate_limits: Vec::new(),
+            power,
+            supply_channels: vec![C, D],
+        }
+    }
+
+    fn config(channels: &[PicoChannel]) -> OscilloscopeConfig {
+        let mut config = OscilloscopeConfig::default();
+        for ch in channels {
+            config.enable_channel(*ch, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        }
+        config
+    }
+
+    #[test]
+    fn usb_power_runs_only_a_and_b() {
+        for power in [PowerSource::Usb, PowerSource::UsbNonUsb3Port] {
+            let info = ps5444d(Some(power));
+            assert_eq!(info.available_channels(), vec![A, B]);
+            assert!(info.check_config(&config(&[A, B])).is_ok());
+            let err = info.check_config(&config(&[A, C, D])).unwrap_err();
+            assert_eq!(err.status, PicoStatus::CHANNEL_DISABLED_DUE_TO_USB_POWERED);
+            assert!(err.to_string().contains("C, D"), "{err}");
+        }
+    }
+
+    #[test]
+    fn the_supply_runs_every_channel() {
+        let info = ps5444d(Some(PowerSource::External));
+        assert_eq!(info.available_channels(), vec![A, B, C, D]);
+        assert!(info.check_config(&config(&[A, B, C, D])).is_ok());
+        // A unit with no choice of power has no supply channels to keep off.
+        let info = ps5444d(None);
+        assert_eq!(info.available_channels().len(), 4);
+    }
+
+    #[test]
+    fn power_is_checked_before_resolution() {
+        let info = OscilloscopeInfo {
+            resolutions: vec![(PicoResolution::DR_16BIT, 32_767)],
+            channel_limits: vec![(PicoResolution::DR_16BIT, 1)],
+            ..ps5444d(Some(PowerSource::Usb))
+        };
+        let err = info.check_config(&config(&[A, C])).unwrap_err();
+        assert_eq!(err.status, PicoStatus::CHANNEL_DISABLED_DUE_TO_USB_POWERED);
+    }
+
+    #[test]
+    fn rate_limit_follows_channels_and_resolution() {
+        let limit = |resolution, channels, rate| RateLimit {
+            resolution: Some(resolution),
+            channels,
+            max_samples_per_second: rate,
+        };
+        let info = OscilloscopeInfo {
+            resolutions: vec![
+                (PicoResolution::DR_8BIT, 32_512),
+                (PicoResolution::DR_16BIT, 32_767),
+            ],
+            resolution: Some(PicoResolution::DR_16BIT),
+            rate_limits: vec![
+                limit(PicoResolution::DR_8BIT, 1, 5e9),
+                limit(PicoResolution::DR_16BIT, 1, 2.5e9),
+                limit(PicoResolution::DR_16BIT, 2, 1.25e9),
+                limit(PicoResolution::DR_16BIT, 4, 625e6),
+            ],
+            ..ps5444d(Some(PowerSource::External))
+        };
+        assert_eq!(info.max_samples_per_second_for(&config(&[A])), Some(2.5e9));
+        assert_eq!(
+            info.max_samples_per_second_for(&config(&[A, B, C])),
+            Some(625e6)
+        );
+        let mut eight = config(&[A]);
+        eight.resolution = Some(PicoResolution::DR_8BIT);
+        assert_eq!(info.max_samples_per_second_for(&eight), Some(5e9));
+        eight.enable_channel(B, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        assert_eq!(info.max_samples_per_second_for(&eight), None);
     }
 }
 

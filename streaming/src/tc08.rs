@@ -46,7 +46,7 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &TC08Info) -> Current<TC08Info, u32> {
+    fn ping(&self, info: &TC08Info, _notices: &super::state::Notices) -> Current<TC08Info, u32> {
         // There is no ping call, so reading the unit info stands in for one
         if self.driver.get_unit_info(*info.handle).is_err() {
             let _ = self.driver.stop(*info.handle);
@@ -59,7 +59,12 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn start(&self, info: &TC08Info, config: &TC08Config) -> PicoResult<Current<TC08Info, u32>> {
+    fn start(
+        &self,
+        info: &TC08Info,
+        config: &TC08Config,
+        _notices: &super::state::Notices,
+    ) -> PicoResult<Current<TC08Info, u32>> {
         self.driver
             .set_mains_rejection(*info.handle, config.mains_rejection)?;
 
@@ -85,6 +90,7 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
         config: &TC08Config,
         interval_ms: &u32,
         events: &EventEmitter<TC08StreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<TC08Info, u32> {
         let mut event = TC08StreamingEvent {
             interval_ms: *interval_ms,

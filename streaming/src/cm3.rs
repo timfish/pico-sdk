@@ -47,7 +47,11 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &PLCM3Info) -> Current<PLCM3Info, LoggerPollState> {
+    fn ping(
+        &self,
+        info: &PLCM3Info,
+        _notices: &super::state::Notices,
+    ) -> Current<PLCM3Info, LoggerPollState> {
         // There is no ping call for CM3, so just check if we can read unit info
         if self.driver.get_unit_info(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
@@ -62,6 +66,7 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
         &self,
         info: &PLCM3Info,
         config: &PLCM3Config,
+        _notices: &super::state::Notices,
     ) -> PicoResult<Current<PLCM3Info, LoggerPollState>> {
         self.driver
             .set_mains(*info.handle, config.mains_rejection)?;
@@ -88,6 +93,7 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
         config: &PLCM3Config,
         state: &LoggerPollState,
         events: &EventEmitter<PLCM3StreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<PLCM3Info, LoggerPollState> {
         if !state.due() {
             return Current::Streaming(info.clone(), state.clone());

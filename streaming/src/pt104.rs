@@ -45,7 +45,11 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &PT104Info) -> Current<PT104Info, LoggerPollState> {
+    fn ping(
+        &self,
+        info: &PT104Info,
+        _notices: &super::state::Notices,
+    ) -> Current<PT104Info, LoggerPollState> {
         // There is no ping call for PT-104, so just check if we can read unit info
         if self.driver.get_unit_info(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
@@ -60,6 +64,7 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         &self,
         info: &PT104Info,
         config: &PT104Config,
+        _notices: &super::state::Notices,
     ) -> PicoResult<Current<PT104Info, LoggerPollState>> {
         // Set mains rejection
         self.driver
@@ -89,6 +94,7 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         config: &PT104Config,
         state: &LoggerPollState,
         events: &EventEmitter<PT104StreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<PT104Info, LoggerPollState> {
         if !state.due() {
             return Current::Streaming(info.clone(), state.clone());

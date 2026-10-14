@@ -60,7 +60,11 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &PL1000Info) -> Current<PL1000Info, u32> {
+    fn ping(
+        &self,
+        info: &PL1000Info,
+        _notices: &super::state::Notices,
+    ) -> Current<PL1000Info, u32> {
         if self.driver.ping_unit(*info.handle).is_err() {
             let _ = self.driver.close_unit(*info.handle);
             Current::Closed
@@ -74,6 +78,7 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
         &self,
         info: &PL1000Info,
         config: &PL1000Config,
+        _notices: &super::state::Notices,
     ) -> PicoResult<Current<PL1000Info, u32>> {
         let channels: Vec<PL1000Channel> = config.enabled_channels().collect();
 
@@ -96,6 +101,7 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
         config: &PL1000Config,
         interval_us: &u32,
         events: &EventEmitter<PL1000StreamingEvent>,
+        _notices: &super::state::Notices,
     ) -> Current<PL1000Info, u32> {
         let channels: Vec<PL1000Channel> = config.enabled_channels().collect();
 
