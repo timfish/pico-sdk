@@ -1,7 +1,7 @@
 use crate::DeviceOpen;
 use pico_common::{
-    OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-    PicoResolution, PicoResult, PicoStatus,
+    Downsample, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo,
+    PicoRange, PicoResolution, PicoResult, PicoStatus,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -10,6 +10,7 @@ use std::{collections::HashMap, sync::Arc};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct OscilloscopeConfig {
+    /// The device's rate. A downsample divides it for the stored rate.
     pub samples_per_second: u32,
     pub channels: HashMap<PicoChannel, OscilloscopeChannelConfig>,
     /// `None` keeps the resolution the unit opened at, or, on a unit
@@ -20,6 +21,12 @@ pub struct OscilloscopeConfig {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub resolution: Option<PicoResolution>,
+    /// `None` streams every sample.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub downsample: Option<Downsample>,
 }
 
 impl OscilloscopeConfig {
@@ -45,6 +52,15 @@ impl OscilloscopeConfig {
 
     pub fn set_sample_rate(&mut self, samples_per_second: u32) {
         self.samples_per_second = samples_per_second;
+    }
+
+    pub fn set_downsample(&mut self, downsample: Option<Downsample>) {
+        self.downsample = downsample;
+    }
+
+    /// The rate of the samples the stream delivers, as asked for.
+    pub fn stored_samples_per_second(&self) -> f64 {
+        self.samples_per_second as f64 / Downsample::ratio_of(self.downsample) as f64
     }
 }
 
@@ -349,6 +365,7 @@ mod serde_tests {
             samples_per_second: 1_000_000,
             channels,
             resolution: None,
+            downsample: None,
         }
     }
 
@@ -378,6 +395,20 @@ mod serde_tests {
 
         // Channel B was never inserted, so it must not appear on either side.
         assert!(!deserialized.channels.contains_key(&PicoChannel::B));
+    }
+
+    #[test]
+    fn downsample_round_trips() {
+        let mut config = sample_config();
+        config.set_downsample(Some(Downsample::average(16)));
+        let json = serde_json::to_string(&config).expect("serialize");
+        assert!(
+            json.ends_with(r#""downsample":{"ratio":16,"mode":"Average"}}"#),
+            "{json}"
+        );
+        let back: OscilloscopeConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.downsample, Some(Downsample::average(16)));
+        assert_eq!(back.stored_samples_per_second(), 62_500.0);
     }
 
     /// An unknown field in an incoming snapshot must not break deserialization — forward

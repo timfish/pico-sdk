@@ -756,10 +756,10 @@ pub enum PicoStatus {
     #[error("The adc was powered down when trying to capture data")]
     ADC_POWERED_DOWN = 50_339_840,
     #[error("")]
-    OPTIONAL_BOOTLOADER_UPDATE_AVAILABLE_WITH_THIS_DRIVER  = 50_352_128,
+    OPTIONAL_BOOTLOADER_UPDATE_AVAILABLE_WITH_THIS_DRIVER = 50_352_128,
     #[error("")]
     BOOTLOADER_VERSION_NOT_AVAILABLE = 50_352_129,
-    #[error("An internal error has occurred and a watchdog timer has been called")]    
+    #[error("An internal error has occurred and a watchdog timer has been called")]
     WATCHDOGTIMER = 268_435_456,
     #[error("The picoipp library has not been found")]
     IPP_NOT_FOUND = 268_435_457,

@@ -162,8 +162,9 @@
 
 pub mod prelude {
     pub use pico_common::{
-        Driver, MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError,
-        PicoInfo, PicoRange, PicoStatus, TC08Channel, TCType,
+        Downsample, DownsampleKind, Driver, MainsRejectionFreq, OscilloscopeChannelConfig,
+        PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoStatus, SampleType,
+        TC08Channel, TCType,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
@@ -185,7 +186,8 @@ pub mod prelude {
     };
     pub use pico_streaming::{
         DrDAQStreamingEvent, EventHandler, HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent,
-        IntoStreamingDevice, LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
+        IntoStreamingDevice, LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent,
+        PLCM3StreamingEvent, PT104StreamingEvent, RawChannelDataBlock, Samples, ScopeStreamState,
         TC08StreamingEvent,
     };
 }

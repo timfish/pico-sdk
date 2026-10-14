@@ -1,12 +1,13 @@
 use super::{
     dependencies::{load_dependencies, LoadedDependencies},
-    get_version_string, EnumerationResult, OscilloscopeDriverInternal,
+    get_version_string, EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
-    OscilloscopeChannelConfig, Driver, FromPicoStr, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-    PicoResult, PicoStatus, OscilloscopeSampleConfig,
+    Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
+    OscilloscopeSampleConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
+    PicoResult, PicoStatus,
 };
 use pico_sys_dynamic::ps2000::PS2000Loader;
 use std::{collections::HashMap, sync::Arc};
@@ -114,6 +115,17 @@ extern "C" fn streaming_callback(
     n_values: u32,
 ) {
     CALLBACK_REF.callback(overview_buffers as *const *const usize, n_values as usize);
+}
+
+/// The ps2000 API streams no average or sum, only min and max.
+fn refuse_downsample(downsample: Option<Downsample>) -> PicoResult<()> {
+    match Downsample::effective(downsample)? {
+        None => Ok(()),
+        Some(_) => Err(PicoError::from_status(
+            PicoStatus::RATIO_MODE_NOT_SUPPORTED,
+            "downsample",
+        )),
+    }
 }
 
 pub struct PS2000Driver {
@@ -328,6 +340,10 @@ impl OscilloscopeDriverInternal for PS2000Driver {
         .to_result((), "set_channel")
     }
 
+    fn downsample_modes(&self) -> &'static [DownsampleKind] {
+        &[]
+    }
+
     // The ps2000 driver doesn't copy data into supplied buffers. It passes the
     // buffers in the callback. Here we store the buffers and try and emulate
     // the other drivers
@@ -336,9 +352,12 @@ impl OscilloscopeDriverInternal for PS2000Driver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         _buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()> {
+        refuse_downsample(downsample)?;
+        let buffer = buffer.as_i16("set_data_buffer")?.clone();
         let mut buffers = BUFFERS.lock();
 
         buffers
@@ -362,7 +381,9 @@ impl OscilloscopeDriverInternal for PS2000Driver {
         sample_config: &OscilloscopeSampleConfig,
         _enabled_channels: u8,
         _buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig> {
+        refuse_downsample(downsample)?;
         let status = PicoStatus::from(unsafe {
             self.bindings.ps2000_run_streaming_ns(
                 handle,

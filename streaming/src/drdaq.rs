@@ -31,7 +31,9 @@ pub struct DrDAQStreamingEvent {
     pub over_range: Vec<DrDAQChannel>,
 }
 
-impl IntoStreamingDevice<DrDAQDevice, DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> for DrDAQDevice {
+impl IntoStreamingDevice<DrDAQDevice, DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent>
+    for DrDAQDevice
+{
     fn into_streaming_device(
         self,
     ) -> StreamingRunner<Self, DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> {
@@ -106,7 +108,10 @@ impl StreamDevice<DrDAQConfig, DrDAQInfo, u32, DrDAQStreamingEvent> for DrDAQDev
 
                 for set in values.chunks_exact(channels.len()) {
                     for (i, &channel) in channels.iter().enumerate() {
-                        per_channel.get_mut(&channel).expect("channel just inserted").push(set[i]);
+                        per_channel
+                            .get_mut(&channel)
+                            .expect("channel just inserted")
+                            .push(set[i]);
                     }
                 }
 

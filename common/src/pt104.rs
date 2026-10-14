@@ -179,12 +179,22 @@ impl FromStr for PT104DataType {
             "OFF" => Ok(PT104DataType::Off),
             "PT100" => Ok(PT104DataType::PT100),
             "PT1000" => Ok(PT104DataType::PT1000),
-            "RESISTANCE0375R" | "RESISTANCE375R" | "RESISTANCETO375R" => Ok(PT104DataType::ResistanceTo375R),
-            "RESISTANCE010KR" | "RESISTANCE10K" | "RESISTANCE10KR" | "RESISTANCETO10K" => Ok(PT104DataType::ResistanceTo10K),
+            "RESISTANCE0375R" | "RESISTANCE375R" | "RESISTANCETO375R" => {
+                Ok(PT104DataType::ResistanceTo375R)
+            }
+            "RESISTANCE010KR" | "RESISTANCE10K" | "RESISTANCE10KR" | "RESISTANCETO10K" => {
+                Ok(PT104DataType::ResistanceTo10K)
+            }
             "DIFFERENTIAL115MV" | "DIFFERENTIALTO115MV" => Ok(PT104DataType::DifferentialTo115mV),
-            "DIFFERENTIAL2500MV" | "DIFFERENTIALTO2500MV" => Ok(PT104DataType::DifferentialTo2500mV),
-            "SINGLEENDED0115MV" | "SINGLEENDED115MV" | "SINGLEENDEDTO115MV" => Ok(PT104DataType::SingleEndedTo115mV),
-            "SINGLEENDED02500MV" | "SINGLEENDED2500MV" | "SINGLEENDEDTO2500MV" => Ok(PT104DataType::SingleEndedTo2500mV),
+            "DIFFERENTIAL2500MV" | "DIFFERENTIALTO2500MV" => {
+                Ok(PT104DataType::DifferentialTo2500mV)
+            }
+            "SINGLEENDED0115MV" | "SINGLEENDED115MV" | "SINGLEENDEDTO115MV" => {
+                Ok(PT104DataType::SingleEndedTo115mV)
+            }
+            "SINGLEENDED02500MV" | "SINGLEENDED2500MV" | "SINGLEENDEDTO2500MV" => {
+                Ok(PT104DataType::SingleEndedTo2500mV)
+            }
             _ => Err(ParseError),
         }
     }
@@ -220,7 +230,6 @@ impl fmt::Display for PT104Wires {
     }
 }
 
-
 /// What was discovered about a PT-104 once it was opened
 ///
 /// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
@@ -255,7 +264,10 @@ mod tests {
 
     fn assert_close(value: Option<f64>, expected: f64) {
         let value = value.expect("a value");
-        assert!((value - expected).abs() <= expected.abs() * 1e-12, "{value} != {expected}");
+        assert!(
+            (value - expected).abs() <= expected.abs() * 1e-12,
+            "{value} != {expected}"
+        );
     }
 
     #[test]
@@ -265,7 +277,10 @@ mod tests {
         assert_eq!(PT104DataType::PT1000.scale(), Some((1e-3, "°C")));
         assert_close(PT104DataType::ResistanceTo375R.to_unit(100_000_000), 100.0);
         assert_close(PT104DataType::ResistanceTo10K.to_unit(4_700_000), 4700.0);
-        assert_close(PT104DataType::DifferentialTo115mV.to_unit(115_000_000), 0.115);
+        assert_close(
+            PT104DataType::DifferentialTo115mV.to_unit(115_000_000),
+            0.115,
+        );
         assert_close(PT104DataType::SingleEndedTo2500mV.to_unit(250_000_000), 2.5);
         // Every full-scale reading fits an i32.
         assert!(2.5 / 1e-8 < i32::MAX as f64);
