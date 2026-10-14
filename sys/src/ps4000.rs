@@ -20,116 +20,8 @@ pub const MIN_DWELL_COUNT: u32 = 10;
 pub const PS4262_MAX_WAVEFORM_BUFFER_SIZE: u32 = 4096;
 pub const PS4262_MIN_DWELL_COUNT: u32 = 3;
 pub const MAX_SWEEPS_SHOTS: u32 = 1073741823;
-
-pub type PICO_POINTER = *mut ::std::os::raw::c_void;
 pub type PICO_INFO = u32;
 pub type PICO_STATUS = u32;
-pub const enPicoStringValue_PICO_SV_MEMORY: enPicoStringValue = 0;
-pub const enPicoStringValue_PICO_SV_MEMORY_NO_OF_SEGMENTS: enPicoStringValue = 1;
-pub const enPicoStringValue_PICO_SV_MEMORY_MAX_SAMPLES: enPicoStringValue = 2;
-pub const enPicoStringValue_PICO_SV_NO_OF_CHANNELS: enPicoStringValue = 3;
-pub const enPicoStringValue_PICO_SV_ARRAY_OF_CHANNELS: enPicoStringValue = 4;
-pub const enPicoStringValue_PICO_SV_CHANNEL: enPicoStringValue = 5;
-pub const enPicoStringValue_PICO_SV_CHANNEL_NAME: enPicoStringValue = 6;
-pub const enPicoStringValue_PICO_SV_CHANNEL_RANGE: enPicoStringValue = 7;
-pub const enPicoStringValue_PICO_SV_CHANNEL_COUPLING: enPicoStringValue = 8;
-pub const enPicoStringValue_PICO_SV_CHANNEL_ENABLED: enPicoStringValue = 9;
-pub const enPicoStringValue_PICO_SV_CHANNEL_ANALOGUE_OFFSET: enPicoStringValue = 10;
-pub const enPicoStringValue_PICO_SV_CHANNEL_FILTER: enPicoStringValue = 11;
-pub const enPicoStringValue_PICO_SV_TRIGGER: enPicoStringValue = 12;
-pub const enPicoStringValue_PICO_SV_TRIGGER_AUXIO_OUTPUT_ENABLED: enPicoStringValue = 13;
-pub const enPicoStringValue_PICO_SV_TRIGGER_AUTO_TRIGGER_MICROSECONDS: enPicoStringValue = 14;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES: enPicoStringValue = 15;
-pub const enPicoStringValue_PICO_SV_NO_OF_TRIGGER_PROPERTIES: enPicoStringValue = 16;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_CHANNEL: enPicoStringValue = 17;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_UPPER: enPicoStringValue = 18;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_UPPER_HYSTERESIS:
-    enPicoStringValue = 19;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_LOWER: enPicoStringValue = 20;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_LOWER_HYSTERESIS:
-    enPicoStringValue = 21;
-pub const enPicoStringValue_PICO_SV_TRIGGER_PROPERTIES_THRESHOLD_MODE: enPicoStringValue = 22;
-pub const enPicoStringValue_PICO_SV_TRIGGER_ARRAY_OF_BLOCK_CONDITIONS: enPicoStringValue = 23;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_BLOCK_CONDITIONS: enPicoStringValue = 24;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITIONS: enPicoStringValue = 25;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_CONDITIONS: enPicoStringValue = 26;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITION_SOURCE: enPicoStringValue = 27;
-pub const enPicoStringValue_PICO_SV_TRIGGER_CONDITION_STATE: enPicoStringValue = 28;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION: enPicoStringValue = 29;
-pub const enPicoStringValue_PICO_SV_TRIGGER_NO_OF_DIRECTIONS: enPicoStringValue = 30;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION_CHANNEL: enPicoStringValue = 31;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DIRECTION_DIRECTION: enPicoStringValue = 32;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DELAY: enPicoStringValue = 33;
-pub const enPicoStringValue_PICO_SV_TRIGGER_DELAY_MS: enPicoStringValue = 34;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER: enPicoStringValue = 35;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_ENABLED: enPicoStringValue = 36;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_CHANNEL: enPicoStringValue = 37;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_RANGE: enPicoStringValue = 38;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_TRESHOLDMAJOR: enPicoStringValue = 39;
-pub const enPicoStringValue_PICO_SV_FREQUENCY_COUNTER_TRESHOLDMINOR: enPicoStringValue = 40;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES: enPicoStringValue = 41;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_DIRECTION: enPicoStringValue = 42;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_LOWER: enPicoStringValue = 43;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_UPPER: enPicoStringValue = 44;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_PROPERTIES_TYPE: enPicoStringValue = 45;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_ARRAY_OF_BLOCK_CONDITIONS: enPicoStringValue = 46;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_NO_OF_BLOCK_CONDITIONS: enPicoStringValue = 47;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS: enPicoStringValue = 48;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_NO_OF_CONDITIONS: enPicoStringValue = 49;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS_SOURCE: enPicoStringValue = 50;
-pub const enPicoStringValue_PICO_SV_PULSE_WIDTH_CONDITIONS_STATE: enPicoStringValue = 51;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES: enPicoStringValue = 52;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_PRE_TRIGGER_SAMPLES: enPicoStringValue = 53;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_POST_TRIGGER_SAMPLES: enPicoStringValue = 54;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_TIMEBASE: enPicoStringValue = 55;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_NO_OF_CAPTURES: enPicoStringValue = 56;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_RESOLUTION: enPicoStringValue = 57;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED: enPicoStringValue = 58;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_DOWN_SAMPLE_RATIO:
-    enPicoStringValue = 59;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_DOWN_SAMPLE_RATIO_MODE:
-    enPicoStringValue = 60;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_REQUERSTED_NO_OF_SAMPLES:
-    enPicoStringValue = 61;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_SEGMENT_INDEX_FROM:
-    enPicoStringValue = 62;
-pub const enPicoStringValue_PICO_SV_SAMPLE_PROPERTIES_OVERLAPPED_SEGMENT_INDEX_TO:
-    enPicoStringValue = 63;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR: enPicoStringValue = 64;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN: enPicoStringValue = 65;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_WAVE_TYPE: enPicoStringValue = 66;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_START_FREQUENCY: enPicoStringValue =
-    67;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_STOP_FREQUENCY: enPicoStringValue =
-    68;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_INCREMENT: enPicoStringValue = 69;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_BUILT_IN_DWELL_TIME: enPicoStringValue = 70;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG: enPicoStringValue = 71;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_START_DELTA_PHASE: enPicoStringValue = 72;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_STOP_DELTA_PHASE: enPicoStringValue = 73;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_DELTA_PHASE_INCREMENT: enPicoStringValue =
-    74;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_DWELL_COUNT: enPicoStringValue = 75;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_INDEX_MODE: enPicoStringValue = 76;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_AWG_WAVEFORM_SIZE: enPicoStringValue = 77;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_ARRAY_OF_AWG_WAVEFORM_VALUES:
-    enPicoStringValue = 78;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_OFFSET_VOLTAGE: enPicoStringValue = 79;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_PK_TO_PK: enPicoStringValue = 80;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_OPERATION: enPicoStringValue = 81;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SHOTS: enPicoStringValue = 82;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SWEEPS: enPicoStringValue = 83;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_SWEEP_TYPE: enPicoStringValue = 84;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_TRIGGER_TYPE: enPicoStringValue = 85;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_TRIGGER_SOURCE: enPicoStringValue = 86;
-pub const enPicoStringValue_PICO_SV_SIGNAL_GENERATOR_EXT_IN_THRESHOLD: enPicoStringValue = 87;
-pub const enPicoStringValue_PICO_SV_ETS: enPicoStringValue = 88;
-pub const enPicoStringValue_PICO_SV_ETS_STATE: enPicoStringValue = 89;
-pub const enPicoStringValue_PICO_SV_ETS_CYCLE: enPicoStringValue = 90;
-pub const enPicoStringValue_PICO_SV_ETS_INTERLEAVE: enPicoStringValue = 91;
-pub const enPicoStringValue_PICO_SV_ETS_SAMPLE_TIME_PICOSECONDS: enPicoStringValue = 92;
-pub type enPicoStringValue = ::std::os::raw::c_uint;
-pub use self::enPicoStringValue as PICO_STRING_VALUE;
 pub const enChannelBufferIndex_PS4000_CHANNEL_A_MAX: enChannelBufferIndex = 0;
 pub const enChannelBufferIndex_PS4000_CHANNEL_A_MIN: enChannelBufferIndex = 1;
 pub const enChannelBufferIndex_PS4000_CHANNEL_B_MAX: enChannelBufferIndex = 2;
@@ -336,7 +228,6 @@ pub struct tTriggerChannelProperties {
     pub channel: PS4000_CHANNEL,
     pub thresholdMode: THRESHOLD_MODE,
 }
-
 pub type TRIGGER_CHANNEL_PROPERTIES = tTriggerChannelProperties;
 pub const enRatioMode_RATIO_MODE_NONE: enRatioMode = 0;
 pub const enRatioMode_RATIO_MODE_AGGREGATE: enRatioMode = 1;
@@ -362,7 +253,7 @@ pub const enPS4000FrequencyCounterRange_FC_MAX: enPS4000FrequencyCounterRange = 
 pub type enPS4000FrequencyCounterRange = ::std::os::raw::c_uint;
 pub use self::enPS4000FrequencyCounterRange as PS4000_FREQUENCY_COUNTER_RANGE;
 pub type ps4000BlockReady = ::std::option::Option<
-    extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
+    unsafe extern "C" fn(handle: i16, status: PICO_STATUS, pParameter: *mut ::std::os::raw::c_void),
 >;
 pub type ps4000StreamingReady = ::std::option::Option<
     unsafe extern "C" fn(
@@ -386,20 +277,8 @@ pub type ps4000DataReady = ::std::option::Option<
         pParameter: *mut ::std::os::raw::c_void,
     ),
 >;
-pub type __builtin_va_list = [__va_list_tag; 1usize];
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct __va_list_tag {
-    pub gp_offset: ::std::os::raw::c_uint,
-    pub fp_offset: ::std::os::raw::c_uint,
-    pub overflow_arg_area: *mut ::std::os::raw::c_void,
-    pub reg_save_area: *mut ::std::os::raw::c_void,
-}
-
-extern crate libloading;
 pub struct PS4000Loader {
     __library: ::libloading::Library,
-    pub ps4000ApplyFix: Result<unsafe extern "C" fn(u32, u16), ::libloading::Error>,
     pub ps4000OpenUnit:
         Result<unsafe extern "C" fn(handle: *mut i16) -> PICO_STATUS, ::libloading::Error>,
     pub ps4000OpenUnitAsync:
@@ -924,14 +803,22 @@ pub struct PS4000Loader {
         unsafe extern "C" fn(handle: i16, nCaptures: *mut u16) -> PICO_STATUS,
         ::libloading::Error,
     >,
+    pub ps4000ApplyFix: Result<unsafe extern "C" fn(arg1: u32, arg2: u16), ::libloading::Error>,
 }
 impl PS4000Loader {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let __library = ::libloading::Library::new(path)?;
-        let ps4000ApplyFix = __library.get(b"ps4000ApplyFix\0").map(|sym| *sym);
+        let path = path.as_ref();
+        let library = ::libloading::Library::new(path)?;
+        Self::from_library(library)
+    }
+    pub unsafe fn from_library<L>(library: L) -> Result<Self, ::libloading::Error>
+    where
+        L: Into<::libloading::Library>,
+    {
+        let __library = library.into();
         let ps4000OpenUnit = __library.get(b"ps4000OpenUnit\0").map(|sym| *sym);
         let ps4000OpenUnitAsync = __library.get(b"ps4000OpenUnitAsync\0").map(|sym| *sym);
         let ps4000OpenUnitEx = __library.get(b"ps4000OpenUnitEx\0").map(|sym| *sym);
@@ -1045,9 +932,9 @@ impl PS4000Loader {
             .get(b"ps4000TriggerWithinPreTriggerSamples\0")
             .map(|sym| *sym);
         let ps4000GetNoOfCaptures = __library.get(b"ps4000GetNoOfCaptures\0").map(|sym| *sym);
+        let ps4000ApplyFix = __library.get(b"ps4000ApplyFix\0").map(|sym| *sym);
         Ok(PS4000Loader {
             __library,
-            ps4000ApplyFix,
             ps4000OpenUnit,
             ps4000OpenUnitAsync,
             ps4000OpenUnitEx,
@@ -1113,42 +1000,32 @@ impl PS4000Loader {
             ps4000SetBwFilter,
             ps4000TriggerWithinPreTriggerSamples,
             ps4000GetNoOfCaptures,
+            ps4000ApplyFix,
         })
     }
-    pub unsafe fn ps4000ApplyFix(&self, a: u32, b: u16) {
-        let sym = self
-            .ps4000ApplyFix
-            .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(a, b)
-    }
     pub unsafe fn ps4000OpenUnit(&self, handle: *mut i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000OpenUnit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps4000OpenUnitAsync(&self, status: *mut i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000OpenUnitAsync
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(status)
+            .expect("Expected function, got error."))(status)
     }
     pub unsafe fn ps4000OpenUnitEx(&self, handle: *mut i16, serial: *mut i8) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000OpenUnitEx
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, serial)
+            .expect("Expected function, got error."))(handle, serial)
     }
     pub unsafe fn ps4000OpenUnitAsyncEx(&self, status: *mut i16, serial: *mut i8) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000OpenUnitAsyncEx
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(status, serial)
+            .expect("Expected function, got error."))(status, serial)
     }
     pub unsafe fn ps4000OpenUnitProgress(
         &self,
@@ -1156,11 +1033,10 @@ impl PS4000Loader {
         progressPercent: *mut i16,
         complete: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000OpenUnitProgress
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, progressPercent, complete)
+            .expect("Expected function, got error."))(handle, progressPercent, complete)
     }
     pub unsafe fn ps4000GetUnitInfo(
         &self,
@@ -1170,32 +1046,34 @@ impl PS4000Loader {
         requiredSize: *mut i16,
         info: PICO_INFO,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetUnitInfo
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, string, stringLength, requiredSize, info)
+            .expect("Expected function, got error."))(
+            handle,
+            string,
+            stringLength,
+            requiredSize,
+            info,
+        )
     }
     pub unsafe fn ps4000FlashLed(&self, handle: i16, start: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000FlashLed
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, start)
+            .expect("Expected function, got error."))(handle, start)
     }
     pub unsafe fn ps4000IsLedFlashing(&self, handle: i16, status: *mut i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000IsLedFlashing
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, status)
+            .expect("Expected function, got error."))(handle, status)
     }
     pub unsafe fn ps4000CloseUnit(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000CloseUnit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps4000MemorySegments(
         &self,
@@ -1203,11 +1081,10 @@ impl PS4000Loader {
         nSegments: u16,
         nMaxSamples: *mut i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000MemorySegments
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nSegments, nMaxSamples)
+            .expect("Expected function, got error."))(handle, nSegments, nMaxSamples)
     }
     pub unsafe fn ps4000SetChannel(
         &self,
@@ -1217,18 +1094,16 @@ impl PS4000Loader {
         dc: i16,
         range: PS4000_RANGE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetChannel
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, enabled, dc, range)
+            .expect("Expected function, got error."))(handle, channel, enabled, dc, range)
     }
     pub unsafe fn ps4000SetNoOfCaptures(&self, handle: i16, nCaptures: u16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetNoOfCaptures
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nCaptures)
+            .expect("Expected function, got error."))(handle, nCaptures)
     }
     pub unsafe fn ps4000GetTimebase(
         &self,
@@ -1240,11 +1115,10 @@ impl PS4000Loader {
         maxSamples: *mut i32,
         segmentIndex: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetTimebase
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             timebase,
             noSamples,
@@ -1264,11 +1138,10 @@ impl PS4000Loader {
         maxSamples: *mut i32,
         segmentIndex: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetTimebase2
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             timebase,
             noSamples,
@@ -1279,11 +1152,10 @@ impl PS4000Loader {
         )
     }
     pub unsafe fn ps4000SigGenOff(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SigGenOff
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps4000SetSigGenArbitrary(
         &self,
@@ -1305,11 +1177,10 @@ impl PS4000Loader {
         triggerSource: SIGGEN_TRIG_SOURCE,
         extInThreshold: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetSigGenArbitrary
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             offsetVoltage,
             pkToPk,
@@ -1347,11 +1218,10 @@ impl PS4000Loader {
         triggerSource: SIGGEN_TRIG_SOURCE,
         extInThreshold: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetSigGenBuiltIn
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             offsetVoltage,
             pkToPk,
@@ -1377,11 +1247,16 @@ impl PS4000Loader {
         bufferLength: u32,
         phase: *mut u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SigGenFrequencyToPhase
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, frequency, indexMode, bufferLength, phase)
+            .expect("Expected function, got error."))(
+            handle,
+            frequency,
+            indexMode,
+            bufferLength,
+            phase,
+        )
     }
     pub unsafe fn ps4000SigGenArbitraryMinMaxValues(
         &self,
@@ -1391,11 +1266,10 @@ impl PS4000Loader {
         minArbitraryWaveformSize: *mut u32,
         maxArbitraryWaveformSize: *mut u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SigGenArbitraryMinMaxValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             minArbitraryWaveformValue,
             maxArbitraryWaveformValue,
@@ -1404,11 +1278,10 @@ impl PS4000Loader {
         )
     }
     pub unsafe fn ps4000SigGenSoftwareControl(&self, handle: i16, state: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SigGenSoftwareControl
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, state)
+            .expect("Expected function, got error."))(handle, state)
     }
     pub unsafe fn ps4000SetEts(
         &self,
@@ -1418,11 +1291,10 @@ impl PS4000Loader {
         etsInterleave: i16,
         sampleTimePicoseconds: *mut i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetEts
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             mode,
             etsCycles,
@@ -1440,11 +1312,10 @@ impl PS4000Loader {
         delay: u32,
         autoTrigger_ms: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetSimpleTrigger
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             enable,
             source,
@@ -1462,11 +1333,10 @@ impl PS4000Loader {
         auxOutputEnable: i16,
         autoTriggerMilliseconds: i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetTriggerChannelProperties
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             channelProperties,
             nChannelProperties,
@@ -1479,11 +1349,10 @@ impl PS4000Loader {
         handle: i16,
         extRange: PS4000_RANGE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetExtTriggerRange
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, extRange)
+            .expect("Expected function, got error."))(handle, extRange)
     }
     pub unsafe fn ps4000SetTriggerChannelConditions(
         &self,
@@ -1491,11 +1360,10 @@ impl PS4000Loader {
         conditions: *mut TRIGGER_CONDITIONS,
         nConditions: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetTriggerChannelConditions
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, conditions, nConditions)
+            .expect("Expected function, got error."))(handle, conditions, nConditions)
     }
     pub unsafe fn ps4000SetTriggerChannelDirections(
         &self,
@@ -1507,18 +1375,18 @@ impl PS4000Loader {
         ext: THRESHOLD_DIRECTION,
         aux: THRESHOLD_DIRECTION,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetTriggerChannelDirections
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channelA, channelB, channelC, channelD, ext, aux)
+            .expect("Expected function, got error."))(
+            handle, channelA, channelB, channelC, channelD, ext, aux,
+        )
     }
     pub unsafe fn ps4000SetTriggerDelay(&self, handle: i16, delay: u32) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetTriggerDelay
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, delay)
+            .expect("Expected function, got error."))(handle, delay)
     }
     pub unsafe fn ps4000SetPulseWidthQualifier(
         &self,
@@ -1530,11 +1398,10 @@ impl PS4000Loader {
         upper: u32,
         type_: PULSE_WIDTH_TYPE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetPulseWidthQualifier
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             conditions,
             nConditions,
@@ -1550,11 +1417,14 @@ impl PS4000Loader {
         triggerEnabled: *mut i16,
         pulseWidthQualifierEnabled: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000IsTriggerOrPulseWidthQualifierEnabled
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, triggerEnabled, pulseWidthQualifierEnabled)
+            .expect("Expected function, got error."))(
+            handle,
+            triggerEnabled,
+            pulseWidthQualifierEnabled,
+        )
     }
     pub unsafe fn ps4000GetTriggerTimeOffset(
         &self,
@@ -1564,11 +1434,16 @@ impl PS4000Loader {
         timeUnits: *mut PS4000_TIME_UNITS,
         segmentIndex: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetTriggerTimeOffset
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, timeUpper, timeLower, timeUnits, segmentIndex)
+            .expect("Expected function, got error."))(
+            handle,
+            timeUpper,
+            timeLower,
+            timeUnits,
+            segmentIndex,
+        )
     }
     pub unsafe fn ps4000GetTriggerChannelTimeOffset(
         &self,
@@ -1579,11 +1454,10 @@ impl PS4000Loader {
         segmentIndex: u16,
         channel: PS4000_CHANNEL,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetTriggerChannelTimeOffset
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             timeUpper,
             timeLower,
@@ -1599,11 +1473,10 @@ impl PS4000Loader {
         timeUnits: *mut PS4000_TIME_UNITS,
         segmentIndex: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetTriggerTimeOffset64
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, time, timeUnits, segmentIndex)
+            .expect("Expected function, got error."))(handle, time, timeUnits, segmentIndex)
     }
     pub unsafe fn ps4000GetTriggerChannelTimeOffset64(
         &self,
@@ -1613,11 +1486,16 @@ impl PS4000Loader {
         segmentIndex: u16,
         channel: PS4000_CHANNEL,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetTriggerChannelTimeOffset64
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, time, timeUnits, segmentIndex, channel)
+            .expect("Expected function, got error."))(
+            handle,
+            time,
+            timeUnits,
+            segmentIndex,
+            channel,
+        )
     }
     pub unsafe fn ps4000GetValuesTriggerTimeOffsetBulk(
         &self,
@@ -1628,11 +1506,10 @@ impl PS4000Loader {
         fromSegmentIndex: u16,
         toSegmentIndex: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetValuesTriggerTimeOffsetBulk
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             timesUpper,
             timesLower,
@@ -1651,11 +1528,10 @@ impl PS4000Loader {
         toSegmentIndex: u16,
         channel: PS4000_CHANNEL,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetValuesTriggerChannelTimeOffsetBulk
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             timesUpper,
             timesLower,
@@ -1673,11 +1549,16 @@ impl PS4000Loader {
         fromSegmentIndex: u16,
         toSegmentIndex: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetValuesTriggerTimeOffsetBulk64
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, times, timeUnits, fromSegmentIndex, toSegmentIndex)
+            .expect("Expected function, got error."))(
+            handle,
+            times,
+            timeUnits,
+            fromSegmentIndex,
+            toSegmentIndex,
+        )
     }
     pub unsafe fn ps4000GetValuesTriggerChannelTimeOffsetBulk64(
         &self,
@@ -1688,11 +1569,10 @@ impl PS4000Loader {
         toSegmentIndex: u16,
         channel: PS4000_CHANNEL,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetValuesTriggerChannelTimeOffsetBulk64
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             times,
             timeUnits,
@@ -1709,11 +1589,12 @@ impl PS4000Loader {
         bufferLth: i32,
         waveform: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetDataBufferBulk
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, buffer, bufferLth, waveform)
+            .expect("Expected function, got error."))(
+            handle, channel, buffer, bufferLth, waveform
+        )
     }
     pub unsafe fn ps4000SetDataBuffers(
         &self,
@@ -1723,11 +1604,12 @@ impl PS4000Loader {
         bufferMin: *mut i16,
         bufferLth: i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetDataBuffers
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, bufferMax, bufferMin, bufferLth)
+            .expect("Expected function, got error."))(
+            handle, channel, bufferMax, bufferMin, bufferLth,
+        )
     }
     pub unsafe fn ps4000SetDataBufferWithMode(
         &self,
@@ -1737,11 +1619,12 @@ impl PS4000Loader {
         bufferLth: i32,
         mode: RATIO_MODE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetDataBufferWithMode
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, buffer, bufferLth, mode)
+            .expect("Expected function, got error."))(
+            handle, channel, buffer, bufferLth, mode
+        )
     }
     pub unsafe fn ps4000SetDataBuffersWithMode(
         &self,
@@ -1752,11 +1635,12 @@ impl PS4000Loader {
         bufferLth: i32,
         mode: RATIO_MODE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetDataBuffersWithMode
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, bufferMax, bufferMin, bufferLth, mode)
+            .expect("Expected function, got error."))(
+            handle, channel, bufferMax, bufferMin, bufferLth, mode,
+        )
     }
     pub unsafe fn ps4000SetDataBuffer(
         &self,
@@ -1765,11 +1649,10 @@ impl PS4000Loader {
         buffer: *mut i16,
         bufferLth: i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetDataBuffer
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, buffer, bufferLth)
+            .expect("Expected function, got error."))(handle, channel, buffer, bufferLth)
     }
     pub unsafe fn ps4000SetEtsTimeBuffer(
         &self,
@@ -1777,11 +1660,10 @@ impl PS4000Loader {
         buffer: *mut i64,
         bufferLth: i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetEtsTimeBuffer
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, buffer, bufferLth)
+            .expect("Expected function, got error."))(handle, buffer, bufferLth)
     }
     pub unsafe fn ps4000SetEtsTimeBuffers(
         &self,
@@ -1790,11 +1672,12 @@ impl PS4000Loader {
         timeLower: *mut u32,
         bufferLth: i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetEtsTimeBuffers
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, timeUpper, timeLower, bufferLth)
+            .expect("Expected function, got error."))(
+            handle, timeUpper, timeLower, bufferLth
+        )
     }
     pub unsafe fn ps4000RunBlock(
         &self,
@@ -1808,11 +1691,10 @@ impl PS4000Loader {
         lpReady: ps4000BlockReady,
         pParameter: *mut ::std::os::raw::c_void,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000RunBlock
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             noOfPreTriggerSamples,
             noOfPostTriggerSamples,
@@ -1835,11 +1717,10 @@ impl PS4000Loader {
         downSampleRatio: u32,
         overviewBufferSize: u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000RunStreaming
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             sampleInterval,
             sampleIntervalTimeUnits,
@@ -1862,11 +1743,10 @@ impl PS4000Loader {
         downSampleRatioMode: i16,
         overviewBufferSize: u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000RunStreamingEx
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             sampleInterval,
             sampleIntervalTimeUnits,
@@ -1879,11 +1759,10 @@ impl PS4000Loader {
         )
     }
     pub unsafe fn ps4000IsReady(&self, handle: i16, ready: *mut i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000IsReady
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, ready)
+            .expect("Expected function, got error."))(handle, ready)
     }
     pub unsafe fn ps4000GetStreamingLatestValues(
         &self,
@@ -1891,22 +1770,20 @@ impl PS4000Loader {
         lpPs4000Ready: ps4000StreamingReady,
         pParameter: *mut ::std::os::raw::c_void,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetStreamingLatestValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, lpPs4000Ready, pParameter)
+            .expect("Expected function, got error."))(handle, lpPs4000Ready, pParameter)
     }
     pub unsafe fn ps4000NoOfStreamingValues(
         &self,
         handle: i16,
         noOfValues: *mut u32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000NoOfStreamingValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, noOfValues)
+            .expect("Expected function, got error."))(handle, noOfValues)
     }
     pub unsafe fn ps4000GetMaxDownSampleRatio(
         &self,
@@ -1916,11 +1793,10 @@ impl PS4000Loader {
         downSampleRatioMode: i16,
         segmentIndex: u16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetMaxDownSampleRatio
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             noOfUnaggreatedSamples,
             maxDownSampleRatio,
@@ -1938,11 +1814,10 @@ impl PS4000Loader {
         segmentIndex: u16,
         overflow: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetValues
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             startIndex,
             noOfSamples,
@@ -1960,11 +1835,10 @@ impl PS4000Loader {
         toSegmentIndex: u16,
         overflow: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetValuesBulk
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             noOfSamples,
             fromSegmentIndex,
@@ -1983,11 +1857,10 @@ impl PS4000Loader {
         lpDataReady: *mut ::std::os::raw::c_void,
         pParameter: *mut ::std::os::raw::c_void,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetValuesAsync
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             startIndex,
             noOfSamples,
@@ -1999,11 +1872,10 @@ impl PS4000Loader {
         )
     }
     pub unsafe fn ps4000Stop(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000Stop
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps4000SetProbe(
         &self,
@@ -2011,11 +1883,10 @@ impl PS4000Loader {
         probe: PS4000_PROBE,
         range: PS4000_RANGE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetProbe
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, probe, range)
+            .expect("Expected function, got error."))(handle, probe, range)
     }
     pub unsafe fn ps4000HoldOff(
         &self,
@@ -2023,18 +1894,16 @@ impl PS4000Loader {
         holdoff: u64,
         type_: PS4000_HOLDOFF_TYPE,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000HoldOff
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, holdoff, type_)
+            .expect("Expected function, got error."))(handle, holdoff, type_)
     }
     pub unsafe fn ps4000GetProbe(&self, handle: i16, probe: *mut PS4000_PROBE) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetProbe
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, probe)
+            .expect("Expected function, got error."))(handle, probe)
     }
     pub unsafe fn ps4000GetChannelInformation(
         &self,
@@ -2045,11 +1914,12 @@ impl PS4000Loader {
         length: *mut i32,
         channels: i32,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetChannelInformation
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, info, probe, ranges, length, channels)
+            .expect("Expected function, got error."))(
+            handle, info, probe, ranges, length, channels
+        )
     }
     pub unsafe fn ps4000SetFrequencyCounter(
         &self,
@@ -2060,11 +1930,10 @@ impl PS4000Loader {
         thresholdMajor: i16,
         thresholdMinor: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetFrequencyCounter
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(
+            .expect("Expected function, got error."))(
             handle,
             channel,
             enabled,
@@ -2079,18 +1948,16 @@ impl PS4000Loader {
         serials: *mut i8,
         serialLth: *mut i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000EnumerateUnits
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(count, serials, serialLth)
+            .expect("Expected function, got error."))(count, serials, serialLth)
     }
     pub unsafe fn ps4000PingUnit(&self, handle: i16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000PingUnit
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle)
+            .expect("Expected function, got error."))(handle)
     }
     pub unsafe fn ps4000SetBwFilter(
         &self,
@@ -2098,28 +1965,31 @@ impl PS4000Loader {
         channel: PS4000_CHANNEL,
         enable: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000SetBwFilter
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, channel, enable)
+            .expect("Expected function, got error."))(handle, channel, enable)
     }
     pub unsafe fn ps4000TriggerWithinPreTriggerSamples(
         &self,
         handle: i16,
         state: i16,
     ) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000TriggerWithinPreTriggerSamples
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, state)
+            .expect("Expected function, got error."))(handle, state)
     }
     pub unsafe fn ps4000GetNoOfCaptures(&self, handle: i16, nCaptures: *mut u16) -> PICO_STATUS {
-        let sym = self
+        (self
             .ps4000GetNoOfCaptures
             .as_ref()
-            .expect("Expected function, got error.");
-        (sym)(handle, nCaptures)
+            .expect("Expected function, got error."))(handle, nCaptures)
+    }
+    pub unsafe fn ps4000ApplyFix(&self, arg1: u32, arg2: u16) {
+        (self
+            .ps4000ApplyFix
+            .as_ref()
+            .expect("Expected function, got error."))(arg1, arg2)
     }
 }

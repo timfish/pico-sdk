@@ -266,6 +266,7 @@ impl DrDAQLoader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let path = path.as_ref();
         let library = ::libloading::Library::new(path)?;
         Self::from_library(library)
     }
