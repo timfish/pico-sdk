@@ -14,6 +14,9 @@ pub struct ScopeCapabilities {
     pub digital_ports: u8,
     pub sig_gen: Option<SigGenCapabilities>,
     pub aux_io: bool,
+    /// An RGB LED by each channel input that `LedDriver` sets
+    /// (3000E and 5000E). Asked of the driver at open.
+    pub channel_leds: bool,
     /// Analogue bandwidth at -3 dB, from the model's data sheet, at its
     /// best. `None` for a model the tables do not list.
     pub bandwidth_hz: Option<u64>,

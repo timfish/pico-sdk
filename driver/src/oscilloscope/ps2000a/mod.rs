@@ -4,6 +4,7 @@ mod capabilities;
 mod digital;
 mod ets;
 mod extras;
+mod led;
 mod rapid_block;
 mod siggen;
 mod streaming;

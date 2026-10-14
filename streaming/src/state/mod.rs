@@ -334,6 +334,15 @@ where
         }
     }
 
+    /// Runs `f` on the device and its info between two steps, so a
+    /// driver call that a stream allows runs with no stop. `None` while
+    /// the device is closed.
+    pub fn with_open<R>(&self, f: impl FnOnce(&Device, &Info) -> R) -> Option<R> {
+        let _steps = self.steps.lock();
+        let info = self.state.read().current.get_info()?;
+        Some(f(&self.device, &info))
+    }
+
     fn start_background_thread(&mut self) {
         let (tx_terminate, rx_terminate) = bounded::<()>(0);
 
