@@ -17,7 +17,9 @@ pub struct TC08StreamingEvent {
 ///
 /// Channels missing from the config are yielded as `None` so that `start` disables them rather
 /// than leaving whatever the previous run configured.
-fn all_channel_settings(config: &TC08Config) -> impl Iterator<Item = (TC08Channel, Option<TCType>)> + '_ {
+fn all_channel_settings(
+    config: &TC08Config,
+) -> impl Iterator<Item = (TC08Channel, Option<TCType>)> + '_ {
     enum_iterator::all::<TC08Channel>()
         .map(move |channel| (channel, config.channels.get(&channel).copied().flatten()))
 }

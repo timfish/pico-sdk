@@ -1,11 +1,14 @@
 use super::{
+    buffer_pointer,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result, EnumerationResult, OscilloscopeDriverInternal,
+    PicoStreamMode, SampleBuffer,
 };
 use parking_lot::RwLock;
 use pico_common::{
-    Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
-    PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, ToPicoStr,
+    Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
+    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution,
+    PicoResult, PicoStatus, SampleType, ToPicoStr,
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL,
@@ -96,6 +99,8 @@ pub struct PSOSPADriver {
     resolutions: RwLock<HashMap<i16, enPicoDeviceResolution>>,
     /// Parsed `psospaGetVariantDetails` output, by variant name.
     variant_details: RwLock<HashMap<String, Arc<JsonValue>>>,
+    /// The ratio mode and data type of each handle's buffers.
+    streams: RwLock<HashMap<i16, PicoStreamMode>>,
 }
 
 impl std::fmt::Debug for PSOSPADriver {
@@ -116,6 +121,7 @@ impl PSOSPADriver {
             _dependencies: dependencies,
             resolutions: RwLock::new(HashMap::new()),
             variant_details: RwLock::new(HashMap::new()),
+            streams: RwLock::new(HashMap::new()),
         })
     }
 
@@ -168,6 +174,14 @@ impl PSOSPADriver {
 }
 
 impl OscilloscopeDriverInternal for PSOSPADriver {
+    fn downsample_modes(&self) -> &'static [DownsampleKind] {
+        &[DownsampleKind::Average, DownsampleKind::Sum]
+    }
+
+    fn sample_types(&self) -> &'static [SampleType] {
+        &[SampleType::I8, SampleType::I16, SampleType::I32]
+    }
+
     fn get_driver(&self) -> Driver {
         Driver::PS3000A
     }
@@ -263,6 +277,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn close(&self, handle: i16) -> PicoResult<()> {
+        self.streams.write().remove(&handle);
         self.resolutions.write().remove(&handle);
         PicoStatus::from(unsafe { self.bindings.psospaCloseUnit(handle) })
             .to_result((), "close_unit")
@@ -378,20 +393,22 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         &self,
         handle: i16,
         channel: PicoChannel,
-        buffer: Arc<RwLock<Vec<i16>>>,
+        buffer: SampleBuffer,
         buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<()> {
-        let mut buffer = buffer.write();
+        let stream = PicoStreamMode::new(downsample, buffer.sample_type())?;
+        self.streams.write().insert(handle, stream);
 
         PicoStatus::from(unsafe {
             self.bindings.psospaSetDataBuffer(
                 handle,
                 channel.into(),
-                buffer.as_mut_ptr() as PICO_POINTER,
+                buffer_pointer(&buffer),
                 buffer_len as i32,
-                enPicoDataType_PICO_INT16_T,
+                stream.data_type,
                 0,
-                enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                stream.mode,
                 enPicoAction_PICO_ADD,
             )
         })
@@ -405,7 +422,13 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         sample_config: &OscilloscopeSampleConfig,
         enabled_channels: u8,
         _buffer_len: usize,
+        downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig> {
+        let sample_type = match downsample.map(|d| d.mode) {
+            Some(DownsampleKind::Sum) => SampleType::I32,
+            _ => SampleType::I16,
+        };
+        let stream = PicoStreamMode::new(downsample, sample_type)?;
         let status = PicoStatus::from(unsafe {
             self.bindings
                 .psospaSetDeviceResolution(handle, self.resolution(handle))
@@ -428,8 +451,8 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
                 0,
                 sample_config.samples_per_second() as u64,
                 (false).into(),
-                1,
-                enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                stream.ratio,
+                stream.mode,
             )
         })
         .to_result(
@@ -445,16 +468,22 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
         channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
+        let stream = self.streams.read().get(&handle).copied().ok_or_else(|| {
+            PicoError::from_status(
+                PicoStatus::NO_SAMPLES_AVAILABLE,
+                "get_latest_streaming_values",
+            )
+        })?;
         let mut info: Vec<PICO_STREAMING_DATA_INFO> = channels
             .iter()
             .map(|ch| PICO_STREAMING_DATA_INFO {
                 bufferIndex_: 0,
                 channel_: (*ch).into(),
-                mode_: enPicoRatioMode_PICO_RATIO_MODE_RAW,
+                mode_: stream.mode,
                 noOfSamples_: 0,
                 overflow_: 0,
                 startIndex_: 0,
-                type_: enPicoDataType_PICO_INT16_T,
+                type_: stream.data_type,
             })
             .collect();
 

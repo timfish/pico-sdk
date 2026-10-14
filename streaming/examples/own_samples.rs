@@ -3,7 +3,9 @@
 
 use parking_lot::Mutex;
 use pico_common::PicoChannel;
-use pico_streaming::{EventEmitter, EventHandler, OscilloscopeStreamEvent, RawChannelDataBlock};
+use pico_streaming::{
+    EventEmitter, EventHandler, OscilloscopeStreamEvent, RawChannelDataBlock, Samples,
+};
 use std::{collections::HashMap, sync::Arc};
 
 struct Meter;
@@ -21,7 +23,7 @@ impl EventHandler<OscilloscopeStreamEvent> for Meter {
 
 /// Keeps the samples, as a recorder would.
 struct Recorder {
-    kept: Mutex<Vec<(PicoChannel, Vec<i16>)>>,
+    kept: Mutex<Vec<(PicoChannel, Samples)>>,
 }
 
 impl EventHandler<OscilloscopeStreamEvent> for Recorder {
@@ -51,14 +53,15 @@ fn main() {
     emitter.subscribe(&meter);
     emitter.subscribe(&as_handler);
 
-    let samples: Vec<i16> = (0..1_000).collect();
+    // An 8-bit scope with no downsample gives one byte a sample.
+    let samples: Vec<i8> = (0..1_000).map(|i| (i % 255 - 127) as i8).collect();
     let address = samples.as_ptr();
     let mut channels = HashMap::new();
     channels.insert(
         PicoChannel::A,
         RawChannelDataBlock {
-            multiplier: 5.0 / 32_767.0,
-            samples,
+            multiplier: 5.0 / 127.0,
+            samples: Samples::I8(samples),
         },
     );
     emitter.new_data(OscilloscopeStreamEvent {
@@ -68,8 +71,11 @@ fn main() {
     });
 
     let kept = recorder.kept.lock();
+    let Samples::I8(kept_samples) = &kept[0].1 else {
+        unreachable!("the event holds 8-bit samples")
+    };
     println!(
         "recorder holds the driver copy itself: {}",
-        kept[0].1.as_ptr() == address
+        kept_samples.as_ptr() == address
     );
 }

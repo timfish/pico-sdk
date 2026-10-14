@@ -136,7 +136,11 @@ impl PL1000Info {
     /// the PicoLog 1012 has channels 1 to 12 and the PicoLog 1216 channels 1 to 16. An unknown
     /// variant lists all 16.
     pub fn channels(&self) -> Vec<PL1000Channel> {
-        let count = if self.variant.contains("1012") { 12 } else { 16 };
+        let count = if self.variant.contains("1012") {
+            12
+        } else {
+            16
+        };
         enum_iterator::all::<PL1000Channel>().take(count).collect()
     }
 }

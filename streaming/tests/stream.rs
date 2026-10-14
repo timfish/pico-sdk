@@ -1,21 +1,23 @@
 #[cfg(test)]
 mod streaming_tests {
     use mockall::{mock, predicate::*, Sequence};
-    use parking_lot::RwLock;
     use pico_common::{
-        Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel, PicoCoupling,
-        PicoInfo, PicoRange, PicoResult,
+        Downsample, DownsampleKind, Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
+        PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
+        SampleType,
     };
     use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
     use pico_driver::{
-        oscilloscope::{EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal},
+        oscilloscope::{
+            EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal, SampleBuffer,
+        },
         DriverLoadError,
     };
-    use pico_streaming::IntoStreamingDevice;
+    use pico_streaming::{EventHandler, IntoStreamingDevice, OscilloscopeStreamEvent, Samples};
     use std::{
         sync::{
             atomic::{AtomicUsize, Ordering},
-            Arc,
+            Arc, Mutex,
         },
         thread,
         time::{Duration, Instant},
@@ -34,6 +36,11 @@ mod streaming_tests {
             fn close(&self, handle: i16) -> PicoResult<()>;
             fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String>;
             fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>>;
+            fn get_resolutions(&self, handle: i16) -> PicoResult<Vec<(PicoResolution, i16)>>;
+            fn get_resolution(&self, handle: i16) -> Option<PicoResolution>;
+            fn set_resolution(&self, handle: i16, resolution: PicoResolution) -> PicoResult<()>;
+            fn downsample_modes(&self) -> &'static [DownsampleKind];
+            fn sample_types(&self) -> &'static [SampleType];
             fn enable_channel(
                 &self,
                 handle: i16,
@@ -50,15 +57,17 @@ mod streaming_tests {
                 &self,
                 handle: i16,
                 channel: PicoChannel,
-                buffer: Arc<RwLock<Vec<i16>>>,
+                buffer: SampleBuffer,
                 buffer_len: usize,
+                downsample: Option<Downsample>,
             ) -> PicoResult<()>;
             fn start_streaming(
                 &self,
                 handle: i16,
                 sample_config: &OscilloscopeSampleConfig,
                 enabled_channels: u8,
-                buffer_len: usize
+                buffer_len: usize,
+                downsample: Option<Downsample>,
             ) -> PicoResult<OscilloscopeSampleConfig>;
             fn get_latest_streaming_values<'a>(
                 &self,
@@ -75,6 +84,18 @@ mod streaming_tests {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str("MockOscilloscopeDriver")
         }
+    }
+
+    /// A unit of fixed resolution whose driver averages into i16 buffers,
+    /// unless the test set other answers first.
+    fn fixed_resolution(mock: &mut MockMockDriver) {
+        mock.expect_get_resolutions().returning(|_| Ok(Vec::new()));
+        mock.expect_get_resolution().return_const(None);
+        mock.expect_set_resolution().return_const(Ok(()));
+        mock.expect_downsample_modes()
+            .return_const(&[DownsampleKind::Average][..]);
+        mock.expect_sample_types()
+            .return_const(&[SampleType::I16][..]);
     }
 
     #[test]
@@ -104,6 +125,7 @@ mod streaming_tests {
         mock.expect_start_streaming()
             .return_const(Ok(OscilloscopeSampleConfig::default()));
 
+        fixed_resolution(&mut mock);
         let driver = OscilloscopeDriver::new(mock);
         let device = driver.open_device(None).unwrap();
         let streaming = device.into_streaming_device();
@@ -155,6 +177,7 @@ mod streaming_tests {
         mock.expect_start_streaming()
             .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));
 
+        fixed_resolution(&mut mock);
         let driver = OscilloscopeDriver::new(mock);
         let device = driver.open_device(None).unwrap();
         let streaming = device.into_streaming_device();
@@ -209,6 +232,7 @@ mod streaming_tests {
         mock.expect_start_streaming()
             .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));
 
+        fixed_resolution(&mut mock);
         let driver = OscilloscopeDriver::new(mock);
         let device = driver.open_device(None).unwrap();
         let streaming = device.into_streaming_device();
@@ -262,12 +286,13 @@ mod streaming_tests {
                 .in_sequence(&mut seq)
                 .return_const(Ok(()));
             mock.expect_set_data_buffer()
-                .withf(move |_, ch, _, l| *ch == PicoChannel::A && *l == len)
+                .withf(move |_, ch, _, l, _| *ch == PicoChannel::A && *l == len)
                 .times(1)
                 .in_sequence(&mut seq)
                 .return_const(Ok(()));
         }
 
+        fixed_resolution(&mut mock);
         let driver = OscilloscopeDriver::new(mock);
         let device = driver.open_device(None).unwrap();
         let streaming = device.into_streaming_device();
@@ -280,5 +305,243 @@ mod streaming_tests {
         config.set_sample_rate(5_000);
         streaming.start(config).unwrap();
         streaming.close();
+    }
+
+    /// What one channel got: its samples and multiplier.
+    #[derive(Default)]
+    struct Got(Mutex<Vec<(Samples, f64)>>);
+
+    impl EventHandler<OscilloscopeStreamEvent> for Got {
+        fn new_data(&self, event: Arc<OscilloscopeStreamEvent>) {
+            let block = &event.channels[&PicoChannel::A];
+            self.0
+                .lock()
+                .unwrap()
+                .push((block.samples.clone(), block.multiplier));
+        }
+    }
+
+    /// A family as the streaming layer sees it.
+    struct Family {
+        max_adc: i16,
+        modes: &'static [DownsampleKind],
+        types: &'static [SampleType],
+        /// The resolution a flexible unit runs at.
+        resolution: Option<(PicoResolution, i16)>,
+    }
+
+    const PS2000: Family = Family {
+        max_adc: 32_767,
+        modes: &[],
+        types: &[SampleType::I16],
+        resolution: None,
+    };
+    const PS2000A: Family = Family {
+        max_adc: 32_512,
+        modes: &[DownsampleKind::Average],
+        types: &[SampleType::I16],
+        resolution: None,
+    };
+    const PS4000A: Family = Family {
+        max_adc: 32_767,
+        modes: &[DownsampleKind::Average],
+        types: &[SampleType::I16],
+        resolution: None,
+    };
+    const PSOSPA_8BIT: Family = Family {
+        max_adc: 32_512,
+        modes: &[DownsampleKind::Average, DownsampleKind::Sum],
+        types: &[SampleType::I8, SampleType::I16, SampleType::I32],
+        resolution: Some((PicoResolution::DR_8BIT, 32_512)),
+    };
+
+    struct Run {
+        result: PicoResult<()>,
+        buffer: Option<(SampleType, Option<Downsample>, usize)>,
+        started: Option<Option<Downsample>>,
+        got: Vec<(Samples, f64)>,
+        stored_hz: Option<f64>,
+    }
+
+    /// Streams channel A at ±2 V and 1 MS/s with `downsample` from a
+    /// mock of `family` whose buffer holds the codes `codes`.
+    fn run(family: &Family, downsample: Option<Downsample>, codes: &[i32]) -> Run {
+        let buffer = Arc::new(Mutex::new(None::<(SampleBuffer, Option<Downsample>)>));
+        let started = Arc::new(Mutex::new(None));
+        let mut mock = MockMockDriver::new();
+        mock.expect_open_unit().return_const(Ok(1));
+        mock.expect_get_unit_info().returning(|_, t| match t {
+            PicoInfo::BATCH_AND_SERIAL => Ok("ABC/1234".to_string()),
+            PicoInfo::VARIANT_INFO => Ok("2222".to_string()),
+            _ => Ok("".to_string()),
+        });
+        mock.expect_get_channel_ranges()
+            .returning(|_, _| Ok(vec![PicoRange::X1_PROBE_2V]));
+        let max_adc = family.max_adc;
+        mock.expect_maximum_value().returning(move |_| Ok(max_adc));
+        let resolution = family.resolution;
+        mock.expect_get_resolutions()
+            .returning(move |_| Ok(resolution.into_iter().collect()));
+        mock.expect_get_resolution()
+            .return_const(resolution.map(|(r, _)| r));
+        mock.expect_downsample_modes().return_const(family.modes);
+        mock.expect_sample_types().return_const(family.types);
+        fixed_resolution(&mut mock);
+        mock.expect_close().return_const(Ok(()));
+        mock.expect_enable_channel().return_const(Ok(()));
+        mock.expect_disable_channel().return_const(Ok(()));
+        mock.expect_ping_unit().return_const(Ok(()));
+        mock.expect_clear_data_buffers().return_const(Ok(()));
+        mock.expect_stop().return_const(Ok(()));
+        mock.expect_set_data_buffer().returning({
+            let buffer = buffer.clone();
+            move |_, _, b, _, d| {
+                *buffer.lock().unwrap() = Some((b, d));
+                Ok(())
+            }
+        });
+        mock.expect_start_streaming().returning({
+            let started = started.clone();
+            move |_, _, _, _, d| {
+                *started.lock().unwrap() = Some(d);
+                Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000_000))
+            }
+        });
+        let codes = codes.to_vec();
+        mock.expect_get_latest_streaming_values().returning({
+            let buffer = buffer.clone();
+            move |_, _, mut callback| {
+                if let Some((b, _)) = &*buffer.lock().unwrap() {
+                    match b {
+                        SampleBuffer::I8(b) => {
+                            let mut b = b.write();
+                            codes.iter().enumerate().for_each(|(i, c)| b[i] = *c as i8);
+                        }
+                        SampleBuffer::I16(b) => {
+                            let mut b = b.write();
+                            codes.iter().enumerate().for_each(|(i, c)| b[i] = *c as i16);
+                        }
+                        SampleBuffer::I32(b) => {
+                            let mut b = b.write();
+                            codes.iter().enumerate().for_each(|(i, c)| b[i] = *c);
+                        }
+                    }
+                }
+                callback(0, codes.len());
+                Ok(())
+            }
+        });
+
+        let driver = OscilloscopeDriver::new(mock);
+        let device = driver.open_device(None).unwrap();
+        let streaming = device.into_streaming_device();
+        let got = Arc::new(Got::default());
+        let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = got.clone();
+        streaming.events.subscribe(&handler);
+        let mut config = OscilloscopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000_000);
+        config.set_downsample(downsample);
+        let result = streaming.start(config);
+        let stored_hz = streaming.get_stream().map(|s| s.samples_per_second());
+        if result.is_ok() {
+            let waited = Instant::now();
+            while got.0.lock().unwrap().is_empty() {
+                assert!(waited.elapsed() < Duration::from_secs(5), "no event");
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+        streaming.close();
+        let buffer = buffer
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|(b, d)| (b.sample_type(), *d, b.len()));
+        let started = *started.lock().unwrap();
+        let got = std::mem::take(&mut *got.0.lock().unwrap());
+        Run {
+            result,
+            buffer,
+            started,
+            got,
+            stored_hz,
+        }
+    }
+
+    #[test]
+    fn an_8_bit_unit_with_i16_buffers_delivers_i8() {
+        let run = run(&PS2000A, None, &[-32_512, 256, 32_512]);
+        run.result.unwrap();
+        assert_eq!(run.buffer, Some((SampleType::I16, None, 3_000_000)));
+        let (samples, multiplier) = &run.got[0];
+        assert_eq!(samples, &Samples::I8(vec![-127, 1, 127]));
+        assert_eq!(*multiplier, 2.0 / 127.0);
+    }
+
+    #[test]
+    fn the_ps2000_stays_i16_and_refuses_a_downsample() {
+        let run_raw = run(&PS2000, None, &[32_767]);
+        run_raw.result.unwrap();
+        assert_eq!(run_raw.got[0].0, Samples::I16(vec![32_767]));
+
+        let refused = run(&PS2000, Some(Downsample::average(4)), &[]);
+        assert_eq!(
+            refused.result.unwrap_err().status,
+            PicoStatus::RATIO_MODE_NOT_SUPPORTED
+        );
+        assert_eq!(refused.buffer, None);
+        assert_eq!(refused.started, None);
+    }
+
+    #[test]
+    fn an_average_goes_to_the_driver_and_divides_the_rate() {
+        let average = Some(Downsample::average(16));
+        for family in [&PS2000A, &PS4000A, &PSOSPA_8BIT] {
+            let run = run(family, average, &[12_345]);
+            run.result.unwrap();
+            // 62.5 kS/s for 3 s.
+            assert_eq!(run.buffer, Some((SampleType::I16, average, 187_500)));
+            assert_eq!(run.started, Some(average));
+            assert!((run.stored_hz.unwrap() - 62_500.0).abs() < 1e-6);
+            assert_eq!(run.got[0].0, Samples::I16(vec![12_345]));
+            assert_eq!(run.got[0].1, 2.0 / family.max_adc as f64);
+        }
+    }
+
+    #[test]
+    fn a_sum_needs_a_driver_that_has_it() {
+        let sum = Some(Downsample::sum(8));
+        let refused = run(&PS4000A, sum, &[]);
+        assert_eq!(
+            refused.result.unwrap_err().status,
+            PicoStatus::RATIO_MODE_NOT_SUPPORTED
+        );
+
+        let run = run(&PSOSPA_8BIT, sum, &[8 * 32_512]);
+        run.result.unwrap();
+        assert_eq!(run.buffer.map(|b| (b.0, b.1)), Some((SampleType::I32, sum)));
+        let (samples, multiplier) = &run.got[0];
+        assert_eq!(samples, &Samples::I32(vec![8 * 32_512]));
+        // A full-scale sum reads as the full-scale mean.
+        assert_eq!(8.0 * 32_512.0 * multiplier, 2.0);
+    }
+
+    #[test]
+    fn a_driver_with_i8_buffers_gets_them_at_8_bits() {
+        let run = run(&PSOSPA_8BIT, None, &[-127, 5]);
+        run.result.unwrap();
+        // One byte a sample: 3 s fits.
+        assert_eq!(run.buffer, Some((SampleType::I8, None, 3_000_000)));
+        assert_eq!(run.got[0].0, Samples::I8(vec![-127, 5]));
+        assert_eq!(run.got[0].1, 2.0 / 127.0);
+    }
+
+    #[test]
+    fn a_ratio_of_zero_is_refused() {
+        let run = run(&PS2000A, Some(Downsample::average(0)), &[]);
+        assert_eq!(
+            run.result.unwrap_err().status,
+            PicoStatus::INVALID_SAMPLERATIO
+        );
     }
 }
