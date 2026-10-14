@@ -1,4 +1,4 @@
-use super::{PicoCoupling, PicoRange};
+use super::{BandwidthLimit, PicoCoupling, PicoRange};
 use num_derive::*;
 use std::convert::From;
 
@@ -169,6 +169,13 @@ pub struct OscilloscopeChannelConfig {
     pub coupling: PicoCoupling,
     pub range: PicoRange,
     pub offset: f64,
+    /// `None` gives the unit's full bandwidth. A limit must be one of
+    /// `ScopeCapabilities::bandwidth_limits`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub bandwidth: Option<BandwidthLimit>,
 }
 
 impl OscilloscopeChannelConfig {
@@ -177,6 +184,7 @@ impl OscilloscopeChannelConfig {
             coupling: PicoCoupling::DC,
             range: PicoRange::X1_PROBE_20V,
             offset: 0.0,
+            bandwidth: None,
         }
     }
 }

@@ -9,7 +9,9 @@ mod streaming_tests {
     use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
     use pico_driver::{
         oscilloscope::{
-            EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal, SampleBuffer,
+            AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EnumerationResult,
+            EtsDriver, OscilloscopeDriver, OscilloscopeDriverInternal, RapidBlockDriver,
+            SampleBuffer, SigGenDriver, StreamingDriver, TriggerDriver,
         },
         DriverLoadError,
     };
@@ -39,8 +41,6 @@ mod streaming_tests {
             fn get_resolutions(&self, handle: i16) -> PicoResult<Vec<(PicoResolution, i16)>>;
             fn get_resolution(&self, handle: i16) -> Option<PicoResolution>;
             fn set_resolution(&self, handle: i16, resolution: PicoResolution) -> PicoResult<()>;
-            fn downsample_modes(&self) -> &'static [DownsampleKind];
-            fn sample_types(&self) -> &'static [SampleType];
             fn enable_channel(
                 &self,
                 handle: i16,
@@ -53,6 +53,12 @@ mod streaming_tests {
                 channel: PicoChannel,
             ) -> PicoResult<()>;
             fn clear_data_buffers(&self, handle: i16) -> PicoResult<()>;
+            fn stop(&self, handle: i16) -> PicoResult<()>;
+            fn check_version(&self) -> Result<(), DriverLoadError>;
+        }
+        impl StreamingDriver for MockDriver {
+            fn downsample_modes(&self) -> &'static [DownsampleKind];
+            fn sample_types(&self) -> &'static [SampleType];
             fn set_data_buffer(
                 &self,
                 handle: i16,
@@ -75,10 +81,17 @@ mod streaming_tests {
                 channels: &[PicoChannel],
                 callback: Box<dyn FnMut(usize, usize) + 'a>,
             ) -> PicoResult<()>;
-            fn stop(&self, handle: i16) -> PicoResult<()>;
-            fn check_version(&self) -> Result<(), DriverLoadError>;
         }
     }
+
+    impl BlockDriver for MockMockDriver {}
+    impl RapidBlockDriver for MockMockDriver {}
+    impl TriggerDriver for MockMockDriver {}
+    impl EtsDriver for MockMockDriver {}
+    impl DigitalPortDriver for MockMockDriver {}
+    impl SigGenDriver for MockMockDriver {}
+    impl AuxIoDriver for MockMockDriver {}
+    impl ChannelExtrasDriver for MockMockDriver {}
 
     impl std::fmt::Debug for MockMockDriver {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

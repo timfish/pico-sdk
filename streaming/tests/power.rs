@@ -11,7 +11,9 @@ use pico_common::{
 use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
 use pico_driver::{
     oscilloscope::{
-        EnumerationResult, OscilloscopeDriver, OscilloscopeDriverInternal, SampleBuffer,
+        AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EnumerationResult,
+        EtsDriver, OscilloscopeDriver, OscilloscopeDriverInternal, RapidBlockDriver, SampleBuffer,
+        SigGenDriver, StreamingDriver, TriggerDriver,
     },
     DriverLoadError,
 };
@@ -49,6 +51,10 @@ mock! {
         ) -> PicoResult<()>;
         fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()>;
         fn clear_data_buffers(&self, handle: i16) -> PicoResult<()>;
+        fn stop(&self, handle: i16) -> PicoResult<()>;
+        fn check_version(&self) -> Result<(), DriverLoadError>;
+    }
+    impl StreamingDriver for PowerDriver {
         fn set_data_buffer(
             &self,
             handle: i16,
@@ -71,10 +77,17 @@ mock! {
             channels: &[PicoChannel],
             callback: Box<dyn FnMut(usize, usize) + 'a>,
         ) -> PicoResult<()>;
-        fn stop(&self, handle: i16) -> PicoResult<()>;
-        fn check_version(&self) -> Result<(), DriverLoadError>;
     }
 }
+
+impl BlockDriver for MockPowerDriver {}
+impl RapidBlockDriver for MockPowerDriver {}
+impl TriggerDriver for MockPowerDriver {}
+impl EtsDriver for MockPowerDriver {}
+impl DigitalPortDriver for MockPowerDriver {}
+impl SigGenDriver for MockPowerDriver {}
+impl AuxIoDriver for MockPowerDriver {}
+impl ChannelExtrasDriver for MockPowerDriver {}
 
 impl std::fmt::Debug for MockPowerDriver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

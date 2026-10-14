@@ -1,5 +1,16 @@
+mod aux_io;
+mod block;
+mod capabilities;
+mod digital;
+mod ets;
+mod extras;
+mod rapid_block;
+mod siggen;
+mod streaming;
+mod trigger;
+
 use super::{
-    average_only,
+    average_only, bandwidth_code,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
@@ -8,9 +19,14 @@ use super::{
 use c_vec::CVec;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
+use pico_common::BandwidthLimit;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
     PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, PowerSource, ToPicoStr,
+};
+use pico_sys_dynamic::ps4000a::{
+    enPS4000ABandwidthLimiter_PS4000A_BW_100KHZ, enPS4000ABandwidthLimiter_PS4000A_BW_1MHZ,
+    enPS4000ABandwidthLimiter_PS4000A_BW_20KHZ, enPS4000ABandwidthLimiter_PS4000A_BW_FULL,
 };
 use pico_sys_dynamic::ps4000a::{
     enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE, enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
@@ -278,12 +294,38 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
+    fn capabilities(&self, handle: i16) -> PicoResult<pico_common::ScopeCapabilities> {
+        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
+        Ok(capabilities::of(&variant))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
     fn enable_channel(
         &self,
         handle: i16,
         channel: PicoChannel,
         config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()> {
+        let offered = self.capabilities(handle)?.bandwidth_limits;
+        let filter = bandwidth_code(
+            config.bandwidth,
+            &offered,
+            enPS4000ABandwidthLimiter_PS4000A_BW_FULL,
+            &[
+                (
+                    BandwidthLimit::HZ_20K,
+                    enPS4000ABandwidthLimiter_PS4000A_BW_20KHZ,
+                ),
+                (
+                    BandwidthLimit::HZ_100K,
+                    enPS4000ABandwidthLimiter_PS4000A_BW_100KHZ,
+                ),
+                (
+                    BandwidthLimit::HZ_1M,
+                    enPS4000ABandwidthLimiter_PS4000A_BW_1MHZ,
+                ),
+            ],
+        )?;
         PicoStatus::from(unsafe {
             self.bindings.ps4000aSetChannel(
                 handle,
@@ -294,7 +336,15 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
                 config.offset as f32,
             )
         })
-        .to_result((), "set_channel")
+        .to_result((), "set_channel")?;
+        if offered.is_empty() {
+            return Ok(());
+        }
+        PicoStatus::from(unsafe {
+            self.bindings
+                .ps4000aSetBandwidthFilter(handle, channel.into(), filter)
+        })
+        .to_result((), "set_bandwidth_filter")
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -304,95 +354,6 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
                 .ps4000aSetChannel(handle, channel.into(), 0, 0, 0, 0.0)
         })
         .to_result((), "set_channel")
-    }
-
-    #[tracing::instrument(level = "trace", skip(self, buffer))]
-    fn set_data_buffer(
-        &self,
-        handle: i16,
-        channel: PicoChannel,
-        buffer: SampleBuffer,
-        buffer_len: usize,
-        downsample: Option<Downsample>,
-    ) -> PicoResult<()> {
-        let (_, mode) = average_only(
-            downsample,
-            enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
-            enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE,
-        )?;
-        let mut buffer = buffer.as_i16("set_data_buffer")?.write();
-
-        PicoStatus::from(unsafe {
-            self.bindings.ps4000aSetDataBuffer(
-                handle,
-                channel.into(),
-                buffer.as_mut_ptr(),
-                buffer_len as i32,
-                0,
-                mode,
-            )
-        })
-        .to_result((), "set_data_buffer")
-    }
-
-    #[tracing::instrument(level = "trace", skip(self))]
-    fn start_streaming(
-        &self,
-        handle: i16,
-        sample_config: &OscilloscopeSampleConfig,
-        _enabled_channels: u8,
-        buffer_len: usize,
-        downsample: Option<Downsample>,
-    ) -> PicoResult<OscilloscopeSampleConfig> {
-        let (ratio, mode) = average_only(
-            downsample,
-            enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
-            enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE,
-        )?;
-        let mut sample_interval = sample_config.interval;
-
-        PicoStatus::from(unsafe {
-            self.bindings.ps4000aRunStreaming(
-                handle,
-                &mut sample_interval,
-                sample_config.units.into(),
-                0,
-                0,
-                (false).into(),
-                ratio,
-                mode,
-                u32::try_from(buffer_len).unwrap_or(u32::MAX),
-            )
-        })
-        .to_result(
-            sample_config.with_interval(sample_interval),
-            "start_streaming",
-        )
-    }
-
-    #[tracing::instrument(level = "trace", skip(self, callback))]
-    fn get_latest_streaming_values<'a>(
-        &self,
-        handle: i16,
-        _channels: &[PicoChannel],
-        mut callback: Box<dyn FnMut(usize, usize) + 'a>,
-    ) -> PicoResult<()> {
-        let mut simplify_args =
-            |_: i16, sample_count: i32, start_index: u32, _: i16, _: u32, _: i16, _: i16| {
-                callback(start_index as usize, sample_count as usize);
-            };
-
-        let status = PicoStatus::from(unsafe {
-            let (state, callback) = split_closure(&mut simplify_args);
-
-            self.bindings
-                .ps4000aGetStreamingLatestValues(handle, Some(callback), state)
-        });
-
-        match status {
-            PicoStatus::OK | PicoStatus::BUSY => Ok(()),
-            x => Err(PicoError::from_status(x, "get_latest_streaming_values")),
-        }
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

@@ -28,6 +28,15 @@ impl PicoError {
             context: Some(context.to_string()),
         }
     }
+
+    /// A feature the family or the model does not have.
+    pub fn not_supported(what: &str) -> PicoError {
+        PicoError::from_status(PicoStatus::NOT_SUPPORTED_BY_THIS_DEVICE, what)
+    }
+
+    pub fn is_not_supported(&self) -> bool {
+        self.status == PicoStatus::NOT_SUPPORTED_BY_THIS_DEVICE
+    }
 }
 
 impl From<PicoStatus> for PicoError {
