@@ -45,6 +45,9 @@ pub mod tc08;
 
 /// An open device from any supported instrument family
 #[derive(Clone, Debug)]
+// One value per open unit, so the size of the scope variant costs
+// nothing worth a box.
+#[allow(clippy::large_enum_variant)]
 pub enum PicoDevice {
     DrDAQ(drdaq::DrDAQDevice),
     Oscilloscope(oscilloscope::OscilloscopeDevice),

@@ -34,7 +34,8 @@
 //! let ch_config = OscilloscopeChannelConfig {
 //!     coupling: PicoCoupling::DC,
 //!     range: PicoRange::X1_PROBE_2V,
-//!     offset: 0.0
+//!     offset: 0.0,
+//!     bandwidth: None,
 //! };
 //!
 //! driver.enable_channel(handle, PicoChannel::A, &ch_config)?;

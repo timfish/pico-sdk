@@ -8,6 +8,8 @@
 //! [`crate::tc08`].
 
 mod dependencies;
+pub mod features;
+mod models;
 mod trampoline;
 
 mod ps2000;
@@ -30,12 +32,17 @@ pub use ps6000::PS6000Driver;
 pub use ps6000a::PS6000ADriver;
 pub use psospa::PSOSPADriver;
 
+pub use features::{
+    AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EtsDriver, RapidBlockDriver,
+    SigGenDriver, StreamingDriver, TriggerDriver,
+};
+
 use crate::DriverLoadError;
 use parking_lot::RwLock;
 use pico_common::{
-    Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
-    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution,
-    PicoResult, PicoStatus, PowerSource, RateLimit, SampleType,
+    BandwidthLimit, Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
+    PowerSource, RateLimit, SampleType, ScopeCapabilities,
 };
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
@@ -186,8 +193,22 @@ pub(crate) fn buffer_pointer(buffer: &SampleBuffer) -> *mut std::ffi::c_void {
     }
 }
 
-/// Common trait implemented for every oscilloscope driver
-pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
+/// Common trait implemented for every oscilloscope driver. Each feature
+/// is a trait of its own; see [`features`].
+pub trait OscilloscopeDriverInternal:
+    StreamingDriver
+    + BlockDriver
+    + RapidBlockDriver
+    + TriggerDriver
+    + EtsDriver
+    + DigitalPortDriver
+    + SigGenDriver
+    + AuxIoDriver
+    + ChannelExtrasDriver
+    + fmt::Debug
+    + Send
+    + Sync
+{
     /// Gets the underlying driver type
     fn get_driver(&self) -> Driver;
     /// Gets the driver version string
@@ -252,6 +273,11 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     fn get_supply_channels(&self, _handle: i16) -> Vec<PicoChannel> {
         Vec::new()
     }
+    /// What the unit can do beyond streaming. Every feature is off by
+    /// default.
+    fn capabilities(&self, _handle: i16) -> PicoResult<ScopeCapabilities> {
+        Ok(ScopeCapabilities::default())
+    }
     /// Set up a channel with the supplied config
     fn enable_channel(
         &self,
@@ -267,43 +293,7 @@ pub trait OscilloscopeDriverInternal: fmt::Debug + Send + Sync {
     fn clear_data_buffers(&self, _handle: i16) -> PicoResult<()> {
         Ok(())
     }
-    /// The streaming downsample modes the driver has.
-    fn downsample_modes(&self) -> &'static [DownsampleKind] {
-        &[DownsampleKind::Average]
-    }
-    /// The sample types the driver writes into buffers. Drivers of 8-bit
-    /// units without `I8` write 8-bit codes shifted left by 8 in `I16`.
-    fn sample_types(&self) -> &'static [SampleType] {
-        &[SampleType::I16]
-    }
-    /// Give the driver a buffer to write data into, for a stream with
-    /// `downsample`
-    fn set_data_buffer(
-        &self,
-        handle: i16,
-        channel: PicoChannel,
-        buffer: SampleBuffer,
-        buffer_len: usize,
-        downsample: Option<Downsample>,
-    ) -> PicoResult<()>;
-    /// Starts the device streaming. `sample_config` is the device's
-    /// interval, before any downsample.
-    fn start_streaming(
-        &self,
-        handle: i16,
-        sample_config: &OscilloscopeSampleConfig,
-        enabled_channels: u8,
-        buffer_len: usize,
-        downsample: Option<Downsample>,
-    ) -> PicoResult<OscilloscopeSampleConfig>;
-    /// Gets the latest streaming values
-    fn get_latest_streaming_values<'a>(
-        &self,
-        handle: i16,
-        channels: &[PicoChannel],
-        callback: Box<dyn FnMut(usize, usize) + 'a>,
-    ) -> PicoResult<()>;
-    /// Stops the device streaming
+    /// Stops a stream or a block capture
     fn stop(&self, handle: i16) -> PicoResult<()>;
     /// Check that the driver meets the minimum version tested with these wrappers
     fn check_version(&self) -> Result<(), DriverLoadError> {
@@ -443,6 +433,29 @@ pub(crate) fn rate_limits(
 /// character on every scope family.
 pub(crate) fn variant_channel_count(variant: &str) -> Option<u8> {
     variant.get(1..2)?.parse().ok()
+}
+
+/// The family's code for a channel's bandwidth `limit`, refusing one
+/// the model does not list in `offered`.
+pub(crate) fn bandwidth_code<T: Copy>(
+    limit: Option<BandwidthLimit>,
+    offered: &[BandwidthLimit],
+    full: T,
+    codes: &[(BandwidthLimit, T)],
+) -> PicoResult<T> {
+    let Some(limit) = limit else {
+        return Ok(full);
+    };
+    codes
+        .iter()
+        .find(|(l, _)| *l == limit && offered.contains(l))
+        .map(|(_, code)| *code)
+        .ok_or_else(|| {
+            PicoError::from_status(
+                PicoStatus::BANDWIDTH_NOT_SUPPORTED,
+                &format!("bandwidth limit {limit}"),
+            )
+        })
 }
 
 /// Refuses a stream of `enabled` channels at `resolution` when `limits`

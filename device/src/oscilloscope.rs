@@ -1,7 +1,7 @@
 use crate::DeviceOpen;
 use pico_common::{
     Downsample, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo,
-    PicoRange, PicoResolution, PicoResult, PicoStatus, PowerSource, RateLimit,
+    PicoRange, PicoResolution, PicoResult, PicoStatus, PowerSource, RateLimit, ScopeCapabilities,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -42,6 +42,7 @@ impl OscilloscopeConfig {
                 range,
                 coupling,
                 offset: 0.0,
+                bandwidth: None,
             },
         );
     }
@@ -97,6 +98,8 @@ pub struct OscilloscopeInfo {
     pub power: Option<PowerSource>,
     /// Channels that run only on the external supply
     pub supply_channels: Vec<PicoChannel>,
+    /// What the unit can do beyond streaming
+    pub capabilities: ScopeCapabilities,
 }
 
 impl OscilloscopeInfo {
@@ -290,6 +293,7 @@ impl OscilloscopeDevice {
             rate_limits = rate_limits.len(),
             "unit info read"
         );
+        let capabilities = driver.capabilities(handle)?;
 
         Ok(OscilloscopeInfo {
             handle: Arc::new(handle),
@@ -302,6 +306,7 @@ impl OscilloscopeDevice {
             rate_limits,
             power,
             supply_channels,
+            capabilities,
         })
     }
 }
@@ -364,6 +369,7 @@ mod resolution_tests {
             rate_limits: Vec::new(),
             power: Some(PowerSource::External),
             supply_channels: vec![PicoChannel::C, PicoChannel::D],
+            capabilities: ScopeCapabilities::default(),
         }
     }
 
@@ -476,6 +482,7 @@ mod power_tests {
             rate_limits: Vec::new(),
             power,
             supply_channels: vec![C, D],
+            capabilities: ScopeCapabilities::default(),
         }
     }
 
@@ -569,6 +576,7 @@ mod serde_tests {
                 coupling: PicoCoupling::DC,
                 range: PicoRange::X1_PROBE_5V,
                 offset: 0.25,
+                bandwidth: None,
             },
         );
 
@@ -606,6 +614,20 @@ mod serde_tests {
 
         // Channel B was never inserted, so it must not appear on either side.
         assert!(!deserialized.channels.contains_key(&PicoChannel::B));
+    }
+
+    #[test]
+    fn bandwidth_limit_round_trips() {
+        let mut config = sample_config();
+        config.channels.get_mut(&PicoChannel::A).unwrap().bandwidth =
+            Some(pico_common::BandwidthLimit::HZ_20M);
+        let json = serde_json::to_string(&config).expect("serialize");
+        assert!(json.contains(r#""bandwidth":20000000"#), "{json}");
+        let back: OscilloscopeConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(
+            back.channels[&PicoChannel::A].bandwidth,
+            Some(pico_common::BandwidthLimit::HZ_20M)
+        );
     }
 
     #[test]
