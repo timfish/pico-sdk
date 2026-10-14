@@ -88,7 +88,6 @@ pub const enBlockMethod_HRDL_BM_WINDOW: enBlockMethod = 1;
 pub const enBlockMethod_HRDL_BM_STREAM: enBlockMethod = 2;
 pub type enBlockMethod = ::std::os::raw::c_uint;
 pub use self::enBlockMethod as HRDL_BLOCK_METHOD;
-extern crate libloading;
 pub struct HRDLLoader {
     __library: ::libloading::Library,
     pub HRDLOpenUnit: Result<unsafe extern "C" fn() -> i16, ::libloading::Error>,
@@ -193,6 +192,7 @@ impl HRDLLoader {
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let path = path.as_ref();
         let library = ::libloading::Library::new(path)?;
         Self::from_library(library)
     }

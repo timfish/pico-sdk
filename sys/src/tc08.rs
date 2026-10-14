@@ -4,65 +4,65 @@ pub const USBTC08_MAX_INFO_CHARS: u32 = 256;
 pub const USBTC08_MAX_DATE_CHARS: u32 = 9;
 pub const USBTC08_MAX_SERIAL_CHARS: u32 = 11;
 pub const USBTC08_MAX_VERSION_CHARS: u32 = 12;
+pub const USBTC08_MAX_VERSION_CHARS_V2: u32 = 25;
 pub const CHANNELS_PER_TC08: u32 = 8;
 pub const MAX_TC08_UNITS: u32 = 64;
-
-pub const TC08Channels_USBTC08_CHANNEL_CJC: TC08Channels = 0;
-pub const TC08Channels_USBTC08_CHANNEL_1: TC08Channels = 1;
-pub const TC08Channels_USBTC08_CHANNEL_2: TC08Channels = 2;
-pub const TC08Channels_USBTC08_CHANNEL_3: TC08Channels = 3;
-pub const TC08Channels_USBTC08_CHANNEL_4: TC08Channels = 4;
-pub const TC08Channels_USBTC08_CHANNEL_5: TC08Channels = 5;
-pub const TC08Channels_USBTC08_CHANNEL_6: TC08Channels = 6;
-pub const TC08Channels_USBTC08_CHANNEL_7: TC08Channels = 7;
-pub const TC08Channels_USBTC08_CHANNEL_8: TC08Channels = 8;
-pub const TC08Channels_USBTC08_MAX_CHANNELS: TC08Channels = 8;
-pub type TC08Channels = ::std::os::raw::c_int;
-
-pub const TC08Progress_USBTC08_PROGRESS_FAIL: TC08Progress = -1;
-pub const TC08Progress_USBTC08_PROGRESS_PENDING: TC08Progress = 0;
-pub const TC08Progress_USBTC08_PROGRESS_COMPLETE: TC08Progress = 1;
-pub type TC08Progress = ::std::os::raw::c_int;
-
-pub const TC08Error_USBTC08_ERROR_OK: TC08Error = 0;
-pub const TC08Error_USBTC08_ERROR_OS_NOT_SUPPORTED: TC08Error = 1;
-pub const TC08Error_USBTC08_ERROR_NO_CHANNELS_SET: TC08Error = 2;
-pub const TC08Error_USBTC08_ERROR_INVALID_PARAMETER: TC08Error = 3;
-pub const TC08Error_USBTC08_ERROR_VARIANT_NOT_SUPPORTED: TC08Error = 4;
-pub const TC08Error_USBTC08_ERROR_INCORRECT_MODE: TC08Error = 5;
-pub const TC08Error_USBTC08_ERROR_ENUMERATION_INCOMPLETE: TC08Error = 6;
-pub const TC08Error_USBTC08_ERROR_NOT_RESPONDING: TC08Error = 7;
-pub const TC08Error_USBTC08_ERROR_FW_FAIL: TC08Error = 8;
-pub const TC08Error_USBTC08_ERROR_CONFIG_FAIL: TC08Error = 9;
-pub const TC08Error_USBTC08_ERROR_NOT_FOUND: TC08Error = 10;
-pub const TC08Error_USBTC08_ERROR_THREAD_FAIL: TC08Error = 11;
-pub const TC08Error_USBTC08_ERROR_PIPE_INFO_FAIL: TC08Error = 12;
-pub const TC08Error_USBTC08_ERROR_NOT_CALIBRATED: TC08Error = 13;
-pub const TC08Error_USBTC08_EROOR_PICOPP_TOO_OLD: TC08Error = 14;
-pub const TC08Error_USBTC08_ERROR_PICOPP_TOO_OLD: TC08Error = 14;
-pub const TC08Error_USBTC08_ERROR_PICO_DRIVER_FUNCTION: TC08Error = 15;
-pub const TC08Error_USBTC08_ERROR_COMMUNICATION: TC08Error = 16;
-pub type TC08Error = ::std::os::raw::c_int;
-
-pub const TC08Units_USBTC08_UNITS_CENTIGRADE: TC08Units = 0;
-pub const TC08Units_USBTC08_UNITS_FAHRENHEIT: TC08Units = 1;
-pub const TC08Units_USBTC08_UNITS_KELVIN: TC08Units = 2;
-pub const TC08Units_USBTC08_UNITS_RANKINE: TC08Units = 3;
-pub const TC08Units_USBTC08_MAX_UNITS: TC08Units = 3;
-pub type TC08Units = ::std::os::raw::c_int;
-
-pub const TC08InfoLine_USBTC08LINE_DRIVER_VERSION: TC08InfoLine = 0;
-pub const TC08InfoLine_USBTC08LINE_KERNEL_DRIVER_VERSION: TC08InfoLine = 1;
-pub const TC08InfoLine_USBTC08LINE_HARDWARE_VERSION: TC08InfoLine = 2;
-pub const TC08InfoLine_USBTC08LINE_VARIANT_INFO: TC08InfoLine = 3;
-pub const TC08InfoLine_USBTC08LINE_BATCH_AND_SERIAL: TC08InfoLine = 4;
-pub const TC08InfoLine_USBTC08LINE_CAL_DATE: TC08InfoLine = 5;
-pub const TC08InfoLine_USBTC08LINE_DRIVER_PATH: TC08InfoLine = 6;
-pub type TC08InfoLine = ::std::os::raw::c_int;
-
+pub const enUSBTC08Channels_USBTC08_CHANNEL_CJC: enUSBTC08Channels = 0;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_1: enUSBTC08Channels = 1;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_2: enUSBTC08Channels = 2;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_3: enUSBTC08Channels = 3;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_4: enUSBTC08Channels = 4;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_5: enUSBTC08Channels = 5;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_6: enUSBTC08Channels = 6;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_7: enUSBTC08Channels = 7;
+pub const enUSBTC08Channels_USBTC08_CHANNEL_8: enUSBTC08Channels = 8;
+pub const enUSBTC08Channels_USBTC08_MAX_CHANNELS: enUSBTC08Channels = 8;
+pub type enUSBTC08Channels = ::std::os::raw::c_uint;
+pub use self::enUSBTC08Channels as USBTC08_CHANNELS;
+pub const enUSBTC08Progress_USBTC08_PROGRESS_FAIL: enUSBTC08Progress = -1;
+pub const enUSBTC08Progress_USBTC08_PROGRESS_PENDING: enUSBTC08Progress = 0;
+pub const enUSBTC08Progress_USBTC08_PROGRESS_COMPLETE: enUSBTC08Progress = 1;
+pub type enUSBTC08Progress = ::std::os::raw::c_int;
+pub use self::enUSBTC08Progress as USBTC08_PROGRESS;
+pub const enUSBTC08Error_USBTC08_ERROR_OK: enUSBTC08Error = 0;
+pub const enUSBTC08Error_USBTC08_ERROR_OS_NOT_SUPPORTED: enUSBTC08Error = 1;
+pub const enUSBTC08Error_USBTC08_ERROR_NO_CHANNELS_SET: enUSBTC08Error = 2;
+pub const enUSBTC08Error_USBTC08_ERROR_INVALID_PARAMETER: enUSBTC08Error = 3;
+pub const enUSBTC08Error_USBTC08_ERROR_VARIANT_NOT_SUPPORTED: enUSBTC08Error = 4;
+pub const enUSBTC08Error_USBTC08_ERROR_INCORRECT_MODE: enUSBTC08Error = 5;
+pub const enUSBTC08Error_USBTC08_ERROR_ENUMERATION_INCOMPLETE: enUSBTC08Error = 6;
+pub const enUSBTC08Error_USBTC08_ERROR_NOT_RESPONDING: enUSBTC08Error = 7;
+pub const enUSBTC08Error_USBTC08_ERROR_FW_FAIL: enUSBTC08Error = 8;
+pub const enUSBTC08Error_USBTC08_ERROR_CONFIG_FAIL: enUSBTC08Error = 9;
+pub const enUSBTC08Error_USBTC08_ERROR_NOT_FOUND: enUSBTC08Error = 10;
+pub const enUSBTC08Error_USBTC08_ERROR_THREAD_FAIL: enUSBTC08Error = 11;
+pub const enUSBTC08Error_USBTC08_ERROR_PIPE_INFO_FAIL: enUSBTC08Error = 12;
+pub const enUSBTC08Error_USBTC08_ERROR_NOT_CALIBRATED: enUSBTC08Error = 13;
+pub const enUSBTC08Error_USBTC08_EROOR_PICOPP_TOO_OLD: enUSBTC08Error = 14;
+pub const enUSBTC08Error_USBTC08_ERROR_PICOPP_TOO_OLD: enUSBTC08Error = 14;
+pub const enUSBTC08Error_USBTC08_ERROR_PICO_DRIVER_FUNCTION: enUSBTC08Error = 15;
+pub const enUSBTC08Error_USBTC08_ERROR_COMMUNICATION: enUSBTC08Error = 16;
+pub type enUSBTC08Error = ::std::os::raw::c_uint;
+pub use self::enUSBTC08Error as USBTC08_ERROR;
+pub const enUSBTC08Units_USBTC08_UNITS_CENTIGRADE: enUSBTC08Units = 0;
+pub const enUSBTC08Units_USBTC08_UNITS_FAHRENHEIT: enUSBTC08Units = 1;
+pub const enUSBTC08Units_USBTC08_UNITS_KELVIN: enUSBTC08Units = 2;
+pub const enUSBTC08Units_USBTC08_UNITS_RANKINE: enUSBTC08Units = 3;
+pub const enUSBTC08Units_USBTC08_MAX_UNITS: enUSBTC08Units = 3;
+pub type enUSBTC08Units = ::std::os::raw::c_uint;
+pub use self::enUSBTC08Units as USBTC08_UNITS;
+pub const enUSBTC08InfoLine_USBTC08LINE_DRIVER_VERSION: enUSBTC08InfoLine = 0;
+pub const enUSBTC08InfoLine_USBTC08LINE_KERNEL_DRIVER_VERSION: enUSBTC08InfoLine = 1;
+pub const enUSBTC08InfoLine_USBTC08LINE_HARDWARE_VERSION: enUSBTC08InfoLine = 2;
+pub const enUSBTC08InfoLine_USBTC08LINE_VARIANT_INFO: enUSBTC08InfoLine = 3;
+pub const enUSBTC08InfoLine_USBTC08LINE_BATCH_AND_SERIAL: enUSBTC08InfoLine = 4;
+pub const enUSBTC08InfoLine_USBTC08LINE_CAL_DATE: enUSBTC08InfoLine = 5;
+pub const enUSBTC08InfoLine_USBTC08LINE_DRIVER_PATH: enUSBTC08InfoLine = 6;
+pub type enUSBTC08InfoLine = ::std::os::raw::c_uint;
+pub use self::enUSBTC08InfoLine as USBTC08_INFO_LINE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct USBTC08Info {
+pub struct tUSBTC08Info {
     pub size: i16,
     pub DriverVersion: [i8; 12usize],
     pub PicoppVersion: i16,
@@ -71,10 +71,21 @@ pub struct USBTC08Info {
     pub szSerial: [i8; 11usize],
     pub szCalDate: [i8; 9usize],
 }
-
-pub type USBTC08_INFO = USBTC08Info;
-pub type LPUSBTC08_INFO = *mut USBTC08Info;
-
+pub type USBTC08_INFO = tUSBTC08Info;
+pub type LPUSBTC08_INFO = *mut tUSBTC08Info;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct tUSBTC08InfoV2 {
+    pub size: i16,
+    pub DriverVersion: [i8; 25usize],
+    pub UsbVersion: i16,
+    pub HardwareVersion: i16,
+    pub Variant: i16,
+    pub szSerial: [i8; 11usize],
+    pub szCalDate: [i8; 9usize],
+}
+pub type USBTC08_INFO_V2 = tUSBTC08InfoV2;
+pub type LPUSBTC08_INFO_V2 = *mut tUSBTC08InfoV2;
 pub struct TC08Loader {
     __library: ::libloading::Library,
     pub usb_tc08_set_channel: Result<
@@ -134,6 +145,10 @@ pub struct TC08Loader {
         unsafe extern "C" fn(handle: i16, info: *mut USBTC08_INFO) -> i16,
         ::libloading::Error,
     >,
+    pub usb_tc08_get_unit_info_v2: Result<
+        unsafe extern "C" fn(handle: i16, info: *mut USBTC08_INFO_V2) -> i16,
+        ::libloading::Error,
+    >,
     pub usb_tc08_get_unit_info2: Result<
         unsafe extern "C" fn(handle: i16, string: *mut i8, string_length: i16, line: i16) -> i16,
         ::libloading::Error,
@@ -169,12 +184,12 @@ pub struct TC08Loader {
     pub usb_tc08_legacy_get_cycle:
         Result<unsafe extern "C" fn(cycle: *mut i32, handle: i16) -> i16, ::libloading::Error>,
 }
-
 impl TC08Loader {
     pub unsafe fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
+        let path = path.as_ref();
         let library = ::libloading::Library::new(path)?;
         Self::from_library(library)
     }
@@ -200,6 +215,9 @@ impl TC08Loader {
             .get(b"usb_tc08_get_minimum_interval_ms\0")
             .map(|sym| *sym);
         let usb_tc08_get_unit_info = __library.get(b"usb_tc08_get_unit_info\0").map(|sym| *sym);
+        let usb_tc08_get_unit_info_v2 = __library
+            .get(b"usb_tc08_get_unit_info_v2\0")
+            .map(|sym| *sym);
         let usb_tc08_get_unit_info2 = __library.get(b"usb_tc08_get_unit_info2\0").map(|sym| *sym);
         let usb_tc08_get_formatted_info = __library
             .get(b"usb_tc08_get_formatted_info\0")
@@ -237,6 +255,7 @@ impl TC08Loader {
             usb_tc08_set_mains,
             usb_tc08_get_minimum_interval_ms,
             usb_tc08_get_unit_info,
+            usb_tc08_get_unit_info_v2,
             usb_tc08_get_unit_info2,
             usb_tc08_get_formatted_info,
             usb_tc08_get_last_error,
@@ -249,7 +268,6 @@ impl TC08Loader {
             usb_tc08_legacy_get_cycle,
         })
     }
-
     pub unsafe fn usb_tc08_set_channel(&self, handle: i16, channel: i16, tc_type: i8) -> i16 {
         (self
             .usb_tc08_set_channel
@@ -373,6 +391,12 @@ impl TC08Loader {
     pub unsafe fn usb_tc08_get_unit_info(&self, handle: i16, info: *mut USBTC08_INFO) -> i16 {
         (self
             .usb_tc08_get_unit_info
+            .as_ref()
+            .expect("Expected function, got error."))(handle, info)
+    }
+    pub unsafe fn usb_tc08_get_unit_info_v2(&self, handle: i16, info: *mut USBTC08_INFO_V2) -> i16 {
+        (self
+            .usb_tc08_get_unit_info_v2
             .as_ref()
             .expect("Expected function, got error."))(handle, info)
     }
