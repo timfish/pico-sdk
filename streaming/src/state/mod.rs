@@ -5,12 +5,18 @@ pub use events::{EventEmitter, EventHandler};
 use parking_lot::{Mutex, MutexGuard, RwLock};
 use pico_common::{PicoChannel, PicoResult, PicoStatus, PowerSource};
 use std::{
+    any::Any,
     fmt,
+    panic::{catch_unwind, AssertUnwindSafe},
     sync::Arc,
     thread::{self, JoinHandle},
-    time::Instant,
+    time::{Duration, Instant},
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
+
+/// The longest [`StreamingRunner::start`] waits for the step that runs
+/// now, such as a driver's open or stop.
+const START_WAIT: Duration = Duration::from_secs(30);
 
 pub fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -268,7 +274,13 @@ where
 
     pub fn start(&self, config: Config) -> PicoResult<()> {
         let waited = Instant::now();
-        let steps = self.steps.lock();
+        let Some(steps) = self.steps.try_lock_for(START_WAIT) else {
+            warn!(
+                waited_ms = waited.elapsed().as_secs_f64() * 1e3,
+                "start found the device busy"
+            );
+            return Err(PicoStatus::TIMEOUT.into());
+        };
         debug!(
             waited_ms = waited.elapsed().as_secs_f64() * 1e3,
             "start took the device"
@@ -344,6 +356,33 @@ where
         Some(f(&self.device, &info))
     }
 
+    /// A step that panicked left the device in a state no one knows,
+    /// and this thread is the only one that steps a stream: close the
+    /// device, so the next steps open it again and start the stream the
+    /// target asks for.
+    fn after_panic(&self, panic: &(dyn Any + Send)) {
+        let reason = panic
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| panic.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        let current = self.state.read().current.clone();
+        error!(
+            %reason,
+            state = current.name(),
+            "stream step panicked; the device will open again"
+        );
+        if let Some(info) = current.get_info() {
+            let _ = catch_unwind(AssertUnwindSafe(|| {
+                if matches!(current, Current::Streaming(..)) {
+                    self.device.stop(&info);
+                }
+                self.device.close(&info);
+            }));
+        }
+        self.state.write().current = Current::Closed;
+    }
+
     fn start_background_thread(&mut self) {
         let (tx_terminate, rx_terminate) = bounded::<()>(0);
 
@@ -367,7 +406,13 @@ where
 
         loop {
             let steps = this.steps.lock();
-            let failed = this.step(&steps).is_err();
+            let failed = match catch_unwind(AssertUnwindSafe(|| this.step(&steps))) {
+                Ok(result) => result.is_err(),
+                Err(panic) => {
+                    this.after_panic(panic.as_ref());
+                    true
+                }
+            };
             drop(steps);
             if failed {
                 sleep_ms(500);

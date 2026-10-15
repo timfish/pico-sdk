@@ -469,6 +469,173 @@ mod streaming_tests {
         assert!(streaming.get_stream().is_some());
     }
 
+    /// A mock scope of one channel at 1 kS/s, whose polls return 10
+    /// samples each, the driver's opens counted. `refill` answers the
+    /// buffers given again after the driver asks for them on the third
+    /// poll.
+    fn polled_scope(
+        opens: Arc<AtomicUsize>,
+        refill: PicoResult<()>,
+    ) -> pico_streaming::ScopeRunner {
+        polled_scope_starting(opens, refill, Ok(()))
+    }
+
+    /// As [`polled_scope`], with the first stream start answering
+    /// `first_start`.
+    fn polled_scope_starting(
+        opens: Arc<AtomicUsize>,
+        refill: PicoResult<()>,
+        first_start: PicoResult<()>,
+    ) -> pico_streaming::ScopeRunner {
+        let mut mock = MockMockDriver::new();
+        mock.expect_open_unit().returning(move |_| {
+            opens.fetch_add(1, Ordering::Relaxed);
+            Ok(1)
+        });
+        mock.expect_get_unit_info().returning(|_, t| match t {
+            PicoInfo::BATCH_AND_SERIAL => Ok("ABC/1234".to_string()),
+            PicoInfo::VARIANT_INFO => Ok("2222".to_string()),
+            _ => Ok("".to_string()),
+        });
+        mock.expect_get_channel_ranges()
+            .returning(|_, _| Ok(vec![PicoRange::X1_PROBE_2V]));
+        mock.expect_maximum_value().returning(|_| Ok(32_000));
+        mock.expect_close().return_const(Ok(()));
+        mock.expect_enable_channel().return_const(Ok(()));
+        mock.expect_disable_channel().return_const(Ok(()));
+        mock.expect_ping_unit().return_const(Ok(()));
+        mock.expect_clear_data_buffers().return_const(Ok(()));
+        let polls = Arc::new(AtomicUsize::new(0));
+        let sets = Arc::new(AtomicUsize::new(0));
+        mock.expect_set_data_buffer()
+            .returning(move |_, _, _, _, _| {
+                // The first set of each stream comes before its first poll.
+                match sets.fetch_add(1, Ordering::Relaxed) {
+                    1 => refill.clone(),
+                    _ => Ok(()),
+                }
+            });
+        mock.expect_stop().return_const(Ok(()));
+        // A panic in a call poisons its expectation, so the first poll,
+        // where a listener may panic, has its own.
+        mock.expect_get_latest_streaming_values()
+            .times(1)
+            .returning(move |_, _, mut callback| {
+                callback(0, 10, Overflow::default());
+                Ok(())
+            });
+        mock.expect_get_latest_streaming_values()
+            .returning(move |_, _, mut callback| {
+                callback(0, 10, Overflow::default());
+                match polls.fetch_add(1, Ordering::Relaxed) {
+                    1 => Err(PicoStatus::WAITING_FOR_DATA_BUFFERS.into()),
+                    _ => Ok(()),
+                }
+            });
+        if let Err(error) = first_start {
+            mock.expect_start_streaming()
+                .times(1)
+                .return_const(Err(error));
+        }
+        mock.expect_start_streaming()
+            .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));
+        fixed_resolution(&mut mock);
+        let driver = OscilloscopeDriver::new(mock);
+        driver.open_device(None).unwrap().into_streaming_device()
+    }
+
+    /// A start the driver answers with NOT_RESPONDING, as a 5464E did
+    /// to every start after one until it was opened again, opens the
+    /// device again and starts on it.
+    #[test]
+    fn a_start_that_finds_the_unit_lost_opens_it_again() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let streaming = polled_scope_starting(
+            opens.clone(),
+            Ok(()),
+            Err(PicoStatus::NOT_RESPONDING.into()),
+        );
+        let count = Arc::new(Count {
+            events: AtomicUsize::new(0),
+            panic: false,
+        });
+        let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = count.clone();
+        streaming.events.subscribe(&handler);
+        start_a(&streaming);
+        wait_for_events(&count, 3);
+        assert_eq!(opens.load(Ordering::Relaxed), 2);
+        streaming.close();
+    }
+
+    /// Counts the events of a stream; panics on the first when `panic`.
+    struct Count {
+        events: AtomicUsize,
+        panic: bool,
+    }
+
+    impl EventHandler<OscilloscopeStreamEvent> for Count {
+        fn new_data(&self, _: Arc<OscilloscopeStreamEvent>) {
+            if self.events.fetch_add(1, Ordering::Relaxed) == 0 && self.panic {
+                panic!("handler failed");
+            }
+        }
+    }
+
+    fn wait_for_events(count: &Count, events: usize) {
+        let waited = Instant::now();
+        while count.events.load(Ordering::Relaxed) < events {
+            assert!(waited.elapsed() < Duration::from_secs(5), "no events");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn start_a(streaming: &pico_streaming::ScopeRunner) {
+        let mut config = OscilloscopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000);
+        streaming.start(config).unwrap();
+    }
+
+    /// A step that panics, here in a listener, would end the only
+    /// thread that polls the scope, and the stream would show as
+    /// streaming with no samples: the device opens again and the
+    /// stream goes on.
+    #[test]
+    fn a_panic_in_a_step_opens_the_device_again() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let streaming = polled_scope(opens.clone(), Ok(()));
+        let count = Arc::new(Count {
+            events: AtomicUsize::new(0),
+            panic: true,
+        });
+        let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = count.clone();
+        streaming.events.subscribe(&handler);
+        start_a(&streaming);
+        wait_for_events(&count, 5);
+        assert_eq!(opens.load(Ordering::Relaxed), 2);
+        assert!(streaming.get_stream().is_some());
+        streaming.close();
+    }
+
+    /// Buffers the driver refuses to take again end the stream, which
+    /// starts again on the device opened again, rather than ending the
+    /// thread that polls it.
+    #[test]
+    fn buffers_refused_on_a_refill_open_the_device_again() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let streaming = polled_scope(opens.clone(), Err(PicoStatus::DRIVER_FUNCTION.into()));
+        let count = Arc::new(Count {
+            events: AtomicUsize::new(0),
+            panic: false,
+        });
+        let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = count.clone();
+        streaming.events.subscribe(&handler);
+        start_a(&streaming);
+        wait_for_events(&count, 8);
+        assert_eq!(opens.load(Ordering::Relaxed), 2);
+        streaming.close();
+    }
+
     /// Drivers that add buffers keep the last stream's buffers, and refuse
     /// a buffer of another length, so each start clears them first.
     #[test]
