@@ -112,17 +112,12 @@ pub(crate) fn stream_offset(
         return None;
     }
     let at = usize::try_from(at).ok()?;
-    let offset = if relative {
-        at
-    } else {
-        at.checked_sub(start)?
-    };
+    let offset = if relative { at } else { at.checked_sub(start)? };
     (offset < count).then_some(offset)
 }
 
 pub(crate) fn delay_u32(delay: u64) -> PicoResult<u32> {
-    u32::try_from(delay)
-        .map_err(|_| PicoError::from_status(PicoStatus::DELAY, "trigger delay"))
+    u32::try_from(delay).map_err(|_| PicoError::from_status(PicoStatus::DELAY, "trigger delay"))
 }
 
 /// The header code of a channel source of the old model, where EXT and
@@ -306,7 +301,10 @@ mod tests {
         let terms = list_terms(
             &vec![vec![
                 (TriggerSource::Digital, TriggerState::True),
-                (TriggerSource::Channel(PicoChannel::A), TriggerState::DontCare),
+                (
+                    TriggerSource::Channel(PicoChannel::A),
+                    TriggerState::DontCare,
+                ),
             ]],
             &[
                 DigitalBit::new(12, DigitalDirection::High),
@@ -346,7 +344,10 @@ mod tests {
     fn states_remember_per_handle_and_take_once() {
         let states = TriggerStates::new();
         assert!(!states.needs_calls(1, &TriggerConfig::None));
-        states.set(1, &TriggerConfig::edge(PicoChannel::A, 0, ThresholdDirection::Rising));
+        states.set(
+            1,
+            &TriggerConfig::edge(PicoChannel::A, 0, ThresholdDirection::Rising),
+        );
         assert_eq!(states.enabled(1), (true, false));
         assert_eq!(states.enabled(2), (false, false));
         assert!(states.needs_calls(1, &TriggerConfig::None));

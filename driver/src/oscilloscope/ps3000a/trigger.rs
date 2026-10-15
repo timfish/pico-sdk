@@ -5,9 +5,7 @@
 
 use super::{capabilities, PS3000ADriver};
 use crate::oscilloscope::{
-    features::trigger::{
-        count, delay_u32, directions, rows, source_code, Row, TriggerStates,
-    },
+    features::trigger::{count, delay_u32, directions, rows, source_code, Row, TriggerStates},
     OscilloscopeDriverInternal, TriggerDriver,
 };
 use pico_common::{
@@ -168,11 +166,9 @@ impl TriggerDriver for PS3000ADriver {
                 if pwq_on {
                     self.pulse_width_off(handle)?;
                 }
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i16::MAX as u64,
-                )? as i16;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i16::MAX as u64)?
+                        as i16;
                 ok(
                     unsafe {
                         b.ps3000aSetSimpleTrigger(
@@ -197,11 +193,9 @@ impl TriggerDriver for PS3000ADriver {
                 holdoff: _,
                 auto_trigger,
             } => {
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i32::MAX as u64,
-                )? as i32;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i32::MAX as u64)?
+                        as i32;
                 let mut props = properties(channels)?;
                 ok(
                     unsafe {
@@ -321,8 +315,11 @@ impl TriggerDriver for PS3000ADriver {
         let (mut trigger, mut pwq) = (0i16, 0i16);
         ok(
             unsafe {
-                self.bindings
-                    .ps3000aIsTriggerOrPulseWidthQualifierEnabled(handle, &mut trigger, &mut pwq)
+                self.bindings.ps3000aIsTriggerOrPulseWidthQualifierEnabled(
+                    handle,
+                    &mut trigger,
+                    &mut pwq,
+                )
             },
             "trigger_enabled",
         )?;
@@ -370,10 +367,7 @@ mod tests {
             enPS3000AThresholdDirection_PS3000A_NEGATIVE_RUNT
         );
         assert_eq!(NONE_DIRECTION, enPS3000AThresholdDirection_PS3000A_NONE);
-        assert_eq!(
-            Exit.mode().code(),
-            enPS3000A_ThresholdMode_PS3000A_WINDOW
-        );
+        assert_eq!(Exit.mode().code(), enPS3000A_ThresholdMode_PS3000A_WINDOW);
         assert_eq!(
             TriggerState::False.code(),
             enPS3000ATriggerState_PS3000A_CONDITION_FALSE

@@ -117,15 +117,28 @@ impl PS4000ADriver {
             return ok(status, context);
         }
         for (index, list) in lists.iter_mut().enumerate() {
-            let status =
-                unsafe { set(self, handle, list.as_mut_ptr(), count(list, context)?, info(index)) };
+            let status = unsafe {
+                set(
+                    self,
+                    handle,
+                    list.as_mut_ptr(),
+                    count(list, context)?,
+                    info(index),
+                )
+            };
             ok(status, context)?;
         }
         Ok(())
     }
 
     fn set_conditions(&self, handle: i16, lists: &mut [Vec<PS4000A_CONDITION>]) -> PicoResult<()> {
-        unsafe fn call(d: &PS4000ADriver, h: i16, c: *mut PS4000A_CONDITION, n: i16, i: u32) -> u32 {
+        unsafe fn call(
+            d: &PS4000ADriver,
+            h: i16,
+            c: *mut PS4000A_CONDITION,
+            n: i16,
+            i: u32,
+        ) -> u32 {
             d.bindings.ps4000aSetTriggerChannelConditions(h, c, n, i)
         }
         self.set_lists(handle, lists, call, "trigger conditions")
@@ -136,8 +149,15 @@ impl PS4000ADriver {
         handle: i16,
         lists: &mut [Vec<PS4000A_CONDITION>],
     ) -> PicoResult<()> {
-        unsafe fn call(d: &PS4000ADriver, h: i16, c: *mut PS4000A_CONDITION, n: i16, i: u32) -> u32 {
-            d.bindings.ps4000aSetPulseWidthQualifierConditions(h, c, n, i)
+        unsafe fn call(
+            d: &PS4000ADriver,
+            h: i16,
+            c: *mut PS4000A_CONDITION,
+            n: i16,
+            i: u32,
+        ) -> u32 {
+            d.bindings
+                .ps4000aSetPulseWidthQualifierConditions(h, c, n, i)
         }
         self.set_lists(handle, lists, call, "pulse width conditions")
     }
@@ -170,11 +190,9 @@ impl TriggerDriver for PS4000ADriver {
                 if pwq_on {
                     self.set_pulse_width_conditions(handle, &mut [])?;
                 }
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i16::MAX as u64,
-                )? as i16;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i16::MAX as u64)?
+                        as i16;
                 ok(
                     unsafe {
                         b.ps4000aSetSimpleTrigger(
@@ -198,11 +216,9 @@ impl TriggerDriver for PS4000ADriver {
                 auto_trigger,
                 ..
             } => {
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i32::MAX as u64,
-                )? as i32;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i32::MAX as u64)?
+                        as i32;
                 let mut props = properties(channels)?;
                 ok(
                     unsafe {
@@ -273,8 +289,11 @@ impl TriggerDriver for PS4000ADriver {
         let (mut trigger, mut pwq) = (0i16, 0i16);
         ok(
             unsafe {
-                self.bindings
-                    .ps4000aIsTriggerOrPulseWidthQualifierEnabled(handle, &mut trigger, &mut pwq)
+                self.bindings.ps4000aIsTriggerOrPulseWidthQualifierEnabled(
+                    handle,
+                    &mut trigger,
+                    &mut pwq,
+                )
             },
             "trigger_enabled",
         )?;
@@ -330,7 +349,9 @@ mod tests {
         );
         assert_eq!(list_code(ListSource::External).unwrap(), 8);
         assert_eq!(list_code(ListSource::Aux).unwrap(), 9);
-        assert!(list_code(ListSource::Port(0)).unwrap_err().is_not_supported());
+        assert!(list_code(ListSource::Port(0))
+            .unwrap_err()
+            .is_not_supported());
     }
 
     #[test]

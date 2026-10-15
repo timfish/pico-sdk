@@ -252,7 +252,10 @@ pub struct PulseWidthQualifier {
     pub upper: u32,
     pub kind: PulseWidthType,
     /// Digital inputs the qualifier times, on MSO models.
-    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     pub digital: Vec<DigitalBit>,
 }
 
@@ -497,7 +500,10 @@ impl TriggerConfig {
                     source,
                     TriggerSource::Channel(_) | TriggerSource::External | TriggerSource::Aux
                 ) {
-                    return Err(refuse(PicoStatus::INVALID_TRIGGER_CHANNEL, "simple trigger"));
+                    return Err(refuse(
+                        PicoStatus::INVALID_TRIGGER_CHANNEL,
+                        "simple trigger",
+                    ));
                 }
                 if direction.mode() != ThresholdMode::Level {
                     return Err(refuse(
@@ -520,7 +526,10 @@ impl TriggerConfig {
                         channel.source,
                         TriggerSource::PulseWidthQualifier | TriggerSource::Digital
                     ) {
-                        return Err(refuse(PicoStatus::INVALID_TRIGGER_CHANNEL, "trigger channels"));
+                        return Err(refuse(
+                            PicoStatus::INVALID_TRIGGER_CHANNEL,
+                            "trigger channels",
+                        ));
                     }
                     if sources.contains(&channel.source) {
                         return Err(refuse(
@@ -564,7 +573,10 @@ impl TriggerConfig {
                 let pwq_digital = pulse_width.iter().flat_map(|p| &p.digital);
                 for bit in digital.iter().chain(pwq_digital) {
                     if bit.bit > 15 {
-                        return Err(refuse(PicoStatus::INVALID_DIGITAL_CHANNEL, "digital trigger"));
+                        return Err(refuse(
+                            PicoStatus::INVALID_DIGITAL_CHANNEL,
+                            "digital trigger",
+                        ));
                     }
                 }
                 if let Some(pwq) = pulse_width {
@@ -581,9 +593,15 @@ impl TriggerConfig {
                             ));
                         }
                     }
-                    let range = matches!(pwq.kind, PulseWidthType::InRange | PulseWidthType::OutOfRange);
+                    let range = matches!(
+                        pwq.kind,
+                        PulseWidthType::InRange | PulseWidthType::OutOfRange
+                    );
                     if range && pwq.upper < pwq.lower {
-                        return Err(refuse(PicoStatus::PULSE_WIDTH_QUALIFIER, "pulse width range"));
+                        return Err(refuse(
+                            PicoStatus::PULSE_WIDTH_QUALIFIER,
+                            "pulse width range",
+                        ));
                     }
                 }
                 Ok(())
@@ -661,7 +679,10 @@ mod tests {
     fn a_family_without_a_kind_refuses_it_by_name() {
         let config = TriggerConfig::Advanced {
             channels: vec![a(ThresholdDirection::Rising)],
-            conditions: vec![vec![(TriggerSource::Channel(PicoChannel::A), TriggerState::True)]],
+            conditions: vec![vec![(
+                TriggerSource::Channel(PicoChannel::A),
+                TriggerState::True,
+            )]],
             digital: Vec::new(),
             pulse_width: None,
             delay: 0,

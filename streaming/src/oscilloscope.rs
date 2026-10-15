@@ -217,6 +217,10 @@ pub struct OscilloscopeStreamEvent {
     /// The rate the driver set, which can differ from the rate asked for.
     pub samples_per_second: f64,
     pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
+    /// Where the trigger of `OscilloscopeConfig::trigger` fired, as an
+    /// index into this event's samples. Families with
+    /// `TriggerCapabilities::streaming` report it.
+    pub trigger_at: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -504,6 +508,13 @@ fn start_stream(
         }
     }
 
+    // A family with no trigger calls refuses even `None`, which asks
+    // for nothing.
+    match device.driver.set_trigger(*info.handle, &config.trigger) {
+        Err(e) if e.is_not_supported() && config.trigger.is_none() => {}
+        result => result?,
+    }
+
     let target_config =
         OscilloscopeSampleConfig::from_samples_per_second(config.samples_per_second);
 
@@ -567,6 +578,12 @@ impl ScopeRunner {
     pub fn set_aux_io_mode(&self, mode: AuxIoMode) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.set_aux_io_mode(*info.handle, mode))
             .unwrap_or_else(|| Err(closed("set_aux_io_mode")))
+    }
+
+    /// Whether the trigger and the pulse width qualifier are on.
+    pub fn trigger_enabled(&self) -> PicoResult<(bool, bool)> {
+        self.with_open(|device, info| device.driver.trigger_enabled(*info.handle))
+            .unwrap_or_else(|| Err(closed("trigger_enabled")))
     }
 }
 
@@ -714,10 +731,15 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 })
                 .collect::<HashMap<_, _>>();
 
+            let trigger_at = self.driver.streaming_trigger(*info.handle);
+            if let Some(at) = trigger_at {
+                debug!(at, samples = sample_count, "trigger in stream");
+            }
             events.new_data(OscilloscopeStreamEvent {
                 samples_per_second: state.samples_per_second(),
                 length: sample_count,
                 channels,
+                trigger_at,
             });
         };
 

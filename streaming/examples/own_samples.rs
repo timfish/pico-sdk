@@ -68,6 +68,7 @@ fn main() {
         length: 1_000,
         samples_per_second: 1_000.0,
         channels,
+        trigger_at: None,
     });
 
     let kept = recorder.kept.lock();

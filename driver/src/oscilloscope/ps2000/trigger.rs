@@ -27,7 +27,10 @@ const NONE_DIRECTION: u32 = 2;
 
 fn ok(result: i16, context: &str) -> PicoResult<()> {
     match result {
-        0 => Err(PicoError::from_status(PicoStatus::OPERATION_FAILED, context)),
+        0 => Err(PicoError::from_status(
+            PicoStatus::OPERATION_FAILED,
+            context,
+        )),
         _ => Ok(()),
     }
 }
@@ -166,11 +169,9 @@ impl TriggerDriver for PS2000Driver {
                     ));
                 }
                 self.advanced_off(handle, pwq_on)?;
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i16::MAX as u64,
-                )? as i16;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i16::MAX as u64)?
+                        as i16;
                 ok(
                     unsafe {
                         b.ps2000_set_trigger(
@@ -194,11 +195,9 @@ impl TriggerDriver for PS2000Driver {
                 ..
             } => {
                 self.advanced_calls()?;
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i32::MAX as u64,
-                )? as i32;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i32::MAX as u64)?
+                        as i32;
                 let mut props = properties(channels)?;
                 ok(
                     unsafe {
@@ -296,7 +295,10 @@ mod tests {
         assert_eq!(Above.code(), enPS2000ThresholdDirection_PS2000_ABOVE);
         assert_eq!(Below.code(), enPS2000ThresholdDirection_PS2000_BELOW);
         assert_eq!(Rising.code(), enPS2000ThresholdDirection_PS2000_ADV_RISING);
-        assert_eq!(Falling.code(), enPS2000ThresholdDirection_PS2000_ADV_FALLING);
+        assert_eq!(
+            Falling.code(),
+            enPS2000ThresholdDirection_PS2000_ADV_FALLING
+        );
         assert_eq!(
             RisingOrFalling.code(),
             enPS2000ThresholdDirection_PS2000_RISING_OR_FALLING

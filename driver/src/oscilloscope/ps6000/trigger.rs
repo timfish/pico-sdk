@@ -11,7 +11,8 @@ use pico_common::{
     auto_trigger_units, ChannelTrigger, PicoInfo, PicoResult, PicoStatus, TriggerConfig,
 };
 use pico_sys_dynamic::ps6000::{
-    enPS6000Channel_PS6000_EXTERNAL, enPS6000Channel_PS6000_TRIGGER_AUX, PS6000_PWQ_CONDITIONS, PS6000_TRIGGER_CHANNEL_PROPERTIES, PS6000_TRIGGER_CONDITIONS,
+    enPS6000Channel_PS6000_EXTERNAL, enPS6000Channel_PS6000_TRIGGER_AUX, PS6000_PWQ_CONDITIONS,
+    PS6000_TRIGGER_CHANNEL_PROPERTIES, PS6000_TRIGGER_CONDITIONS,
 };
 use std::{ptr, time::Duration};
 
@@ -117,11 +118,9 @@ impl TriggerDriver for PS6000Driver {
                 if pwq_on {
                     self.pulse_width_off(handle)?;
                 }
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i16::MAX as u64,
-                )? as i16;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i16::MAX as u64)?
+                        as i16;
                 ok(
                     unsafe {
                         b.ps6000SetSimpleTrigger(
@@ -145,11 +144,9 @@ impl TriggerDriver for PS6000Driver {
                 auto_trigger,
                 ..
             } => {
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i32::MAX as u64,
-                )? as i32;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i32::MAX as u64)?
+                        as i32;
                 let mut props = properties(channels)?;
                 ok(
                     unsafe {
@@ -219,8 +216,11 @@ impl TriggerDriver for PS6000Driver {
         let (mut trigger, mut pwq) = (0i16, 0i16);
         ok(
             unsafe {
-                self.bindings
-                    .ps6000IsTriggerOrPulseWidthQualifierEnabled(handle, &mut trigger, &mut pwq)
+                self.bindings.ps6000IsTriggerOrPulseWidthQualifierEnabled(
+                    handle,
+                    &mut trigger,
+                    &mut pwq,
+                )
             },
             "trigger_enabled",
         )?;
@@ -247,18 +247,36 @@ mod tests {
         assert_eq!(Below.code(), enPS6000ThresholdDirection_PS6000_BELOW);
         assert_eq!(Rising.code(), enPS6000ThresholdDirection_PS6000_RISING);
         assert_eq!(Falling.code(), enPS6000ThresholdDirection_PS6000_FALLING);
-        assert_eq!(RisingOrFalling.code(), enPS6000ThresholdDirection_PS6000_RISING_OR_FALLING);
+        assert_eq!(
+            RisingOrFalling.code(),
+            enPS6000ThresholdDirection_PS6000_RISING_OR_FALLING
+        );
         assert_eq!(Inside.code(), enPS6000ThresholdDirection_PS6000_INSIDE);
         assert_eq!(Outside.code(), enPS6000ThresholdDirection_PS6000_OUTSIDE);
         assert_eq!(Enter.code(), enPS6000ThresholdDirection_PS6000_ENTER);
         assert_eq!(Exit.code(), enPS6000ThresholdDirection_PS6000_EXIT);
-        assert_eq!(EnterOrExit.code(), enPS6000ThresholdDirection_PS6000_ENTER_OR_EXIT);
-        assert_eq!(PositiveRunt.code(), enPS6000ThresholdDirection_PS6000_POSITIVE_RUNT);
-        assert_eq!(NegativeRunt.code(), enPS6000ThresholdDirection_PS6000_NEGATIVE_RUNT);
+        assert_eq!(
+            EnterOrExit.code(),
+            enPS6000ThresholdDirection_PS6000_ENTER_OR_EXIT
+        );
+        assert_eq!(
+            PositiveRunt.code(),
+            enPS6000ThresholdDirection_PS6000_POSITIVE_RUNT
+        );
+        assert_eq!(
+            NegativeRunt.code(),
+            enPS6000ThresholdDirection_PS6000_NEGATIVE_RUNT
+        );
         assert_eq!(NONE_DIRECTION, enPS6000ThresholdDirection_PS6000_NONE);
         assert_eq!(Exit.mode().code(), enPS6000ThresholdMode_PS6000_WINDOW);
-        assert_eq!(TriggerState::False.code(), enPS6000TriggerState_PS6000_CONDITION_FALSE);
-        assert_eq!(PulseWidthType::OutOfRange.code(), enPS6000PulseWidthType_PS6000_PW_TYPE_OUT_OF_RANGE);
+        assert_eq!(
+            TriggerState::False.code(),
+            enPS6000TriggerState_PS6000_CONDITION_FALSE
+        );
+        assert_eq!(
+            PulseWidthType::OutOfRange.code(),
+            enPS6000PulseWidthType_PS6000_PW_TYPE_OUT_OF_RANGE
+        );
         assert_eq!(EXTERNAL, 4);
         assert_eq!(AUX, 5);
     }

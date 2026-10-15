@@ -12,7 +12,8 @@ use pico_common::{
     auto_trigger_units, ChannelTrigger, PicoInfo, PicoResult, PicoStatus, TriggerConfig,
 };
 use pico_sys_dynamic::ps4000::{
-    enPS4000Channel_PS4000_EXTERNAL, enPS4000Channel_PS4000_TRIGGER_AUX, PWQ_CONDITIONS, TRIGGER_CHANNEL_PROPERTIES, TRIGGER_CONDITIONS,
+    enPS4000Channel_PS4000_EXTERNAL, enPS4000Channel_PS4000_TRIGGER_AUX, PWQ_CONDITIONS,
+    TRIGGER_CHANNEL_PROPERTIES, TRIGGER_CONDITIONS,
 };
 use std::{ptr, time::Duration};
 
@@ -118,11 +119,9 @@ impl TriggerDriver for PS4000Driver {
                 if pwq_on {
                     self.pulse_width_off(handle)?;
                 }
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i16::MAX as u64,
-                )? as i16;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i16::MAX as u64)?
+                        as i16;
                 ok(
                     unsafe {
                         b.ps4000SetSimpleTrigger(
@@ -146,11 +145,9 @@ impl TriggerDriver for PS4000Driver {
                 auto_trigger,
                 ..
             } => {
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i32::MAX as u64,
-                )? as i32;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i32::MAX as u64)?
+                        as i32;
                 let mut props = properties(channels)?;
                 ok(
                     unsafe {
@@ -220,8 +217,11 @@ impl TriggerDriver for PS4000Driver {
         let (mut trigger, mut pwq) = (0i16, 0i16);
         ok(
             unsafe {
-                self.bindings
-                    .ps4000IsTriggerOrPulseWidthQualifierEnabled(handle, &mut trigger, &mut pwq)
+                self.bindings.ps4000IsTriggerOrPulseWidthQualifierEnabled(
+                    handle,
+                    &mut trigger,
+                    &mut pwq,
+                )
             },
             "trigger_enabled",
         )?;
@@ -248,7 +248,10 @@ mod tests {
         assert_eq!(Below.code(), enThresholdDirection_BELOW);
         assert_eq!(Rising.code(), enThresholdDirection_RISING);
         assert_eq!(Falling.code(), enThresholdDirection_FALLING);
-        assert_eq!(RisingOrFalling.code(), enThresholdDirection_RISING_OR_FALLING);
+        assert_eq!(
+            RisingOrFalling.code(),
+            enThresholdDirection_RISING_OR_FALLING
+        );
         assert_eq!(Inside.code(), enThresholdDirection_INSIDE);
         assert_eq!(Outside.code(), enThresholdDirection_OUTSIDE);
         assert_eq!(Enter.code(), enThresholdDirection_ENTER);
@@ -259,7 +262,10 @@ mod tests {
         assert_eq!(NONE_DIRECTION, enThresholdDirection_NONE);
         assert_eq!(Exit.mode().code(), enThresholdMode_WINDOW);
         assert_eq!(TriggerState::False.code(), enTriggerState_CONDITION_FALSE);
-        assert_eq!(PulseWidthType::OutOfRange.code(), enPulseWidthType_PW_TYPE_OUT_OF_RANGE);
+        assert_eq!(
+            PulseWidthType::OutOfRange.code(),
+            enPulseWidthType_PW_TYPE_OUT_OF_RANGE
+        );
         assert_eq!(EXTERNAL, 4);
         assert_eq!(AUX, 5);
     }

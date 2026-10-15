@@ -7,7 +7,9 @@
 
 use super::{capabilities, PS5000ADriver};
 use crate::oscilloscope::{
-    features::trigger::{count, delay_u32, list_terms, pulse_width_channels, ListSource, TriggerStates},
+    features::trigger::{
+        count, delay_u32, list_terms, pulse_width_channels, ListSource, TriggerStates,
+    },
     OscilloscopeDriverInternal, TriggerDriver,
 };
 use pico_common::{
@@ -17,9 +19,8 @@ use pico_common::{
 use pico_sys_dynamic::ps5000a::{
     enPS5000AChannel_PS5000A_DIGITAL_PORT0, enPS5000AChannel_PS5000A_EXTERNAL,
     enPS5000AChannel_PS5000A_PULSE_WIDTH_SOURCE, enPS5000AChannel_PS5000A_TRIGGER_AUX,
-    enPS5000AConditionsInfo_PS5000A_ADD, enPS5000AConditionsInfo_PS5000A_CLEAR,
-    PS5000A_CONDITION, PS5000A_DIGITAL_CHANNEL_DIRECTIONS, PS5000A_DIRECTION,
-    PS5000A_TRIGGER_CHANNEL_PROPERTIES_V2,
+    enPS5000AConditionsInfo_PS5000A_ADD, enPS5000AConditionsInfo_PS5000A_CLEAR, PS5000A_CONDITION,
+    PS5000A_DIGITAL_CHANNEL_DIRECTIONS, PS5000A_DIRECTION, PS5000A_TRIGGER_CHANNEL_PROPERTIES_V2,
 };
 use std::{ptr, time::Duration};
 
@@ -72,7 +73,10 @@ fn properties(
         .collect()
 }
 
-fn direction(source: TriggerSource, direction: ThresholdDirection) -> PicoResult<PS5000A_DIRECTION> {
+fn direction(
+    source: TriggerSource,
+    direction: ThresholdDirection,
+) -> PicoResult<PS5000A_DIRECTION> {
     Ok(PS5000A_DIRECTION {
         source: source_code(source)?,
         direction: direction.code(),
@@ -228,11 +232,9 @@ impl TriggerDriver for PS5000ADriver {
                 if pwq_on {
                     self.set_pulse_width_conditions(handle, &mut [])?;
                 }
-                let auto = auto_trigger_units(
-                    *auto_trigger,
-                    Duration::from_millis(1),
-                    i16::MAX as u64,
-                )? as i16;
+                let auto =
+                    auto_trigger_units(*auto_trigger, Duration::from_millis(1), i16::MAX as u64)?
+                        as i16;
                 ok(
                     unsafe {
                         b.ps5000aSetSimpleTrigger(
@@ -365,8 +367,11 @@ impl TriggerDriver for PS5000ADriver {
         let (mut trigger, mut pwq) = (0i16, 0i16);
         ok(
             unsafe {
-                self.bindings
-                    .ps5000aIsTriggerOrPulseWidthQualifierEnabled(handle, &mut trigger, &mut pwq)
+                self.bindings.ps5000aIsTriggerOrPulseWidthQualifierEnabled(
+                    handle,
+                    &mut trigger,
+                    &mut pwq,
+                )
             },
             "trigger_enabled",
         )?;

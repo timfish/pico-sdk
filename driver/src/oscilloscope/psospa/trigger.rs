@@ -15,7 +15,6 @@ use crate::oscilloscope::{
 use pico_common::{
     auto_trigger_units, digital_by_port, ChannelTrigger, DigitalBit, PicoError, PicoInfo,
     PicoResult, PicoStatus, ThresholdDirection, TriggerConditions, TriggerConfig, TriggerSource,
-    TriggerState,
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoChannel_PICO_EXTERNAL,
@@ -76,10 +75,7 @@ fn direction(source: TriggerSource, direction: ThresholdDirection) -> PicoResult
     })
 }
 
-fn condition_lists(
-    terms: &TriggerConditions,
-    digital: &[DigitalBit],
-) -> Vec<Vec<PICO_CONDITION>> {
+fn condition_lists(terms: &TriggerConditions, digital: &[DigitalBit]) -> Vec<Vec<PICO_CONDITION>> {
     list_terms(terms, digital)
         .into_iter()
         .map(|term| {
@@ -360,7 +356,7 @@ impl TriggerDriver for PSOSPADriver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pico_common::{DigitalDirection, PicoChannel, PulseWidthType, Threshold};
+    use pico_common::{DigitalDirection, PicoChannel, PulseWidthType, Threshold, TriggerState};
     use pico_sys_dynamic::psospa::*;
 
     #[test]
@@ -378,9 +374,18 @@ mod tests {
         assert_eq!(Outside.code(), enPicoThresholdDirection_PICO_OUTSIDE);
         assert_eq!(Enter.code(), enPicoThresholdDirection_PICO_ENTER);
         assert_eq!(Exit.code(), enPicoThresholdDirection_PICO_EXIT);
-        assert_eq!(EnterOrExit.code(), enPicoThresholdDirection_PICO_ENTER_OR_EXIT);
-        assert_eq!(PositiveRunt.code(), enPicoThresholdDirection_PICO_POSITIVE_RUNT);
-        assert_eq!(NegativeRunt.code(), enPicoThresholdDirection_PICO_NEGATIVE_RUNT);
+        assert_eq!(
+            EnterOrExit.code(),
+            enPicoThresholdDirection_PICO_ENTER_OR_EXIT
+        );
+        assert_eq!(
+            PositiveRunt.code(),
+            enPicoThresholdDirection_PICO_POSITIVE_RUNT
+        );
+        assert_eq!(
+            NegativeRunt.code(),
+            enPicoThresholdDirection_PICO_NEGATIVE_RUNT
+        );
         assert_eq!(Exit.mode().code(), enPicoThresholdMode_PICO_WINDOW);
         assert_eq!(
             TriggerState::False.code(),
@@ -447,8 +452,14 @@ mod tests {
         ]);
         assert_eq!(ports.len(), 2);
         assert_eq!(ports[0].0, enPicoChannel_PICO_PORT0);
-        assert_eq!(({ ports[0].1[0].channel }, { ports[0].1[0].direction }), (3, 3));
+        assert_eq!(
+            ({ ports[0].1[0].channel }, { ports[0].1[0].direction }),
+            (3, 3)
+        );
         assert_eq!(ports[1].0, enPicoChannel_PICO_PORT1);
-        assert_eq!(({ ports[1].1[0].channel }, { ports[1].1[0].direction }), (7, 1));
+        assert_eq!(
+            ({ ports[1].1[0].channel }, { ports[1].1[0].direction }),
+            (7, 1)
+        );
     }
 }
