@@ -1,27 +1,28 @@
 //! Safe wrapper for the PicoLog CM3 current data logger driver (`Driver::PLCM3`).
 //!
-//! The CM3 is poll-only: confirmed from the PicoLog 6 reference (`driver-cm3/src/driver.ts`),
-//! which only ever calls `PLCM3GetValue` for a single channel reading - there is no `run`/
-//! `getValues` buffer like the streaming loggers. Call [`PLCM3DriverInternal::get_value`] to read
-//! the current value from a channel.
+//! The CM3 has no capture buffer: once channels are set "the driver begins to take continuous
+//! readings", and `PLCM3GetValue` gives the most recent reading of one channel (PicoLog CM3
+//! Programmer's Guide, plcm3pg r4, section 2.5). The driver's routines (section 2.1) have no
+//! run, block or stop call. Call [`PLCM3DriverInternal::get_value`] to read a channel.
 //!
 //! Two differences from the TC-08/PT-104 pattern worth knowing about:
 //!
-//! - `PLCM3OpenUnit` takes an optional serial filter directly, unlike TC08/PT-104 where every
-//!   unit has to be opened in turn to find one by serial.
-//! - There is no ping call. [`crate::PicoDriver`] families without one substitute a
-//!   `get_unit_info` round trip to check the connection, same as PT-104.
+//! - `PLCM3OpenUnit` takes the serial of the unit to open (section 2.7), and `PLCM3Enumerate`
+//!   lists the serials of the units attached (section 2.3), so no unit is opened only to read
+//!   its serial.
+//! - There is no ping call (section 2.1). [`crate::PicoDriver`] families without one substitute
+//!   a `get_unit_info` round trip to check the connection, same as PT-104.
 //!
-//! Ethernet discovery/connection (`PLCM3Enumerate`, `PLCM3OpenUnitViaIp`) is out of scope here -
-//! USB only, matching the PT-104 wrapper's scope decision.
+//! Ethernet discovery/connection (`PLCM3Enumerate` over Ethernet, `PLCM3OpenUnitViaIp`) is out of
+//! scope here - USB only, matching the PT-104 wrapper's scope decision.
 
 use crate::LibraryResolution;
 use pico_common::{
-    Driver, FromPicoStr, LoggerReading, MainsRejectionFreq, PicoError, PicoInfo, PicoResult,
-    PicoStatus, PLCM3Channel, PLCM3DataType, PLCM3Info, ToPicoStr,
+    Driver, FromPicoStr, LoggerReading, MainsRejectionFreq, PLCM3Channel, PLCM3DataType, PLCM3Info,
+    PicoError, PicoInfo, PicoResult, PicoStatus, ToPicoStr,
 };
-use pico_sys_dynamic::plcm3::PLCM3Loader;
-use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
+use pico_sys_dynamic::plcm3::{enPLCM3CommunicationType_PLCM3_CT_USB, PLCM3Loader};
+use std::{fmt, ops::Deref, path::Path, sync::Arc};
 
 pub struct PLCM3DriverInternal {
     bindings: PLCM3Loader,
@@ -50,8 +51,8 @@ impl PLCM3DriverInternal {
 
     /// Opens a unit, optionally filtered by serial number
     ///
-    /// Unlike TC08/PT-104, `PLCM3OpenUnit` takes the serial filter directly rather than requiring
-    /// every connected unit to be opened in turn.
+    /// Unlike TC08/PT-104, `PLCM3OpenUnit` takes the serial directly rather than requiring every
+    /// connected unit to be opened in turn (section 2.7).
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         let mut handle: i16 = 0;
@@ -75,36 +76,43 @@ impl PLCM3DriverInternal {
         }
     }
 
-    /// Opens the next connected unit that is not already open, for enumeration.
+    /// The serials of the units attached by USB
     ///
-    /// `PLCM3OpenUnit` with a null serial opens the next unopened unit, reporting a non-positive
-    /// handle / `NOT_FOUND` once none remain -- the same open-next convention the other USB
-    /// loggers use (TC-08, PT-104). NB: assumed consistent with the family (the PicoLog 6
-    /// reference only ever opens one CM3); confirm on hardware that a repeated null open does not
-    /// re-return an already-open unit, which would make [`Self::open_unit_iter`] loop.
-    fn open_next_unit(&self) -> Result<i16, PicoStatus> {
-        let mut handle: i16 = 0;
-        let status =
-            unsafe { self.bindings.PLCM3OpenUnit(&mut handle as *mut i16, std::ptr::null_mut()) };
+    /// `PLCM3Enumerate` writes a comma-separated list such as `USB:DV045/055` (section 2.3).
+    #[tracing::instrument(level = "trace", skip(self), ret)]
+    pub fn enumerate_usb(&self) -> PicoResult<Vec<String>> {
+        let mut buffer = vec![0i8; 4096];
+        let mut length = buffer.len() as u32;
+
+        let status = unsafe {
+            self.bindings.PLCM3Enumerate(
+                buffer.as_mut_ptr(),
+                &mut length as *mut u32,
+                enPLCM3CommunicationType_PLCM3_CT_USB,
+            )
+        };
 
         match PicoStatus::from(status) {
-            PicoStatus::OK if handle > 0 => Ok(handle),
-            PicoStatus::OK | PicoStatus::NOT_FOUND | PicoStatus::NOT_RESPONDING => {
-                Err(PicoStatus::NOT_FOUND)
-            }
-            other => Err(other),
+            PicoStatus::OK => {}
+            PicoStatus::NOT_FOUND => return Ok(Vec::new()),
+            status => return Err(PicoError::from_status(status, "enumerate_usb")),
         }
+
+        let length = (length as usize).min(buffer.len());
+        Ok(parse_usb_serials(&buffer.from_pico_i8_string(length)))
     }
 
-    /// Iterates every connected unit, opening each one.
+    /// Opens every unit attached by USB, one by serial at a time
     ///
     /// The caller owns every handle this yields and must close the ones it does not keep.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
-        iter::from_fn(|| match self.open_next_unit() {
-            Ok(handle) => Some(Ok(handle)),
-            Err(PicoStatus::NOT_FOUND) => None,
-            Err(status) => Some(Err(PicoError::from_status(status, "open_next_unit"))),
-        })
+        let serials = match self.enumerate_usb() {
+            Ok(serials) => serials.into_iter().map(Ok).collect(),
+            Err(error) => vec![Err(error)],
+        };
+        serials
+            .into_iter()
+            .map(|serial: PicoResult<String>| self.open_unit(Some(&serial?)))
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -136,8 +144,15 @@ impl PLCM3DriverInternal {
     }
 
     /// Configures a channel with the type of clamp (or voltage) connected to it
+    ///
+    /// Each channel that is on takes about 720 ms to measure (section 2.9).
     #[tracing::instrument(level = "trace", skip(self))]
-    pub fn set_channel(&self, handle: i16, channel: PLCM3Channel, data_type: PLCM3DataType) -> PicoResult<()> {
+    pub fn set_channel(
+        &self,
+        handle: i16,
+        channel: PLCM3Channel,
+        data_type: PLCM3DataType,
+    ) -> PicoResult<()> {
         let status = unsafe {
             self.bindings
                 .PLCM3SetChannel(handle, u32::from(channel), u32::from(data_type))
@@ -146,7 +161,7 @@ impl PLCM3DriverInternal {
         PicoStatus::from(status).to_result((), "set_channel")
     }
 
-    /// Reads the newest conversion of a channel
+    /// Reads the newest conversion of a channel (section 2.5)
     ///
     /// The scale of the raw value depends on the channel's [`PLCM3DataType`]; see
     /// [`PLCM3DataType::scale`].
@@ -172,6 +187,16 @@ impl PLCM3DriverInternal {
         let status = unsafe { self.bindings.PLCM3CloseUnit(handle) };
         PicoStatus::from(status).to_result((), "close_unit")
     }
+}
+
+/// The serials in a `PLCM3Enumerate` list, keeping only USB entries
+fn parse_usb_serials(details: &str) -> Vec<String> {
+    details
+        .split(',')
+        .filter_map(|entry| entry.trim().strip_prefix("USB:"))
+        .map(|serial| serial.trim().to_string())
+        .filter(|serial| !serial.is_empty())
+        .collect()
 }
 
 /// A loaded PicoLog CM3 driver
@@ -201,5 +226,19 @@ impl Deref for PLCM3Driver {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn usb_serials_come_from_the_enumerate_list() {
+        assert_eq!(
+            parse_usb_serials("USB:DV045/055,IP:DV045/056[192.168.1.253:6500],USB:DV045/057"),
+            vec!["DV045/055".to_string(), "DV045/057".to_string()]
+        );
+        assert!(parse_usb_serials("").is_empty());
     }
 }
