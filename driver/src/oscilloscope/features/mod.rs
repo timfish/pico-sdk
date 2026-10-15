@@ -16,12 +16,18 @@ mod streaming;
 mod trigger;
 
 pub use aux_io::AuxIoDriver;
-pub use block::BlockDriver;
+pub(crate) use block::{
+    channel_flags, check_min_buffer, narrow, resolution_or, RatioCodes, ReadyParameter,
+};
+pub use block::{BlockDriver, BlockReady};
 pub use digital::DigitalPortDriver;
 pub use ets::EtsDriver;
 pub use extras::ChannelExtrasDriver;
 pub use led::LedDriver;
 pub use rapid_block::RapidBlockDriver;
+pub(crate) use rapid_block::{
+    offsets_only, overflows, segment_count, since_first, since_previous, CounterEntry,
+};
 pub use siggen::SigGenDriver;
 pub use streaming::StreamingDriver;
 pub use trigger::TriggerDriver;

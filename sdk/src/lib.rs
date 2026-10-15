@@ -162,10 +162,11 @@
 
 pub mod prelude {
     pub use pico_common::{
-        AuxIoMode, Downsample, DownsampleKind, Driver, LedColour, LedState, MainsRejectionFreq,
-        OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed,
-        PicoRange, PicoResolution, PicoStatus, PowerSource, RateLimit, SampleType,
-        ScopeCapabilities, TC08Channel, TCType,
+        AuxIoMode, BlockConfig, Downsample, DownsampleKind, Driver, LedColour, LedState,
+        MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError,
+        PicoInfo, PicoLed, PicoRange, PicoResolution, PicoStatus, PowerSource, RateLimit,
+        SampleType, ScopeCapabilities, SegmentTimestamp, TC08Channel, TCType, Timebase,
+        TriggerConfig, TriggerInfo,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
@@ -186,10 +187,12 @@ pub mod prelude {
         DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
     };
     pub use pico_streaming::{
-        AfterPowerChange, DeviceNotice, DrDAQStreamingEvent, EventHandler, HRDLChannelScale,
+        AfterPowerChange, BlockCapture, BlockChannel, BlockData, BlockPlan, BlockRunner,
+        BlockSettings, DeviceNotice, DrDAQStreamingEvent, EventHandler, HRDLChannelScale,
         HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice, LoggerPollState,
         OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
-        RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState, TC08StreamingEvent,
+        RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState, SegmentInfo,
+        TC08StreamingEvent,
     };
 }
 
