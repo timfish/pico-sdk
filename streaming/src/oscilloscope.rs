@@ -1,10 +1,12 @@
+use super::digital::{port_buffers, read_ports, set_up_ports, PortBuffers};
 use super::state::{
     sleep_ms, AfterPowerChange, Current, DeviceNotice, EventEmitter, IntoStreamingDevice, Notices,
     StreamDevice, StreamingRunner,
 };
 use pico_common::{
-    AuxIoMode, Downsample, DownsampleKind, LedColour, LedState, OscilloscopeSampleConfig,
-    PicoChannel, PicoError, PicoLed, PicoResult, PicoStatus, PowerSource, SampleType,
+    AuxIoMode, DigitalPort, Downsample, DownsampleKind, LedColour, LedState,
+    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoLed, PicoResult, PicoStatus, PowerSource,
+    SampleType,
 };
 use pico_device::{
     oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
@@ -217,6 +219,9 @@ pub struct OscilloscopeStreamEvent {
     /// The rate the driver set, which can differ from the rate asked for.
     pub samples_per_second: f64,
     pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
+    /// The 8 bits of each MSO port that is on, one byte a sample, D0 (or
+    /// D8 on `Port1`) in bit 0.
+    pub digital: HashMap<DigitalPort, Vec<u8>>,
 }
 
 #[derive(Clone)]
@@ -226,6 +231,7 @@ pub struct ScopeStreamState {
     layout: Layout,
     multipliers: HashMap<PicoChannel, f64>,
     buffers: BufferMap,
+    digital_buffers: PortBuffers,
     /// The samples each channel's buffer holds.
     buffer_len: usize,
     polls: Arc<PollTimes>,
@@ -244,6 +250,7 @@ impl Default for ScopeStreamState {
             },
             multipliers: HashMap::new(),
             buffers: HashMap::new(),
+            digital_buffers: HashMap::new(),
             buffer_len: 0,
             polls: Arc::default(),
             low_bits: Arc::default(),
@@ -350,6 +357,13 @@ impl ScopeStreamState {
         self.multipliers.get(&channel).copied()
     }
 
+    /// The MSO ports the stream delivers.
+    pub fn digital_ports(&self) -> Vec<DigitalPort> {
+        let mut ports: Vec<_> = self.digital_buffers.keys().copied().collect();
+        ports.sort();
+        ports
+    }
+
     /// The samples each channel's buffer holds.
     pub fn buffer_len(&self) -> usize {
         self.buffer_len
@@ -449,7 +463,13 @@ fn start_stream(
 
     device.driver.clear_data_buffers(*info.handle)?;
     let stored_rate = config.samples_per_second as f64 / Downsample::ratio_of(downsample) as f64;
-    let buffer_size = buffer_len(stored_rate, config.channels.len(), layout.buffer.size());
+    // Port buffers are i16: count each as two of an 8-bit layout's.
+    let port_share = config.digital.len() * (2 / layout.buffer.size()).max(1);
+    let buffer_size = buffer_len(
+        stored_rate,
+        config.channels.len() + port_share,
+        layout.buffer.size(),
+    );
     state.buffer_len = buffer_size;
 
     // A resolution that allows fewer channels is refused while more
@@ -504,6 +524,18 @@ fn start_stream(
         }
     }
 
+    set_up_ports(device, info, config)?;
+    state.digital_buffers = port_buffers(config, buffer_size);
+    for (port, buffer) in &state.digital_buffers {
+        device.driver.set_digital_buffer(
+            *info.handle,
+            *port,
+            buffer.clone(),
+            buffer_size,
+            downsample,
+        )?;
+    }
+
     let target_config =
         OscilloscopeSampleConfig::from_samples_per_second(config.samples_per_second);
 
@@ -528,7 +560,8 @@ fn start_stream(
             buffer_size,
             enabled_channel_count as usize,
             layout.buffer.size()
-        ),
+        ) + buffer_bytes(buffer_size, state.digital_buffers.len(), 2),
+        ports = state.digital_buffers.len(),
         interval = state.sample_config.interval,
         units = ?state.sample_config.units,
         "streaming started"
@@ -714,10 +747,16 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 })
                 .collect::<HashMap<_, _>>();
 
+            let digital = read_ports(
+                &state.digital_buffers,
+                start_index..(start_index + sample_count),
+            );
+
             events.new_data(OscilloscopeStreamEvent {
                 samples_per_second: state.samples_per_second(),
                 length: sample_count,
                 channels,
+                digital,
             });
         };
 
@@ -753,6 +792,17 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                             state.downsample,
                         )
                         .expect("could not set buffers");
+                }
+                for (port, buffer) in &state.digital_buffers {
+                    self.driver
+                        .set_digital_buffer(
+                            *info.handle,
+                            *port,
+                            buffer.clone(),
+                            buffer.len(),
+                            state.downsample,
+                        )
+                        .expect("could not set port buffers");
                 }
 
                 Current::Streaming(info.clone(), state.clone())

@@ -87,24 +87,30 @@ impl StreamingDriver for PS6000ADriver {
         channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
-        let stream = self.streams.read().get(&handle).copied().ok_or_else(|| {
-            PicoError::from_status(
+        let ports = self.port_infos(handle);
+        let stream = self.streams.read().get(&handle).copied();
+        let mut info: Vec<PICO_STREAMING_DATA_INFO> = match stream {
+            Some(stream) => channels
+                .iter()
+                .map(|ch| PICO_STREAMING_DATA_INFO {
+                    bufferIndex_: 0,
+                    channel_: (*ch).into(),
+                    mode_: stream.mode,
+                    noOfSamples_: 0,
+                    overflow_: 0,
+                    startIndex_: 0,
+                    type_: stream.data_type,
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        info.extend(ports);
+        if info.is_empty() {
+            return Err(PicoError::from_status(
                 PicoStatus::NO_SAMPLES_AVAILABLE,
                 "get_latest_streaming_values",
-            )
-        })?;
-        let mut info: Vec<PICO_STREAMING_DATA_INFO> = channels
-            .iter()
-            .map(|ch| PICO_STREAMING_DATA_INFO {
-                bufferIndex_: 0,
-                channel_: (*ch).into(),
-                mode_: stream.mode,
-                noOfSamples_: 0,
-                overflow_: 0,
-                startIndex_: 0,
-                type_: stream.data_type,
-            })
-            .collect();
+            ));
+        }
 
         unsafe {
             let mut stream_trig: MaybeUninit<PICO_STREAMING_DATA_TRIGGER_INFO> =

@@ -57,6 +57,7 @@
 //! ```
 
 mod cm3;
+pub mod digital;
 mod drdaq;
 mod hrdl;
 mod oscilloscope;
