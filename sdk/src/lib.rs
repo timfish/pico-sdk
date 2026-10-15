@@ -162,12 +162,13 @@
 
 pub mod prelude {
     pub use pico_common::{
-        AuxIoMode, DigitalHysteresis, DigitalPort, DigitalPortConfig, DigitalThreshold, Downsample,
-        DownsampleKind, Driver, LedColour, LedState, MainsRejectionFreq, OscilloscopeChannelConfig,
-        PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed, PicoRange, PicoResolution,
-        PicoStatus, PowerSource, RateLimit, SampleType, ScopeCapabilities, SigGenConfig,
-        SigGenInfo, SigGenShape, SigGenShapeKind, SigGenTrigger, SigGenTriggerKind,
-        SigGenTriggerSource, Sweep, SweepKind, TC08Channel, TCType,
+        AuxIoMode, BlockConfig, DigitalHysteresis, DigitalPort, DigitalPortConfig,
+        DigitalThreshold, Downsample, DownsampleKind, Driver, LedColour, LedState,
+        MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError,
+        PicoInfo, PicoLed, PicoRange, PicoResolution, PicoStatus, PowerSource, RateLimit,
+        SampleType, ScopeCapabilities, SegmentTimestamp, SigGenConfig, SigGenInfo, SigGenShape,
+        SigGenShapeKind, SigGenTrigger, SigGenTriggerKind, SigGenTriggerSource, Sweep, SweepKind,
+        TC08Channel, TCType, Timebase, TriggerConfig, TriggerInfo,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
@@ -188,11 +189,12 @@ pub mod prelude {
         DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
     };
     pub use pico_streaming::{
-        AfterPowerChange, DeviceNotice, DrDAQStreamState, DrDAQStreamingEvent, EventHandler,
+        AfterPowerChange, BlockCapture, BlockChannel, BlockData, BlockPlan, BlockRunner,
+        BlockSettings, DeviceNotice, DrDAQStreamState, DrDAQStreamingEvent, EventHandler,
         HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice,
         LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent,
         PT104StreamingEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
-        TC08StreamingEvent,
+        SegmentInfo, TC08StreamingEvent,
     };
 }
 
