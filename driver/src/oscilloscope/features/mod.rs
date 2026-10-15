@@ -33,3 +33,6 @@ pub use siggen::SigGenDriver;
 pub(crate) use streaming::flagged_channels;
 pub use streaming::StreamingDriver;
 pub use trigger::TriggerDriver;
+
+pub(crate) use ets::{ets_args, ets_buffer_len};
+pub(crate) use extras::{accessory_string, offset_limits_f32, tripped_channels};

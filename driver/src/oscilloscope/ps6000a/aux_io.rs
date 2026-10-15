@@ -1,4 +1,47 @@
 use super::PS6000ADriver;
 use crate::oscilloscope::AuxIoDriver;
+use pico_common::{AuxIoMode, PicoResult, PicoStatus};
+use pico_sys_dynamic::ps6000a::{
+    enPicoAuxIoMode_PICO_AUXIO_HIGH_OUT, enPicoAuxIoMode_PICO_AUXIO_INPUT,
+    enPicoAuxIoMode_PICO_AUXIO_LOW_OUT, enPicoAuxIoMode_PICO_AUXIO_TRIGGER_OUT, PICO_AUXIO_MODE,
+};
+use tracing::warn;
 
-impl AuxIoDriver for PS6000ADriver {}
+fn aux_io_mode(mode: AuxIoMode) -> PICO_AUXIO_MODE {
+    match mode {
+        AuxIoMode::Input => enPicoAuxIoMode_PICO_AUXIO_INPUT,
+        AuxIoMode::High => enPicoAuxIoMode_PICO_AUXIO_HIGH_OUT,
+        AuxIoMode::Low => enPicoAuxIoMode_PICO_AUXIO_LOW_OUT,
+        AuxIoMode::TriggerOut => enPicoAuxIoMode_PICO_AUXIO_TRIGGER_OUT,
+    }
+}
+
+// ps6000apg-9 §3.42: a 2.5 V CMOS input or output.
+impl AuxIoDriver for PS6000ADriver {
+    #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
+    fn set_aux_io_mode(&self, handle: i16, mode: AuxIoMode) -> PicoResult<()> {
+        match PicoStatus::from(unsafe {
+            self.bindings.ps6000aSetAuxIoMode(handle, aux_io_mode(mode))
+        }) {
+            // The mode is set; the scope or AWG triggers on it.
+            PicoStatus::WARNING_AUX_OUTPUT_CONFLICT => {
+                warn!(?mode, "AUX I/O is an output while a trigger reads it");
+                Ok(())
+            }
+            status => status.to_result((), "set_aux_io_mode"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn modes_map_to_the_header_values() {
+        assert_eq!(aux_io_mode(AuxIoMode::default()), 0);
+        assert_eq!(aux_io_mode(AuxIoMode::High), 1);
+        assert_eq!(aux_io_mode(AuxIoMode::Low), 2);
+        assert_eq!(aux_io_mode(AuxIoMode::TriggerOut), 3);
+    }
+}

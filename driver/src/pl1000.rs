@@ -15,6 +15,10 @@
 //!   oscilloscopes. `pl1000MaxValue` reports the full-scale ADC reading for the connected variant
 //!   (sections 3.2 and 4.6).
 
+mod outputs;
+
+pub use outputs::outputs;
+
 use crate::LibraryResolution;
 use pico_common::{
     Driver, FromPicoStr, PL1000Channel, PL1000Info, PicoError, PicoInfo, PicoResult, PicoStatus,

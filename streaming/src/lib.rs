@@ -62,6 +62,7 @@ pub mod digital;
 mod drdaq;
 mod hrdl;
 mod oscilloscope;
+mod outputs;
 mod over_range;
 mod pl1000;
 mod poll;

@@ -9,9 +9,13 @@
 //! point (sections 2.6, 3.3 and 3.12); [`DrDAQChannelInfo::scale`] does that.
 //!
 //! This wrapper only covers what continuous channel streaming needs (open/close/ping, unit info,
-//! channel capability info, interval/run/stop, and reading the float value buffer). DrDAQ also
-//! has an onboard signal generator, RGB LED, digital I/O and pulse counting, none of which are in
-//! scope for a waveform capture SDK - they are left unwrapped.
+//! channel capability info, interval/run/stop, and reading the float value buffer), and the
+//! outputs: GPIO, PWM, the signal generator and the RGB LED ([`outputs`],
+//! [`DrDAQDriverInternal::set_output`]). Digital inputs and pulse counting are not wrapped.
+
+mod outputs;
+
+pub use outputs::{outputs, sig_gen_info};
 
 use crate::LibraryResolution;
 use pico_common::{
