@@ -1,5 +1,5 @@
 use super::*;
-use crate::oscilloscope::StreamingDriver;
+use crate::oscilloscope::{features::trigger::stream_offset, StreamingDriver};
 
 impl StreamingDriver for PS2000ADriver {
     #[tracing::instrument(level = "trace", skip(self, buffer))]
@@ -73,10 +73,23 @@ impl StreamingDriver for PS2000ADriver {
         _channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
-        let mut full_closure =
-            |_: i16, no_of_samples: i32, start_index: u32, _: i16, _: u32, _: i16, _: i16| {
-                callback(start_index as usize, no_of_samples as usize);
-            };
+        let mut full_closure = |_: i16,
+                                no_of_samples: i32,
+                                start_index: u32,
+                                _: i16,
+                                at: u32,
+                                triggered: i16,
+                                _: i16| {
+            let offset = stream_offset(
+                triggered != 0,
+                at.into(),
+                start_index as usize,
+                no_of_samples as usize,
+                true,
+            );
+            super::trigger::STATES.streamed(handle, offset);
+            callback(start_index as usize, no_of_samples as usize);
+        };
 
         let status = PicoStatus::from(unsafe {
             let (state, callback) = split_closure(&mut full_closure);

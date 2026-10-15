@@ -33,6 +33,13 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
             digital: false,
             delay: true,
             holdoff: false,
+            window: true,
+            runt: false,
+            // The 2200 data sheet (MM012) gives EXT to its 50 MHz and
+            // faster models only; every ps2000 model is slower.
+            external: false,
+            aux: false,
+            streaming: false,
         },
         ets: !matches!(model, "2202"),
         digital_ports: 0,

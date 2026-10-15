@@ -58,6 +58,7 @@
 
 mod block;
 mod cm3;
+pub mod digital;
 mod drdaq;
 mod hrdl;
 mod oscilloscope;
@@ -71,10 +72,11 @@ pub use block::{
     BlockCapture, BlockChannel, BlockData, BlockPlan, BlockRunner, BlockSettings, SegmentInfo,
 };
 pub use cm3::PLCM3StreamingEvent;
-pub use drdaq::DrDAQStreamingEvent;
+pub use drdaq::{DrDAQStreamState, DrDAQStreamingEvent};
 pub use hrdl::{HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent};
 pub use oscilloscope::{
     OscilloscopeStreamEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
+    StreamCounts,
 };
 pub use pl1000::PL1000StreamingEvent;
 pub use poll::LoggerPollState;

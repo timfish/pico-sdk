@@ -13,7 +13,7 @@ mod led;
 mod rapid_block;
 mod siggen;
 mod streaming;
-mod trigger;
+pub(crate) mod trigger;
 
 pub use aux_io::AuxIoDriver;
 pub(crate) use block::{
@@ -21,6 +21,7 @@ pub(crate) use block::{
 };
 pub use block::{BlockDriver, BlockReady};
 pub use digital::DigitalPortDriver;
+pub(crate) use digital::{no_hysteresis, raw_ports_only, StreamPorts, PORT_VOLTS};
 pub use ets::EtsDriver;
 pub use extras::ChannelExtrasDriver;
 pub use led::LedDriver;

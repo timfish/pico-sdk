@@ -106,9 +106,25 @@ pub struct TriggerCapabilities {
     pub simple: bool,
     pub advanced: bool,
     pub pulse_width: bool,
+    /// Digital inputs in the trigger: MSO models only.
     pub digital: bool,
     pub delay: bool,
+    /// A holdoff counter in samples.
     pub holdoff: bool,
+    /// Window directions: inside, outside, enter, exit.
+    pub window: bool,
+    /// Positive and negative runt directions.
+    pub runt: bool,
+    /// An EXT trigger input: from the model's data sheet where the
+    /// family has per-model data (ps2000, ps2000a), else from the
+    /// family's API, where a model without the input gives the
+    /// driver's error.
+    pub external: bool,
+    /// An AUX trigger input, by the same rule as `external`.
+    pub aux: bool,
+    /// A stream marks where the trigger fired; see
+    /// `OscilloscopeStreamEvent::trigger_at`.
+    pub streaming: bool,
 }
 
 /// The signal generator calls a family has.
