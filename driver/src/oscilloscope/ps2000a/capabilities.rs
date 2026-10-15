@@ -22,6 +22,11 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
         _ => None,
     };
     let mso = is_mso(variant);
+    // The first 2206, 2207 and 2208 have an EXT input (MM012); the A, B
+    // and MSO models list channels only as sources (MM051, MM071), and
+    // a 2208A refused EXT and AUX (2026-10-15). No data sheet gives an
+    // AUX trigger input.
+    let external = matches!(model(variant), "2206" | "2207" | "2208");
     ScopeCapabilities {
         block: true,
         rapid_block: Some(RapidBlockCapabilities {
@@ -38,9 +43,11 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
             delay: true,
             holdoff: false,
             window: true,
-            runt: true,
-            external: true,
-            aux: true,
+            // A 2208A refused both runt directions (2026-10-15); the
+            // data sheets list runt as a PicoScope trigger only.
+            runt: false,
+            external,
+            aux: false,
             streaming: true,
         },
         ets: true,
@@ -68,5 +75,13 @@ mod tests {
         assert_eq!(caps.digital_ports, 0);
         assert_eq!(of("2206B MSO").digital_ports, 2);
         assert_eq!(of("2206B MSO").bandwidth_hz, Some(50 * MHZ));
+    }
+
+    #[test]
+    fn only_the_first_2200_models_have_ext() {
+        let caps = of("2208A").triggers;
+        assert!(!caps.external && !caps.aux && !caps.runt);
+        assert!(of("2208").triggers.external);
+        assert!(!of("2206B MSO").triggers.external);
     }
 }

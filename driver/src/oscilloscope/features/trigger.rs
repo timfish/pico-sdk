@@ -116,6 +116,28 @@ pub(crate) fn stream_offset(
     (offset < count).then_some(offset)
 }
 
+/// A call that turns part of a trigger off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OffStep {
+    /// `SetSimpleTrigger` with `enable` 0. Without it a ps2000a that had
+    /// a trigger still reports one on (2208A, 2026-10-15), though no
+    /// condition is left.
+    SimpleDisabled,
+    /// The conditions call with none, which the guides give as off.
+    NoConditions,
+    NoPulseWidth,
+}
+
+/// The calls that turn the trigger off on a family with
+/// `SetSimpleTrigger` and `IsTriggerOrPulseWidthQualifierEnabled`.
+pub(crate) fn off_steps(pulse_width_on: bool) -> Vec<OffStep> {
+    let mut steps = vec![OffStep::SimpleDisabled, OffStep::NoConditions];
+    if pulse_width_on {
+        steps.push(OffStep::NoPulseWidth);
+    }
+    steps
+}
+
 pub(crate) fn delay_u32(delay: u64) -> PicoResult<u32> {
     u32::try_from(delay).map_err(|_| PicoError::from_status(PicoStatus::DELAY, "trigger delay"))
 }
@@ -338,6 +360,15 @@ mod tests {
         assert_eq!(stream_offset(true, 105, 100, 10, false), Some(5));
         assert_eq!(stream_offset(true, 95, 100, 10, false), None);
         assert_eq!(stream_offset(false, 5, 100, 10, true), None);
+    }
+
+    #[test]
+    fn off_disables_the_simple_trigger_first() {
+        assert_eq!(
+            off_steps(false),
+            vec![OffStep::SimpleDisabled, OffStep::NoConditions]
+        );
+        assert_eq!(off_steps(true).last(), Some(&OffStep::NoPulseWidth));
     }
 
     #[test]

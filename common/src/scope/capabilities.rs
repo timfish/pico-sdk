@@ -115,11 +115,12 @@ pub struct TriggerCapabilities {
     pub window: bool,
     /// Positive and negative runt directions.
     pub runt: bool,
-    /// The family's API takes the EXT input as a source. A model with
-    /// no EXT input gives the driver's error.
+    /// An EXT trigger input: from the model's data sheet where the
+    /// family has per-model data (ps2000, ps2000a), else from the
+    /// family's API, where a model without the input gives the
+    /// driver's error.
     pub external: bool,
-    /// The family's API takes the AUX input as a source. A model with
-    /// no AUX input gives the driver's error.
+    /// An AUX trigger input, by the same rule as `external`.
     pub aux: bool,
     /// A stream marks where the trigger fired; see
     /// `OscilloscopeStreamEvent::trigger_at`.

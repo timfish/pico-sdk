@@ -5,11 +5,14 @@
 
 use super::{capabilities, PS4000Driver};
 use crate::oscilloscope::{
-    features::trigger::{count, delay_u32, directions, rows, source_code, Row, TriggerStates},
+    features::trigger::{
+        count, delay_u32, directions, off_steps, rows, source_code, OffStep, Row, TriggerStates,
+    },
     OscilloscopeDriverInternal, TriggerDriver,
 };
 use pico_common::{
-    auto_trigger_units, ChannelTrigger, PicoInfo, PicoResult, PicoStatus, TriggerConfig,
+    auto_trigger_units, ChannelTrigger, PicoInfo, PicoResult, PicoStatus, ThresholdDirection,
+    TriggerConfig,
 };
 use pico_sys_dynamic::ps4000::{
     enPS4000Channel_PS4000_EXTERNAL, enPS4000Channel_PS4000_TRIGGER_AUX, PWQ_CONDITIONS,
@@ -101,12 +104,30 @@ impl TriggerDriver for PS4000Driver {
         let b = &self.bindings;
         match trigger {
             TriggerConfig::None => {
-                ok(
-                    unsafe { b.ps4000SetTriggerChannelConditions(handle, ptr::null_mut(), 0) },
-                    "trigger conditions",
-                )?;
-                if pwq_on {
-                    self.pulse_width_off(handle)?;
+                for step in off_steps(pwq_on) {
+                    match step {
+                        OffStep::SimpleDisabled => ok(
+                            unsafe {
+                                b.ps4000SetSimpleTrigger(
+                                    handle,
+                                    0,
+                                    0,
+                                    0,
+                                    ThresholdDirection::Rising.code(),
+                                    0,
+                                    0,
+                                )
+                            },
+                            "trigger off",
+                        )?,
+                        OffStep::NoConditions => ok(
+                            unsafe {
+                                b.ps4000SetTriggerChannelConditions(handle, ptr::null_mut(), 0)
+                            },
+                            "trigger conditions",
+                        )?,
+                        OffStep::NoPulseWidth => self.pulse_width_off(handle)?,
+                    }
                 }
             }
             TriggerConfig::Simple {

@@ -9,12 +9,14 @@
 
 use super::{capabilities, PS4000ADriver};
 use crate::oscilloscope::{
-    features::trigger::{count, delay_u32, list_terms, ListSource, TriggerStates},
+    features::trigger::{
+        count, delay_u32, list_terms, off_steps, ListSource, OffStep, TriggerStates,
+    },
     OscilloscopeDriverInternal, TriggerDriver,
 };
 use pico_common::{
     auto_trigger_units, ChannelTrigger, PicoError, PicoInfo, PicoResult, PicoStatus,
-    TriggerConditions, TriggerConfig, TriggerSource,
+    ThresholdDirection, TriggerConditions, TriggerConfig, TriggerSource,
 };
 use pico_sys_dynamic::ps4000a::{
     enPS4000AChannel_PS4000A_EXTERNAL, enPS4000AChannel_PS4000A_PULSE_WIDTH_SOURCE,
@@ -175,9 +177,27 @@ impl TriggerDriver for PS4000ADriver {
         let b = &self.bindings;
         match trigger {
             TriggerConfig::None => {
-                self.set_conditions(handle, &mut [])?;
-                if pwq_on {
-                    self.set_pulse_width_conditions(handle, &mut [])?;
+                for step in off_steps(pwq_on) {
+                    match step {
+                        OffStep::SimpleDisabled => ok(
+                            unsafe {
+                                b.ps4000aSetSimpleTrigger(
+                                    handle,
+                                    0,
+                                    0,
+                                    0,
+                                    ThresholdDirection::Rising.code(),
+                                    0,
+                                    0,
+                                )
+                            },
+                            "trigger off",
+                        )?,
+                        OffStep::NoConditions => self.set_conditions(handle, &mut [])?,
+                        OffStep::NoPulseWidth => {
+                            self.set_pulse_width_conditions(handle, &mut [])?
+                        }
+                    }
                 }
             }
             TriggerConfig::Simple {

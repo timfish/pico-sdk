@@ -8,7 +8,8 @@
 use super::{capabilities, PS5000ADriver};
 use crate::oscilloscope::{
     features::trigger::{
-        count, delay_u32, list_terms, pulse_width_channels, ListSource, TriggerStates,
+        count, delay_u32, list_terms, off_steps, pulse_width_channels, ListSource, OffStep,
+        TriggerStates,
     },
     OscilloscopeDriverInternal, TriggerDriver,
 };
@@ -217,9 +218,27 @@ impl TriggerDriver for PS5000ADriver {
         match trigger {
             TriggerConfig::None => {
                 self.v2_calls()?;
-                self.set_conditions(handle, &mut [])?;
-                if pwq_on {
-                    self.set_pulse_width_conditions(handle, &mut [])?;
+                for step in off_steps(pwq_on) {
+                    match step {
+                        OffStep::SimpleDisabled => ok(
+                            unsafe {
+                                b.ps5000aSetSimpleTrigger(
+                                    handle,
+                                    0,
+                                    0,
+                                    0,
+                                    ThresholdDirection::Rising.code(),
+                                    0,
+                                    0,
+                                )
+                            },
+                            "trigger off",
+                        )?,
+                        OffStep::NoConditions => self.set_conditions(handle, &mut [])?,
+                        OffStep::NoPulseWidth => {
+                            self.set_pulse_width_conditions(handle, &mut [])?
+                        }
+                    }
                 }
             }
             TriggerConfig::Simple {
