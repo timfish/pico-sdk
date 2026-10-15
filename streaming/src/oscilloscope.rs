@@ -180,6 +180,8 @@ pub(crate) fn layout(
     match downsample.map(|d| d.mode) {
         Some(DownsampleKind::Sum) => same(SampleType::I32),
         Some(DownsampleKind::Average) => same(SampleType::I16),
+        // Block reads only; no stream offers them.
+        Some(DownsampleKind::Aggregate | DownsampleKind::Decimate) => same(SampleType::I16),
         None if eight_bit && driver_types.contains(&SampleType::I8) => same(SampleType::I8),
         None if eight_bit && max_adc % 256 == 0 => Layout {
             buffer: SampleType::I16,

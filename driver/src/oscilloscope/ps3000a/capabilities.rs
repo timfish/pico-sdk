@@ -9,7 +9,7 @@
 use crate::oscilloscope::models::{is_mso, model, MHZ};
 use pico_common::{
     BandwidthLimit, RapidBlockCapabilities, ScopeCapabilities, SigGenApi, SigGenCapabilities,
-    TriggerCapabilities, TriggerModel,
+    TimestampCounter, TriggerCapabilities, TriggerModel,
 };
 
 pub(super) fn of(variant: &str) -> ScopeCapabilities {
@@ -29,11 +29,12 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
     let mso = is_mso(variant);
     ScopeCapabilities {
         block: true,
-        // The 3207A/B also count trigger timestamps (guide §4.18); T6
-        // reads what the counter means.
+        // Only the 3207A/B count trigger timestamps (§4.18). The guide
+        // gives no layout; the struct is ps5000a's, read the same way.
         rapid_block: Some(RapidBlockCapabilities {
             trigger_offset: true,
-            timestamps: None,
+            timestamps: matches!(model, "3207A" | "3207B")
+                .then_some(TimestampCounter::SincePrevious),
             missed_triggers: false,
         }),
         triggers: TriggerCapabilities {
@@ -85,5 +86,7 @@ mod tests {
         assert_eq!(of("3405A").bandwidth_limits, vec![BandwidthLimit::HZ_20M]);
         assert_eq!(of("3406DMSO").digital_ports, 2);
         assert!(!of("3207A").sig_gen.unwrap().arbitrary);
+        assert!(of("3207B").rapid_block.unwrap().timestamps.is_some());
+        assert!(of("3206B").rapid_block.unwrap().timestamps.is_none());
     }
 }

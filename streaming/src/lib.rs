@@ -56,6 +56,7 @@
 //! # }
 //! ```
 
+mod block;
 mod cm3;
 pub mod digital;
 mod drdaq;
@@ -68,6 +69,9 @@ mod pt104;
 mod state;
 mod tc08;
 
+pub use block::{
+    BlockCapture, BlockChannel, BlockData, BlockPlan, BlockRunner, BlockSettings, SegmentInfo,
+};
 pub use cm3::PLCM3StreamingEvent;
 pub use drdaq::{DrDAQStreamState, DrDAQStreamingEvent};
 pub use hrdl::{HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent};
