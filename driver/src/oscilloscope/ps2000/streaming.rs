@@ -71,7 +71,7 @@ impl StreamingDriver for PS2000Driver {
         &self,
         handle: i16,
         _channels: &[PicoChannel],
-        mut callback: Box<dyn FnMut(usize, usize) + 'a>,
+        mut callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
     ) -> PicoResult<()> {
         CALLBACK_REF.start(handle);
 
@@ -80,8 +80,8 @@ impl StreamingDriver for PS2000Driver {
                 .ps2000_get_streaming_last_values(handle, Some(streaming_callback))
         };
 
-        if let Some(sample_count) = CALLBACK_REF.end() {
-            callback(0, sample_count);
+        if let Some((sample_count, overflow)) = CALLBACK_REF.end() {
+            callback(0, sample_count, overflow);
         }
 
         Ok(())

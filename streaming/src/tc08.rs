@@ -1,9 +1,10 @@
+use super::over_range::RangeLog;
 use super::state::{
     sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
 };
 use pico_common::{PicoError, PicoResult, TC08Channel, TC08Info, TCType};
 use pico_device::tc08::{TC08Config, TC08Device};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 use tracing::warn;
 
 /// A block of temperature readings, one entry per enabled channel
@@ -11,6 +12,25 @@ use tracing::warn;
 pub struct TC08StreamingEvent {
     pub interval_ms: u32,
     pub channels: BTreeMap<TC08Channel, Vec<f32>>,
+    /// Channels with a reading in this block over the unit's input range
+    pub over_range: Vec<TC08Channel>,
+}
+
+/// A running TC-08 stream
+#[derive(Clone, Debug)]
+pub struct TC08StreamState {
+    /// The sample interval the driver set, in milliseconds
+    pub interval_ms: u32,
+    over_range: Arc<RangeLog<TC08Channel>>,
+}
+
+impl TC08StreamState {
+    fn new(interval_ms: u32) -> Self {
+        TC08StreamState {
+            interval_ms,
+            over_range: Arc::default(),
+        }
+    }
 }
 
 /// Every channel paired with the thermocouple type it should be set to
@@ -24,15 +44,17 @@ fn all_channel_settings(
         .map(move |channel| (channel, config.channels.get(&channel).copied().flatten()))
 }
 
-impl IntoStreamingDevice<TC08Device, TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device {
+impl IntoStreamingDevice<TC08Device, TC08Config, TC08Info, TC08StreamState, TC08StreamingEvent>
+    for TC08Device
+{
     fn into_streaming_device(
         self,
-    ) -> StreamingRunner<Self, TC08Config, TC08Info, u32, TC08StreamingEvent> {
+    ) -> StreamingRunner<Self, TC08Config, TC08Info, TC08StreamState, TC08StreamingEvent> {
         StreamingRunner::new(self)
     }
 }
 
-impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device {
+impl StreamDevice<TC08Config, TC08Info, TC08StreamState, TC08StreamingEvent> for TC08Device {
     fn serial(&self) -> &str {
         &self.serial
     }
@@ -41,12 +63,16 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
         self.info.take()
     }
 
-    fn open(&self, serial: &str) -> PicoResult<Current<TC08Info, u32>> {
+    fn open(&self, serial: &str) -> PicoResult<Current<TC08Info, TC08StreamState>> {
         let handle = self.driver.open_unit(Some(serial))?;
         Ok(Current::Open(self.driver.get_unit_info(handle)?))
     }
 
-    fn ping(&self, info: &TC08Info, _notices: &super::state::Notices) -> Current<TC08Info, u32> {
+    fn ping(
+        &self,
+        info: &TC08Info,
+        _notices: &super::state::Notices,
+    ) -> Current<TC08Info, TC08StreamState> {
         // There is no ping call, so reading the unit info stands in for one
         if self.driver.get_unit_info(*info.handle).is_err() {
             let _ = self.driver.stop(*info.handle);
@@ -64,7 +90,7 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
         info: &TC08Info,
         config: &TC08Config,
         _notices: &super::state::Notices,
-    ) -> PicoResult<Current<TC08Info, u32>> {
+    ) -> PicoResult<Current<TC08Info, TC08StreamState>> {
         self.driver
             .set_mains_rejection(*info.handle, config.mains_rejection)?;
 
@@ -80,7 +106,10 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
 
         let interval_ms = self.driver.start(*info.handle, interval_ms as i32)? as u32;
 
-        Ok(Current::Streaming(info.clone(), interval_ms))
+        Ok(Current::Streaming(
+            info.clone(),
+            TC08StreamState::new(interval_ms),
+        ))
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -88,27 +117,32 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
         &self,
         info: &TC08Info,
         config: &TC08Config,
-        interval_ms: &u32,
+        stream: &TC08StreamState,
         events: &EventEmitter<TC08StreamingEvent>,
         _notices: &super::state::Notices,
-    ) -> Current<TC08Info, u32> {
+    ) -> Current<TC08Info, TC08StreamState> {
         let mut event = TC08StreamingEvent {
-            interval_ms: *interval_ms,
+            interval_ms: stream.interval_ms,
             channels: BTreeMap::new(),
+            over_range: Vec::new(),
         };
 
         let result = config.enabled_channels().try_for_each(|(channel, _)| {
-            let (values, _overflow) = self.driver.get_values(*info.handle, channel, 1_000)?;
+            let (values, over_range) = self.driver.get_values(*info.handle, channel, 1_000)?;
+            if over_range {
+                event.over_range.push(channel);
+            }
             event.channels.insert(channel, values);
             Ok::<(), PicoError>(())
         });
 
         match result {
             Ok(()) => {
+                stream.over_range.update(event.over_range.iter().copied());
                 events.new_data(event);
                 sleep_ms(1_000);
 
-                Current::Streaming(info.clone(), *interval_ms)
+                Current::Streaming(info.clone(), stream.clone())
             }
             Err(e) => {
                 warn!("Streaming stopped: '{:?}'", e);
@@ -121,13 +155,13 @@ impl StreamDevice<TC08Config, TC08Info, u32, TC08StreamingEvent> for TC08Device 
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn stop(&self, info: &TC08Info) -> Current<TC08Info, u32> {
+    fn stop(&self, info: &TC08Info) -> Current<TC08Info, TC08StreamState> {
         let _ = self.driver.stop(*info.handle);
         Current::Open(info.clone())
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    fn close(&self, info: &TC08Info) -> Current<TC08Info, u32> {
+    fn close(&self, info: &TC08Info) -> Current<TC08Info, TC08StreamState> {
         let _ = self.driver.close_unit(*info.handle);
         Current::Closed
     }

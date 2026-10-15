@@ -3,7 +3,7 @@
 
 use mockall::{mock, predicate::*};
 use pico_common::{
-    Downsample, Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
+    Downsample, Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, Overflow, PicoChannel,
     PicoCoupling, PicoInfo, PicoRange, PicoResult, PicoStatus, SigGenConfig, SigGenInfo,
     SigGenShape, SigGenShapeKind, SigGenTriggerSource,
 };
@@ -71,7 +71,7 @@ mock! {
             &self,
             handle: i16,
             channels: &[PicoChannel],
-            callback: Box<dyn FnMut(usize, usize) + 'a>,
+            callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
         ) -> PicoResult<()>;
     }
     impl SigGenDriver for GenDriver {

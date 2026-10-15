@@ -3,8 +3,9 @@ mod streaming_tests {
     use mockall::{mock, predicate::*, Sequence};
     use pico_common::{
         AuxIoMode, Downsample, DownsampleKind, Driver, LedColour, LedState,
-        OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel, PicoCoupling, PicoInfo,
-        PicoLed, PicoRange, PicoResolution, PicoResult, PicoStatus, SampleType, ScopeCapabilities,
+        OscilloscopeChannelConfig, OscilloscopeSampleConfig, Overflow, PicoChannel, PicoCoupling,
+        PicoInfo, PicoLed, PicoRange, PicoResolution, PicoResult, PicoStatus, SampleType,
+        ScopeCapabilities,
     };
     use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
     use pico_driver::{
@@ -80,7 +81,7 @@ mod streaming_tests {
                 &self,
                 handle: i16,
                 channels: &[PicoChannel],
-                callback: Box<dyn FnMut(usize, usize) + 'a>,
+                callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
             ) -> PicoResult<()>;
         }
         impl LedDriver for MockDriver {
@@ -282,6 +283,82 @@ mod streaming_tests {
         );
     }
 
+    /// Each block carries the over-range flag of each channel from the
+    /// driver's flags for that block.
+    #[test]
+    fn over_range_reaches_each_channel_block() {
+        let flags = [
+            Overflow::default().with(PicoChannel::A),
+            Overflow::default(),
+            // C is off, so its flag goes nowhere.
+            Overflow::default()
+                .with(PicoChannel::B)
+                .with(PicoChannel::C),
+        ];
+        let poll = Arc::new(AtomicUsize::new(0));
+        let mut mock = MockMockDriver::new();
+        mock.expect_open_unit().return_const(Ok(1));
+        mock.expect_get_unit_info().returning(|_, t| match t {
+            PicoInfo::BATCH_AND_SERIAL => Ok("ABC/1234".to_string()),
+            PicoInfo::VARIANT_INFO => Ok("2222".to_string()),
+            _ => Ok("".to_string()),
+        });
+        mock.expect_get_channel_ranges()
+            .returning(|_, _| Ok(vec![PicoRange::X1_PROBE_2V]));
+        mock.expect_maximum_value().returning(|_| Ok(32_000));
+        mock.expect_close().return_const(Ok(()));
+        mock.expect_enable_channel().return_const(Ok(()));
+        mock.expect_disable_channel().return_const(Ok(()));
+        mock.expect_ping_unit().return_const(Ok(()));
+        mock.expect_clear_data_buffers().return_const(Ok(()));
+        mock.expect_set_data_buffer().return_const(Ok(()));
+        mock.expect_stop().return_const(Ok(()));
+        mock.expect_get_latest_streaming_values().returning({
+            let poll = poll.clone();
+            move |_, _, mut callback| {
+                let n = poll.fetch_add(1, Ordering::Relaxed);
+                if let Some(flags) = flags.get(n) {
+                    callback(n * 10, 10, *flags);
+                }
+                Ok(())
+            }
+        });
+        mock.expect_start_streaming()
+            .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));
+        fixed_resolution(&mut mock);
+
+        struct Flags(Mutex<Vec<(bool, bool)>>);
+        impl EventHandler<OscilloscopeStreamEvent> for Flags {
+            fn new_data(&self, event: Arc<OscilloscopeStreamEvent>) {
+                assert_eq!(event.channels.len(), 2);
+                let a = event.channels[&PicoChannel::A].over_range;
+                let b = event.channels[&PicoChannel::B].over_range;
+                self.0.lock().unwrap().push((a, b));
+            }
+        }
+
+        let driver = OscilloscopeDriver::new(mock);
+        let streaming = driver.open_device(None).unwrap().into_streaming_device();
+        let got = Arc::new(Flags(Mutex::new(Vec::new())));
+        let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = got.clone();
+        streaming.events.subscribe(&handler);
+        let mut config = OscilloscopeConfig::default();
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+        config.set_sample_rate(1_000);
+        streaming.start(config).unwrap();
+        let waited = Instant::now();
+        while got.0.lock().unwrap().len() < 3 {
+            assert!(waited.elapsed() < Duration::from_secs(5), "no events");
+            thread::sleep(Duration::from_millis(5));
+        }
+        streaming.close();
+        assert_eq!(
+            *got.0.lock().unwrap(),
+            [(true, false), (false, false), (false, true)]
+        );
+    }
+
     /// Polls of a 1 kS/s stream in 300 ms when each poll returns
     /// `per_poll` samples.
     fn polls_in_300ms(per_poll: usize) -> usize {
@@ -307,7 +384,7 @@ mod streaming_tests {
             let calls = calls.clone();
             move |_, _, mut callback| {
                 calls.fetch_add(1, Ordering::Relaxed);
-                callback(0, per_poll);
+                callback(0, per_poll, Overflow::default());
                 Ok(())
             }
         });
@@ -564,7 +641,7 @@ mod streaming_tests {
                         }
                     }
                 }
-                callback(0, codes.len());
+                callback(0, codes.len(), Overflow::default());
                 Ok(())
             }
         });

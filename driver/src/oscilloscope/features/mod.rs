@@ -30,6 +30,7 @@ pub(crate) use rapid_block::{
     offsets_only, overflows, segment_count, since_first, since_previous, CounterEntry,
 };
 pub use siggen::SigGenDriver;
+pub(crate) use streaming::flagged_channels;
 pub use streaming::StreamingDriver;
 pub use trigger::TriggerDriver;
 

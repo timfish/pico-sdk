@@ -1,12 +1,13 @@
 use super::digital::{port_buffers, ports_off, read_ports, set_up_ports, PortBuffers};
+use super::over_range::RangeLog;
 use super::state::{
     sleep_ms, AfterPowerChange, Current, DeviceNotice, EventEmitter, IntoStreamingDevice, Notices,
     StreamDevice, StreamingRunner,
 };
 use pico_common::{
     AuxIoMode, DigitalPort, Downsample, DownsampleKind, LedColour, LedState,
-    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoLed, PicoResolution, PicoResult,
-    PicoStatus, PowerSource, SampleType, SigGenConfig, SigGenInfo,
+    OscilloscopeSampleConfig, Overflow, PicoChannel, PicoError, PicoLed, PicoResolution,
+    PicoResult, PicoStatus, PowerSource, SampleType, SigGenConfig, SigGenInfo,
 };
 use pico_device::{
     oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
@@ -127,6 +128,9 @@ pub struct RawChannelDataBlock {
     /// sum it gives the group's mean.
     pub multiplier: f64,
     pub samples: Samples,
+    /// The input went over range at one or more samples of this block.
+    /// The driver does not say which.
+    pub over_range: bool,
 }
 
 impl RawChannelDataBlock {
@@ -244,6 +248,7 @@ pub struct ScopeStreamState {
     counts: Arc<Continuity>,
     /// Set once low bits of 8-bit codes were dropped.
     low_bits: Arc<AtomicBool>,
+    over_range: Arc<RangeLog<PicoChannel>>,
 }
 
 impl Default for ScopeStreamState {
@@ -262,6 +267,7 @@ impl Default for ScopeStreamState {
             polls: Arc::default(),
             counts: Arc::default(),
             low_bits: Arc::default(),
+            over_range: Arc::default(),
         }
     }
 }
@@ -917,8 +923,15 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         notices: &Notices,
     ) -> Current<OscilloscopeInfo, ScopeStreamState> {
         let mut returned = 0usize;
-        let callback = |start_index, sample_count| {
+        let callback = |start_index, sample_count, overflow: Overflow| {
             returned = sample_count;
+            state.over_range.update(
+                config
+                    .channels
+                    .keys()
+                    .copied()
+                    .filter(|ch| overflow.channel(*ch)),
+            );
             state
                 .counts
                 .record(start_index, sample_count, state.buffer_len);
@@ -952,6 +965,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                         RawChannelDataBlock {
                             multiplier: state.multipliers.get(ch).copied().unwrap_or(f64::NAN),
                             samples,
+                            over_range: overflow.channel(*ch),
                         },
                     )
                 })
@@ -1196,6 +1210,7 @@ mod tests {
         let block = |samples| RawChannelDataBlock {
             multiplier: 0.5,
             samples,
+            over_range: false,
         };
         assert_eq!(
             block(Samples::I8(vec![-2, 4])).scale_samples(),

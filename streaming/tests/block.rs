@@ -215,7 +215,7 @@ impl StreamingDriver for Fake {
         &self,
         _: i16,
         _: &[PicoChannel],
-        _: Box<dyn FnMut(usize, usize) + 'a>,
+        _: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
     ) -> PicoResult<()> {
         unreachable!()
     }
@@ -279,7 +279,9 @@ impl BlockDriver for Fake {
         segment: u64,
     ) -> PicoResult<(u64, Overflow)> {
         self.state.lock().calls.push("get_values");
-        Ok((self.fill(start, count, downsample, segment), Overflow(0)))
+        // Channel B over range in every capture.
+        let overflow = Overflow::default().with(PicoChannel::B);
+        Ok((self.fill(start, count, downsample, segment), overflow))
     }
     fn trigger_time_offset(&self, _h: i16, _segment: u64) -> PicoResult<f64> {
         Ok(1e-10)
@@ -326,7 +328,9 @@ impl RapidBlockDriver for Fake {
         for segment in from..=to {
             got = self.fill(0, count, downsample, segment);
         }
-        Ok((got, vec![Overflow(0); (to - from + 1) as usize]))
+        // Channel A over range in odd segments.
+        let flags = (from..=to).map(|s| Overflow((s % 2) as u16)).collect();
+        Ok((got, flags))
     }
     fn trigger_info(&self, _h: i16, from: u64, to: u64) -> PicoResult<Vec<TriggerInfo>> {
         Ok((from..=to)
@@ -435,7 +439,7 @@ forward! {
         fn start_streaming(&self, h: i16, s: &OscilloscopeSampleConfig, e: u8, l: usize, d: Option<Downsample>) -> PicoResult<OscilloscopeSampleConfig> {
             self.0.start_streaming(h, s, e, l, d)
         }
-        fn get_latest_streaming_values<'a>(&self, h: i16, c: &[PicoChannel], cb: Box<dyn FnMut(usize, usize) + 'a>) -> PicoResult<()> {
+        fn get_latest_streaming_values<'a>(&self, h: i16, c: &[PicoChannel], cb: Box<dyn FnMut(usize, usize, Overflow) + 'a>) -> PicoResult<()> {
             self.0.get_latest_streaming_values(h, c, cb)
         }
     }
@@ -528,6 +532,8 @@ fn a_block_gives_an_overview_then_raw_spans() {
     assert_eq!(span.len(), 20);
     assert_eq!(i16s(&span.channels[&PicoChannel::A].values)[0], 5_000);
     assert_eq!(i16s(&span.channels[&PicoChannel::B].values)[19], -5_019);
+    assert!(!span.channels[&PicoChannel::A].over_range);
+    assert!(span.channels[&PicoChannel::B].over_range);
     // A span past the end is cut to the capture.
     assert_eq!(runner.read(0, 9_990, 100, None).unwrap().len(), 10);
 
@@ -554,6 +560,12 @@ fn rapid_block_times_segments_by_the_counter() {
     let all = runner.read_segments(0, 7).unwrap();
     assert_eq!(all.len(), 8);
     assert_eq!(i16s(&all[7].channels[&PicoChannel::A].values)[2], 7_002);
+    let over: Vec<_> = all
+        .iter()
+        .map(|s| s.channels[&PicoChannel::A].over_range)
+        .collect();
+    assert_eq!(over, [false, true, false, true, false, true, false, true]);
+    assert!(all.iter().all(|s| !s.channels[&PicoChannel::B].over_range));
 
     // The counter carries on across captures.
     let next = runner.capture(Duration::from_secs(5)).unwrap();

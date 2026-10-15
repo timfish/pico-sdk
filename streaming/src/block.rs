@@ -11,9 +11,9 @@
 use crate::Samples;
 use crossbeam::channel::{bounded, Receiver, RecvTimeoutError};
 use pico_common::{
-    trigger_times, BlockConfig, Downsample, DownsampleKind, Overflow, PicoChannel, PicoError,
-    PicoResult, PicoStatus, SampleType, SegmentTimestamp, Timebase, TimestampCounter,
-    TriggerConfig, TriggerInfo, SINCE_FIRST_MASK,
+    trigger_times, BlockConfig, Downsample, DownsampleKind, PicoChannel, PicoError, PicoResult,
+    PicoStatus, SampleType, SegmentTimestamp, Timebase, TimestampCounter, TriggerConfig,
+    TriggerInfo, SINCE_FIRST_MASK,
 };
 use pico_device::oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo};
 use pico_driver::oscilloscope::SampleBuffer;
@@ -87,6 +87,8 @@ pub struct BlockChannel {
     pub values: Samples,
     /// The lows of an aggregate read.
     pub min: Option<Samples>,
+    /// The input went over range in the capture or segment read.
+    pub over_range: bool,
 }
 
 /// Values read from one segment of a capture.
@@ -98,7 +100,6 @@ pub struct BlockData {
     /// Raw samples a value stands for: 1 for a raw read.
     pub ratio: u32,
     pub mode: Option<DownsampleKind>,
-    pub overflow: Overflow,
     /// How long the read took.
     pub transfer: Duration,
     pub channels: HashMap<PicoChannel, BlockChannel>,
@@ -543,6 +544,7 @@ impl BlockRunner {
                     multiplier: self.multipliers[channel],
                     values: take(max)?,
                     min: min.as_ref().map(take).transpose()?,
+                    over_range: overflow.channel(*channel),
                 },
             );
         }
@@ -551,7 +553,6 @@ impl BlockRunner {
             start,
             ratio,
             mode: downsample.map(|d| d.mode),
-            overflow,
             transfer,
             channels,
         };
@@ -596,6 +597,7 @@ impl BlockRunner {
         let mut out = Vec::with_capacity(buffers.len());
         for (i, by_channel) in buffers.iter().enumerate() {
             let segment = from + i as u64;
+            let overflow = overflows.get(i).copied().unwrap_or_default();
             let mut channels = HashMap::new();
             for (channel, buffer) in by_channel {
                 channels.insert(
@@ -604,6 +606,7 @@ impl BlockRunner {
                         multiplier: self.multipliers[channel],
                         values: Samples::I16(buffer.as_i16("read")?.read()[..got].to_vec()),
                         min: None,
+                        over_range: overflow.channel(*channel),
                     },
                 );
             }
@@ -614,7 +617,6 @@ impl BlockRunner {
                 start: 0,
                 ratio: 1,
                 mode: None,
-                overflow: overflows.get(i).copied().unwrap_or_default(),
                 transfer,
                 channels,
             });

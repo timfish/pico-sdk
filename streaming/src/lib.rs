@@ -63,6 +63,7 @@ mod drdaq;
 mod hrdl;
 mod oscilloscope;
 mod outputs;
+mod over_range;
 mod pl1000;
 mod poll;
 mod pt104;
@@ -86,4 +87,4 @@ pub use state::{
     AfterPowerChange, Current, DeviceNotice, EventEmitter, EventHandler, IntoStreamingDevice,
     Notices, StreamDevice, StreamingRunner, Target,
 };
-pub use tc08::TC08StreamingEvent;
+pub use tc08::{TC08StreamState, TC08StreamingEvent};

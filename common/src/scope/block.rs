@@ -59,17 +59,11 @@ pub struct RapidBlockConfig {
     pub captures: u64,
 }
 
-/// Channels whose input went over range in a capture, one bit a channel
-/// from bit 0 for channel A.
+/// Channels whose input went over range in a capture or a streamed
+/// block, one bit a channel from bit 0 for channel A.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Overflow(pub u16);
-
-impl Overflow {
-    pub fn channel(&self, channel: crate::PicoChannel) -> bool {
-        self.0 & (1 << channel as u16) != 0
-    }
-}
 
 /// The counter a segment's timestamp comes from. The families count
 /// from different points, so the two stay apart.

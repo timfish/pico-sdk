@@ -4,7 +4,7 @@
 use mockall::{mock, predicate::*, Sequence};
 use pico_common::{
     AuxIoMode, Downsample, DownsampleKind, Driver, LedColour, LedState, OscilloscopeChannelConfig,
-    OscilloscopeSampleConfig, PicoChannel, PicoCoupling, PicoInfo, PicoLed, PicoRange,
+    OscilloscopeSampleConfig, Overflow, PicoChannel, PicoCoupling, PicoInfo, PicoLed, PicoRange,
     PicoResolution, PicoResult, PicoStatus, SampleType, ScopeCapabilities, ThresholdDirection,
     TriggerCapabilities, TriggerConfig,
 };
@@ -74,7 +74,7 @@ mock! {
             &self,
             handle: i16,
             channels: &[PicoChannel],
-            callback: Box<dyn FnMut(usize, usize) + 'a>,
+            callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
         ) -> PicoResult<()>;
     }
     impl TriggerDriver for TrigDriver {
@@ -143,7 +143,7 @@ fn unit(streaming: bool) -> MockTrigDriver {
     });
     mock.expect_get_latest_streaming_values()
         .returning(|_, _, mut callback| {
-            callback(0, 100);
+            callback(0, 100, Overflow::default());
             Ok(())
         });
     mock

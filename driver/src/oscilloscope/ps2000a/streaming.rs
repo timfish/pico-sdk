@@ -1,5 +1,6 @@
 use super::*;
 use crate::oscilloscope::{features::trigger::stream_offset, StreamingDriver};
+use pico_common::Overflow;
 
 impl StreamingDriver for PS2000ADriver {
     #[tracing::instrument(level = "trace", skip(self, buffer))]
@@ -71,12 +72,12 @@ impl StreamingDriver for PS2000ADriver {
         &self,
         handle: i16,
         _channels: &[PicoChannel],
-        mut callback: Box<dyn FnMut(usize, usize) + 'a>,
+        mut callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
     ) -> PicoResult<()> {
         let mut full_closure = |_: i16,
                                 no_of_samples: i32,
                                 start_index: u32,
-                                _: i16,
+                                overflow: i16,
                                 at: u32,
                                 triggered: i16,
                                 _: i16| {
@@ -88,7 +89,12 @@ impl StreamingDriver for PS2000ADriver {
                 true,
             );
             super::trigger::STATES.streamed(handle, offset);
-            callback(start_index as usize, no_of_samples as usize);
+            // Bit 0 is channel A (ps2000a guide §3.66).
+            callback(
+                start_index as usize,
+                no_of_samples as usize,
+                Overflow::from_bits(overflow),
+            );
         };
 
         let status = PicoStatus::from(unsafe {

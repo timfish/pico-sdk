@@ -5,8 +5,8 @@ use mockall::mock;
 use parking_lot::Mutex;
 use pico_common::{
     AuxIoMode, Downsample, Driver, LedColour, LedState, OscilloscopeChannelConfig,
-    OscilloscopeSampleConfig, OutputKind, OutputValue, Outputs, PicoChannel, PicoCoupling,
-    PicoInfo, PicoLed, PicoRange, PicoResult, PicoStatus, ScopeCapabilities,
+    OscilloscopeSampleConfig, OutputKind, OutputValue, Outputs, Overflow, PicoChannel,
+    PicoCoupling, PicoInfo, PicoLed, PicoRange, PicoResult, PicoStatus, ScopeCapabilities,
 };
 use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
 use pico_driver::{
@@ -68,7 +68,7 @@ mock! {
             &self,
             handle: i16,
             channels: &[PicoChannel],
-            callback: Box<dyn FnMut(usize, usize) + 'a>,
+            callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
         ) -> PicoResult<()>;
     }
     impl AuxIoDriver for OutputsDriver {

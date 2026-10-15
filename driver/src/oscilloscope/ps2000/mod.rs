@@ -19,7 +19,7 @@ use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
     Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
-    OscilloscopeSampleConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
+    OscilloscopeSampleConfig, Overflow, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
     PicoResult, PicoStatus,
 };
 use pico_sys_dynamic::ps2000::PS2000Loader;
@@ -35,6 +35,8 @@ lazy_static! {
 struct CallbackRef {
     handle: i16,
     index: usize,
+    /// The over-range flags of every callback in this poll.
+    overflow: Overflow,
 }
 
 #[derive(Default)]
@@ -50,7 +52,11 @@ impl LockedCallbackRef {
             // Check if another device is already waiting on a callback and if
             // so, we yield and check again
             if inner.is_none() {
-                *inner = Some(CallbackRef { handle, index: 0 });
+                *inner = Some(CallbackRef {
+                    handle,
+                    index: 0,
+                    overflow: Overflow::default(),
+                });
                 return;
             } else {
                 std::thread::yield_now();
@@ -58,7 +64,7 @@ impl LockedCallbackRef {
         }
     }
 
-    fn callback(&self, overview_buffers: *const *const usize, n_values: usize) {
+    fn callback(&self, overview_buffers: *const *const usize, overflow: i16, n_values: usize) {
         let mut inner = self.inner.lock();
 
         if let Some(mut callback_ref) = inner.take() {
@@ -96,15 +102,17 @@ impl LockedCallbackRef {
             }
 
             callback_ref.index += n_values;
+            // Bit 0 is channel A, bit 1 channel B (ps2000 guide §5.34).
+            callback_ref.overflow |= Overflow::from_bits(overflow);
             *inner = Some(callback_ref);
         } else {
             panic!("Streaming callback was called without a device reference");
         }
     }
 
-    fn end(&self) -> Option<usize> {
+    fn end(&self) -> Option<(usize, Overflow)> {
         let mut inner = self.inner.lock();
-        inner.take().map(|cb| cb.index)
+        inner.take().map(|cb| (cb.index, cb.overflow))
     }
 }
 
@@ -121,13 +129,17 @@ lazy_static! {
 
 extern "C" fn streaming_callback(
     overview_buffers: *mut *mut i16,
-    _overflow: i16,
+    overflow: i16,
     _triggered_at: u32,
     _triggered: i16,
     _auto_stop: i16,
     n_values: u32,
 ) {
-    CALLBACK_REF.callback(overview_buffers as *const *const usize, n_values as usize);
+    CALLBACK_REF.callback(
+        overview_buffers as *const *const usize,
+        overflow,
+        n_values as usize,
+    );
 }
 
 /// The ps2000 API streams no average or sum, only min and max.
@@ -370,4 +382,33 @@ impl OscilloscopeDriverInternal for PS2000Driver {
 impl Drop for PS2000Driver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn drop(&mut self) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_poll_joins_the_flags_of_its_callbacks() {
+        let handle = -77;
+        BUFFERS.lock().insert(handle, HashMap::new());
+        // No channel buffers, so nothing is copied.
+        let none = [std::ptr::null::<usize>(); 4];
+        let calls = LockedCallbackRef::default();
+
+        calls.start(handle);
+        calls.callback(none.as_ptr(), 0b01, 5);
+        calls.callback(none.as_ptr(), 0b00, 2);
+        calls.callback(none.as_ptr(), 0b10, 3);
+        let (count, overflow) = calls.end().unwrap();
+        assert_eq!(count, 10);
+        assert!(overflow.channel(PicoChannel::A));
+        assert!(overflow.channel(PicoChannel::B));
+
+        // The next poll starts clear.
+        calls.start(handle);
+        calls.callback(none.as_ptr(), 0, 4);
+        assert_eq!(calls.end(), Some((4, Overflow::default())));
+        BUFFERS.lock().remove(&handle);
+    }
 }
