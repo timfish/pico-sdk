@@ -186,10 +186,11 @@ pub mod prelude {
         DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
     };
     pub use pico_streaming::{
-        AfterPowerChange, DeviceNotice, DrDAQStreamingEvent, EventHandler, HRDLChannelScale,
-        HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice, LoggerPollState,
-        OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
-        RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState, TC08StreamingEvent,
+        AfterPowerChange, DeviceNotice, DrDAQStreamState, DrDAQStreamingEvent, EventHandler,
+        HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice,
+        LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent,
+        PT104StreamingEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
+        TC08StreamingEvent,
     };
 }
 
