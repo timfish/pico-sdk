@@ -925,4 +925,48 @@ mod streaming_tests {
             PicoStatus::INVALID_SAMPLERATIO
         );
     }
+    /// While held, the background thread pings no more; calls through
+    /// `with_open` still run, and the pings start again at the drop.
+    #[test]
+    fn held_steps_stop_the_pings() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let pings = Arc::new(AtomicUsize::new(0));
+        let mut mock = MockMockDriver::new();
+        mock.expect_open_unit().return_const(Ok(1));
+        mock.expect_get_unit_info().returning(|_, t| match t {
+            PicoInfo::BATCH_AND_SERIAL => Ok("ABC/1234".to_string()),
+            PicoInfo::VARIANT_INFO => Ok("2222".to_string()),
+            _ => Ok("".to_string()),
+        });
+        mock.expect_get_channel_ranges()
+            .returning(|_, _| Ok(vec![PicoRange::X1_PROBE_2V]));
+        mock.expect_maximum_value().returning(|_| Ok(32_000));
+        mock.expect_close().return_const(Ok(()));
+        let counted = pings.clone();
+        mock.expect_ping_unit().returning(move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        });
+        fixed_resolution(&mut mock);
+        let driver = OscilloscopeDriver::new(mock);
+        let device = driver.open_device(None).unwrap();
+        let streaming = device.into_streaming_device();
+
+        let wait_for = |n: usize| {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while pings.load(Ordering::SeqCst) < n {
+                assert!(std::time::Instant::now() < deadline, "no ping");
+                thread::sleep(Duration::from_millis(10));
+            }
+        };
+        wait_for(1);
+        let held = streaming.hold_steps();
+        let at_hold = pings.load(Ordering::SeqCst);
+        // Three ping steps' time: none comes while held.
+        thread::sleep(Duration::from_millis(650));
+        assert_eq!(pings.load(Ordering::SeqCst), at_hold);
+        assert_eq!(streaming.with_open(|_, _| 7), Some(7));
+        drop(held);
+        wait_for(at_hold + 1);
+    }
 }
