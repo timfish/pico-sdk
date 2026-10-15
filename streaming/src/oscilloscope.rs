@@ -6,7 +6,7 @@ use super::state::{
 use pico_common::{
     AuxIoMode, DigitalPort, Downsample, DownsampleKind, LedColour, LedState,
     OscilloscopeSampleConfig, PicoChannel, PicoError, PicoLed, PicoResolution, PicoResult,
-    PicoStatus, PowerSource, SampleType,
+    PicoStatus, PowerSource, SampleType, SigGenConfig, SigGenInfo,
 };
 use pico_device::{
     oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
@@ -776,6 +776,35 @@ impl ScopeRunner {
     pub fn trigger_enabled(&self) -> PicoResult<(bool, bool)> {
         self.with_open(|device, info| device.driver.trigger_enabled(*info.handle))
             .unwrap_or_else(|| Err(closed("trigger_enabled")))
+    }
+
+    /// What the unit's signal generator can do
+    /// (`ScopeCapabilities::sig_gen`).
+    pub fn sig_gen_info(&self) -> PicoResult<SigGenInfo> {
+        self.with_open(|device, info| device.driver.sig_gen_info(*info.handle))
+            .unwrap_or_else(|| Err(closed("sig_gen_info")))
+    }
+
+    /// Sets the signal generator, or turns it off with `None`, and
+    /// returns what the driver set.
+    pub fn set_sig_gen(&self, config: Option<&SigGenConfig>) -> PicoResult<Option<SigGenConfig>> {
+        self.with_open(|device, info| device.driver.sig_gen_apply(*info.handle, config))
+            .unwrap_or_else(|| Err(closed("sig_gen_apply")))
+    }
+
+    pub fn sig_gen_software_trigger(&self, state: bool) -> PicoResult<()> {
+        self.with_open(|device, info| device.driver.sig_gen_software_trigger(*info.handle, state))
+            .unwrap_or_else(|| Err(closed("sig_gen_software_trigger")))
+    }
+
+    pub fn sig_gen_pause(&self) -> PicoResult<()> {
+        self.with_open(|device, info| device.driver.sig_gen_pause(*info.handle))
+            .unwrap_or_else(|| Err(closed("sig_gen_pause")))
+    }
+
+    pub fn sig_gen_restart(&self) -> PicoResult<()> {
+        self.with_open(|device, info| device.driver.sig_gen_restart(*info.handle))
+            .unwrap_or_else(|| Err(closed("sig_gen_restart")))
     }
 }
 

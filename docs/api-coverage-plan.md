@@ -258,6 +258,8 @@ pub trait SigGenDriver {
 
 `None` turns the output off. `apply` returns the values the driver set (the new API reports them), as streaming reports its actual rate. Size: L (legacy across seven families, new API on two). Can split: T4a legacy, T4b new API.
 
+Built (T4): `SigGenDriver` on every family with a generator, with `sig_gen_pause` and `sig_gen_restart` for the new API; `SigGenInfo::check` refuses a config before any driver call; the legacy families share one plan (`driver/src/oscilloscope/siggen/legacy.rs`), ps6000a and psospa another (`properties.rs`); `ScopeRunner::set_sig_gen` while streaming; example `signal_generator`. No API sets a start phase, so `phase_deg` is refused.
+
 ### 3.8 Other scope features
 
 | Item                                       | Families and guide                                                                                   | API                                                                  | Size |
