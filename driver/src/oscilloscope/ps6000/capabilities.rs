@@ -52,6 +52,11 @@ pub(super) fn of(variant: &str) -> ScopeCapabilities {
             digital: false,
             delay: true,
             holdoff: false,
+            window: true,
+            runt: true,
+            external: true,
+            aux: true,
+            streaming: true,
         },
         // The first 6404 and the 6407 have no ETS.
         ets: !matches!((base, lettered), ("6404", false) | ("6407", _)),

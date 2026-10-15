@@ -2,7 +2,7 @@ use crate::DeviceOpen;
 use pico_common::{
     DigitalPort, DigitalPortConfig, Downsample, OscilloscopeChannelConfig, PicoChannel,
     PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
-    PowerSource, RateLimit, ScopeCapabilities,
+    PowerSource, RateLimit, ScopeCapabilities, TriggerConfig,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -28,6 +28,13 @@ pub struct OscilloscopeConfig {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub downsample: Option<Downsample>,
+    /// The trigger set before the stream starts. A stream does not
+    /// wait for it; each event says where it fired.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "TriggerConfig::is_none")
+    )]
+    pub trigger: TriggerConfig,
     /// MSO ports to stream beside the channels, each with its logic
     /// threshold. Ports stream raw samples only.
     #[cfg_attr(
@@ -175,7 +182,18 @@ impl OscilloscopeInfo {
     pub fn check_config(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         self.check_power(config)?;
         self.check_digital(config)?;
-        self.check_resolution(config)
+        self.check_resolution(config)?;
+        self.check_trigger(config)
+    }
+
+    fn check_trigger(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
+        if config.trigger.is_none() {
+            return Ok(());
+        }
+        if !self.capabilities.triggers.streaming {
+            return Err(PicoError::not_supported("trigger in a stream"));
+        }
+        config.trigger.check(&self.capabilities.triggers)
     }
 
     /// Refuses ports the unit lacks, and ports with a downsample
@@ -696,6 +714,7 @@ mod serde_tests {
             channels,
             resolution: None,
             downsample: None,
+            trigger: TriggerConfig::None,
             digital: HashMap::new(),
         }
     }
