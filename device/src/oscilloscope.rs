@@ -1,8 +1,8 @@
 use crate::DeviceOpen;
 use pico_common::{
-    Downsample, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError, PicoInfo,
-    PicoRange, PicoResolution, PicoResult, PicoStatus, PowerSource, RateLimit, ScopeCapabilities,
-    TriggerConfig,
+    DigitalPort, DigitalPortConfig, Downsample, OscilloscopeChannelConfig, PicoChannel,
+    PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
+    PowerSource, RateLimit, ScopeCapabilities, TriggerConfig,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -35,6 +35,13 @@ pub struct OscilloscopeConfig {
         serde(default, skip_serializing_if = "TriggerConfig::is_none")
     )]
     pub trigger: TriggerConfig,
+    /// MSO ports to stream beside the channels, each with its logic
+    /// threshold. Ports stream raw samples only.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "HashMap::is_empty")
+    )]
+    pub digital: HashMap<DigitalPort, DigitalPortConfig>,
 }
 
 impl OscilloscopeConfig {
@@ -57,6 +64,19 @@ impl OscilloscopeConfig {
 
     pub fn disable_channel(&mut self, channel: PicoChannel) {
         self.channels.remove(&channel);
+    }
+
+    pub fn enable_digital_port(&mut self, port: DigitalPort, config: DigitalPortConfig) {
+        self.digital.insert(port, config);
+    }
+
+    pub fn disable_digital_port(&mut self, port: DigitalPort) {
+        self.digital.remove(&port);
+    }
+
+    /// Whether the config streams ports with no analog channel on.
+    pub fn digital_only(&self) -> bool {
+        self.channels.is_empty() && !self.digital.is_empty()
     }
 
     pub fn set_sample_rate(&mut self, samples_per_second: u32) {
@@ -161,6 +181,7 @@ impl OscilloscopeInfo {
     /// not run, or more channels than its resolution allows
     pub fn check_config(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         self.check_power(config)?;
+        self.check_digital(config)?;
         self.check_resolution(config)?;
         self.check_trigger(config)
     }
@@ -173,6 +194,35 @@ impl OscilloscopeInfo {
             return Err(PicoError::not_supported("trigger in a stream"));
         }
         config.trigger.check(&self.capabilities.triggers)
+    }
+
+    /// Refuses ports the unit lacks, and ports with a downsample
+    pub fn check_digital(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
+        let ports = self.capabilities.digital_ports;
+        if let Some(port) = config.digital.keys().find(|p| p.index() >= ports) {
+            return Err(PicoError::from_status(
+                PicoStatus::INVALID_DIGITAL_PORT,
+                &format!("{port}: the unit has {ports} digital ports"),
+            ));
+        }
+        if !config.digital.is_empty() && Downsample::effective(config.downsample)?.is_some() {
+            return Err(PicoError::from_status(
+                PicoStatus::RATIO_MODE_NOT_SUPPORTED,
+                "digital ports stream raw samples only",
+            ));
+        }
+        Ok(())
+    }
+
+    /// The resolution ports run at with no analog channel on, on a unit
+    /// of more than one resolution: 8 bits (ps5000a guide §4.50,
+    /// ps6000a §3.49, psospa topic psospasetdigitalporton).
+    fn digital_only_resolution(&self) -> Option<PicoResolution> {
+        self.resolutions
+            .iter()
+            .map(|(r, _)| *r)
+            .find(|r| r.bits() == 8)
+            .filter(|_| self.resolutions.len() > 1)
     }
 
     /// The fastest rate of a stream with `config`, where the driver
@@ -200,6 +250,11 @@ impl OscilloscopeInfo {
         let asked = config
             .resolution
             .filter(|r| self.resolutions.iter().any(|(s, _)| s == r));
+        if asked.is_none() && config.digital_only() {
+            if let Some(eight) = self.digital_only_resolution() {
+                return Some(eight);
+            }
+        }
         if asked.is_some() || self.channel_limits.is_empty() {
             return asked.or(self.resolution);
         }
@@ -227,6 +282,16 @@ impl OscilloscopeInfo {
         let Some(resolution) = self.effective_resolution(config) else {
             return Ok(());
         };
+        if config.digital_only()
+            && self
+                .digital_only_resolution()
+                .is_some_and(|eight| eight != resolution)
+        {
+            return Err(PicoError::from_status(
+                PicoStatus::USE_8BIT_RESOLUTION,
+                &format!("digital ports with no analog channel on run at 8 bits, not {resolution}"),
+            ));
+        }
         let on = config.channels.len();
         match self.channel_limit(resolution) {
             Some(most) if on > most => Err(PicoError::from_status(
@@ -413,6 +478,51 @@ mod resolution_tests {
         assert_eq!(pick(&[A, B, C]), Some(DR_14BIT));
         assert_eq!(pick(&[A, B, C, D]), Some(DR_14BIT));
         assert!(info.check_resolution(&config(&[A, B, C], None)).is_ok());
+    }
+
+    fn mso(info: &mut OscilloscopeInfo) {
+        info.capabilities.digital_ports = 2;
+    }
+
+    #[test]
+    fn ports_alone_run_at_8_bits() {
+        let mut info = ps5000d();
+        mso(&mut info);
+        let mut ports = config(&[], None);
+        ports.enable_digital_port(DigitalPort::Port0, DigitalPortConfig::volts(1.5));
+        assert!(ports.digital_only());
+        assert_eq!(info.effective_resolution(&ports), Some(DR_8BIT));
+        assert!(info.check_config(&ports).is_ok());
+
+        ports.resolution = Some(DR_16BIT);
+        assert_eq!(
+            info.check_config(&ports).unwrap_err().status,
+            PicoStatus::USE_8BIT_RESOLUTION
+        );
+
+        // With a channel on, the channels pick the resolution.
+        let mut both = config(&[PicoChannel::A], None);
+        both.enable_digital_port(DigitalPort::Port1, DigitalPortConfig::volts(1.5));
+        assert_eq!(info.effective_resolution(&both), Some(DR_16BIT));
+        assert!(info.check_config(&both).is_ok());
+    }
+
+    #[test]
+    fn ports_the_unit_lacks_or_downsampled_are_refused() {
+        let mut info = ps5000d();
+        let mut ports = config(&[PicoChannel::A], None);
+        ports.enable_digital_port(DigitalPort::Port0, DigitalPortConfig::volts(1.5));
+        assert_eq!(
+            info.check_config(&ports).unwrap_err().status,
+            PicoStatus::INVALID_DIGITAL_PORT
+        );
+        mso(&mut info);
+        assert!(info.check_config(&ports).is_ok());
+        ports.downsample = Some(Downsample::average(4));
+        assert_eq!(
+            info.check_config(&ports).unwrap_err().status,
+            PicoStatus::RATIO_MODE_NOT_SUPPORTED
+        );
     }
 
     #[test]
@@ -605,6 +715,7 @@ mod serde_tests {
             resolution: None,
             downsample: None,
             trigger: TriggerConfig::None,
+            digital: HashMap::new(),
         }
     }
 

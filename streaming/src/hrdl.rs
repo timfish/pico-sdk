@@ -1,9 +1,8 @@
 //! Streaming for the ADC-20/ADC-24 (PicoHRDL) high-resolution data logger.
 //!
-//! Confirmed from the PicoLog 6 reference (`driver-hrdl/src/driver.ts`): the HRDL has a real
-//! native streaming buffer, the same shape as the PL1000/DrDAQ. `HRDLRun` starts the device
-//! collecting continuously into its own buffer, and `HRDLGetValues` drains whatever has landed
-//! since the last call.
+//! The HRDL driver keeps a streaming buffer: `HRDLRun` with `BM_STREAM` starts a continuous
+//! capture, and each `HRDLGetValues` call returns the readings since the last call (ADC-20/ADC-24
+//! Programmer's Guide, adc20.en r2, sections 4.1, 5.15 and 6.1.2).
 
 use super::poll::drain_wait_ms;
 use super::state::{
@@ -14,8 +13,11 @@ use pico_device::hrdl::{HRDLConfig, HRDLDevice};
 use std::collections::BTreeMap;
 use tracing::{debug, warn};
 
-/// Number of sample sets the device's internal buffer is asked to hold, matching the PL1000/DrDAQ
-/// wrappers and the PicoLog 6 reference's block sizing.
+/// Sample sets per channel the driver's buffer is asked to hold
+///
+/// The guide asks for enough to hold what arrives between two `HRDLGetValues` calls, and
+/// preferably twice that (section 5.15). Polls come at most 200 ms apart and the unit takes at
+/// most 1,000 sample sets a second, so this holds more than that, and rides out a stalled host.
 const RUN_BUFFER_SAMPLES: i32 = 64_000;
 
 /// Number of sample sets drained per poll; a full poll is followed by another at once
@@ -190,7 +192,7 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
                 }
             }
 
-            // Bit 0 is channel 1 (ADC-20/ADC-24 Programmer's Guide, HRDLGetValues).
+            // Bit 0 is channel 1 (section 5.10).
             let over_range = channels
                 .iter()
                 .filter(|&&channel| (overflow_bits as u16) & (1 << (i16::from(channel) - 1)) != 0)
@@ -226,6 +228,8 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
         }
     }
 
+    /// The guide asks for `HRDLStop` at the end of a stream, for the unit to be ready for the
+    /// next capture (section 5.20).
     #[tracing::instrument(level = "debug", skip_all)]
     fn stop(&self, info: &HRDLInfo) -> Current<HRDLInfo, HRDLStreamState> {
         self.driver.stop(*info.handle);

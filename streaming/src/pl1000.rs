@@ -1,11 +1,10 @@
 //! Streaming for the PicoLog 1000 series data logger.
 //!
-//! Confirmed from the PicoLog 6 reference (`driver-pl-1000/src/driver.ts`): the PL1000 has a
-//! real native streaming buffer. `run(true, ...)` starts the device collecting continuously into
-//! its own buffer, and `getValues` drains whatever has landed since the last call. This mirrors
-//! the oscilloscope drivers' buffer more than it mirrors TC-08/PT-104's single-value polling, but
-//! the state machine here still polls for data on a background thread rather than being driven by
-//! a native callback, so it plugs into the same [`StreamDevice`] shape as the other loggers.
+//! The PL1000 driver keeps a streaming buffer: `pl1000Run` with `BM_STREAM` starts a continuous
+//! capture, and each `pl1000GetValues` call returns the readings taken since the last call
+//! (PicoLog 1000 Series Programmer's Guide, pl1000pg-8, sections 3.1 Capture modes and 4.12).
+//! The state machine still polls for data on a background thread rather than being driven by a
+//! native callback, so it plugs into the same [`StreamDevice`] shape as the other loggers.
 
 use super::poll::drain_wait_ms;
 use super::state::{
@@ -16,9 +15,22 @@ use pico_device::pl1000::{PL1000Config, PL1000Device};
 use std::collections::BTreeMap;
 use tracing::warn;
 
-/// Number of sample sets the device's internal buffer is asked to hold. Matches the PicoLog 6
-/// reference's `run(true, handle, 64_000)`.
+/// Sample sets per channel the driver's buffer is asked to hold
+///
+/// The guide asks for enough to hold what arrives between two `pl1000GetValues` calls, and
+/// preferably twice that (pl1000pg-8, section 3.1). Polls come at most 200 ms apart, so this
+/// holds more than that at every rate the unit streams at, and rides out a stalled host.
 const RUN_BUFFER_SAMPLES: u32 = 64_000;
+
+/// The most samples, over all channels, asked of the driver at once: the limit the guide gives
+/// for a capture and for `ideal_no_of_samples` times the channels (pl1000pg-8, sections 3.1 and
+/// 4.14)
+const MAX_TOTAL_SAMPLES: u32 = 1_000_000;
+
+/// Sample sets per channel for the driver's buffer, within [`MAX_TOTAL_SAMPLES`]
+fn run_buffer_samples(channels: usize) -> u32 {
+    RUN_BUFFER_SAMPLES.min(MAX_TOTAL_SAMPLES / channels.max(1) as u32)
+}
 
 /// Number of sample sets drained per poll; a full poll is followed by another at once
 const POLL_BUFFER_SAMPLES: u32 = 1_000;
@@ -89,7 +101,8 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
             POLL_BUFFER_SAMPLES,
         )?;
 
-        self.driver.run(*info.handle, RUN_BUFFER_SAMPLES, true)?;
+        self.driver
+            .run(*info.handle, run_buffer_samples(channels.len()), true)?;
 
         Ok(Current::Streaming(info.clone(), interval_us))
     }
@@ -130,7 +143,7 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
                     }
                 }
 
-                // Bit 0 is channel 1 (PicoLog 1000 Series Programmer's Guide, pl1000GetValues).
+                // Bit 0 is channel 1 (pl1000pg-8, section 4.5).
                 let over_range = channels
                     .iter()
                     .filter(|&&channel| overflow_bits & (1 << (i16::from(channel) - 1)) != 0)
@@ -172,5 +185,17 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
     fn close(&self, info: &PL1000Info) -> Current<PL1000Info, u32> {
         let _ = self.driver.close_unit(*info.handle);
         Current::Closed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_buffer_keeps_within_the_total_limit() {
+        assert_eq!(run_buffer_samples(1), 64_000);
+        assert_eq!(run_buffer_samples(15), 64_000);
+        assert_eq!(run_buffer_samples(16), 62_500);
     }
 }

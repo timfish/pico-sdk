@@ -1,10 +1,10 @@
 //! Streaming for the PicoLog CM3 current data logger.
 //!
-//! The CM3 is a poll-only device: confirmed from the PicoLog 6 reference
-//! (`driver-cm3/src/driver.ts`), which only ever reads one channel at a time via `getValue` -
-//! there is no native streaming buffer or block/run call. The unit converts the channels that
-//! are on in turn, about 720 ms each, so the stream polls `get_value()` once per round of
-//! conversions and reports only new conversions, the same pattern as PT-104.
+//! The CM3 has no capture buffer: the driver takes readings all the time, and `PLCM3GetValue`
+//! gives the most recent reading of one channel (PicoLog CM3 Programmer's Guide, plcm3pg r4,
+//! sections 2.1 and 2.5). Measurement takes about 720 ms per channel that is on (section 2.9), so
+//! the stream polls `get_value()` once per round of conversions and reports only new
+//! conversions, the same pattern as PT-104.
 
 use super::poll::LoggerPollState;
 use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
@@ -75,8 +75,8 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
             self.driver.set_channel(*info.handle, channel, data_type)?;
         }
 
-        // The CM3 has no start call: it converts the channels that are on in turn, so poll once
-        // a round of conversions.
+        // The CM3 has no start call (section 2.1): it converts the channels that are on in turn,
+        // so poll once a round of conversions.
         let state = LoggerPollState::new(config.poll_interval_ms());
         debug!(
             poll_interval_ms = state.poll_interval_ms,
@@ -128,7 +128,7 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
 
     #[tracing::instrument(level = "debug", skip_all)]
     fn stop(&self, info: &PLCM3Info) -> Current<PLCM3Info, LoggerPollState> {
-        // CM3 has no explicit stop call; just report open
+        // CM3 has no stop call (section 2.1); just report open
         Current::Open(info.clone())
     }
 
