@@ -697,6 +697,43 @@ fn start_stream(
     Ok(Current::Streaming(info.clone(), state))
 }
 
+/// A status that says the driver lost the unit, so only a close and an
+/// open again can make it work.
+fn lost(status: PicoStatus) -> bool {
+    matches!(
+        status,
+        PicoStatus::NOT_RESPONDING | PicoStatus::INVALID_HANDLE | PicoStatus::NOT_FOUND
+    )
+}
+
+/// Gives the driver the stream's buffers again, as it asks once it
+/// has filled them.
+fn give_buffers(
+    device: &OscilloscopeDevice,
+    info: &OscilloscopeInfo,
+    state: &ScopeStreamState,
+) -> PicoResult<()> {
+    for (channel, buffer) in &state.buffers {
+        device.driver.set_data_buffer(
+            *info.handle,
+            *channel,
+            buffer.clone(),
+            buffer.len(),
+            state.downsample,
+        )?;
+    }
+    for (port, buffer) in &state.digital_buffers {
+        device.driver.set_digital_buffer(
+            *info.handle,
+            *port,
+            buffer.clone(),
+            buffer.len(),
+            state.downsample,
+        )?;
+    }
+    Ok(())
+}
+
 /// Sets the resolution. A 5464E answered `TIMEOUT` to 16 bits with no
 /// channel or port on, after a stream of ports alone. The guides give
 /// no rule for it (psospa guide §3.42, ps5000a §4.49), so after a
@@ -907,6 +944,15 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                     notify_power(notices, info, &changed, to, after);
                     Ok(Current::Open(changed))
                 }
+                None if lost(error.status) => {
+                    // A 5464E gave NOT_RESPONDING to every start after
+                    // one, until it was closed and opened again.
+                    warn!(%error, "stream start failed; the device will open again");
+                    let _ = self.driver.stop(*info.handle);
+                    let _ = self.driver.close(*info.handle);
+                    sleep_ms(200);
+                    Ok(Current::Closed)
+                }
                 None => Err(error),
             },
             started => started,
@@ -1009,35 +1055,20 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         let behind =
             returned > 0 && returned as f64 >= state.samples_per_second() * POLL.as_secs_f64();
 
-        if let Err(error) = result {
-            if error.status == PicoStatus::WAITING_FOR_DATA_BUFFERS {
+        let refilled =
+            matches!(&result, Err(e) if e.status == PicoStatus::WAITING_FOR_DATA_BUFFERS);
+        let result = match result {
+            Err(_) if refilled => {
                 state.counts.refilled();
                 debug!(counts = ?state.counts.snapshot(), "driver asked for buffers again");
-                for (channel, buffer) in &state.buffers {
-                    self.driver
-                        .set_data_buffer(
-                            *info.handle,
-                            *channel,
-                            buffer.clone(),
-                            buffer.len(),
-                            state.downsample,
-                        )
-                        .expect("could not set buffers");
-                }
-                for (port, buffer) in &state.digital_buffers {
-                    self.driver
-                        .set_digital_buffer(
-                            *info.handle,
-                            *port,
-                            buffer.clone(),
-                            buffer.len(),
-                            state.downsample,
-                        )
-                        .expect("could not set port buffers");
-                }
+                give_buffers(self, info, state)
+                    .inspect_err(|error| warn!(%error, "buffers not given again"))
+            }
+            other => other,
+        };
 
-                Current::Streaming(info.clone(), state.clone())
-            } else if let Some((changed, to)) = power_changed(self, info, error.status) {
+        if let Err(error) = result {
+            if let Some((changed, to)) = power_changed(self, info, error.status) {
                 // The runner starts the stream again if the new power
                 // runs its channels, and stops it if not.
                 let after = match changed.check_config(config) {
@@ -1056,7 +1087,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 Current::Closed
             }
         } else {
-            if !behind {
+            if !behind && !refilled {
                 sleep_ms(POLL.as_millis() as u64);
             }
 
