@@ -165,7 +165,9 @@ pub mod prelude {
         AuxIoMode, DigitalHysteresis, DigitalPort, DigitalPortConfig, DigitalThreshold, Downsample,
         DownsampleKind, Driver, LedColour, LedState, MainsRejectionFreq, OscilloscopeChannelConfig,
         PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed, PicoRange, PicoResolution,
-        PicoStatus, PowerSource, RateLimit, SampleType, ScopeCapabilities, TC08Channel, TCType,
+        PicoStatus, PowerSource, RateLimit, SampleType, ScopeCapabilities, SigGenConfig,
+        SigGenInfo, SigGenShape, SigGenShapeKind, SigGenTrigger, SigGenTriggerKind,
+        SigGenTriggerSource, Sweep, SweepKind, TC08Channel, TCType,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
