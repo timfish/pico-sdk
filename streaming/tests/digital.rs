@@ -332,3 +332,37 @@ fn bad_port_configs_are_refused_before_the_driver() {
     averaged.set_downsample(Some(Downsample::average(8)));
     refuse(averaged, PicoStatus::RATIO_MODE_NOT_SUPPORTED);
 }
+
+/// A start just after `stop`, before the runner's thread has stopped
+/// the stream, stops it and starts the new config, or refuses it.
+#[test]
+fn a_start_after_stop_takes_the_new_config() {
+    use DigitalPort::*;
+    let given = Arc::new(Mutex::new(Given::default()));
+    let driver = OscilloscopeDriver::new(mock(given, |m| {
+        m.expect_start_streaming()
+            .times(2)
+            .return_const(Ok(OscilloscopeSampleConfig::from_samples_per_second(1_000)));
+    }));
+    let streaming = driver.open_device(None).unwrap().into_streaming_device();
+
+    streaming
+        .start(config(&[PicoChannel::A], &[Port0]))
+        .unwrap();
+    streaming.stop();
+    streaming.start(config(&[], &[Port0, Port1])).unwrap();
+    assert_eq!(
+        streaming.get_stream().unwrap().digital_ports(),
+        vec![Port0, Port1]
+    );
+
+    streaming.stop();
+    let mut sixteen = config(&[], &[Port0]);
+    sixteen.resolution = Some(DR_16BIT);
+    assert_eq!(
+        streaming.start(sixteen).unwrap_err().status,
+        PicoStatus::USE_8BIT_RESOLUTION
+    );
+    assert!(streaming.get_stream().is_none());
+    streaming.close();
+}
