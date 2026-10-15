@@ -13,7 +13,7 @@ mod led;
 mod rapid_block;
 mod siggen;
 mod streaming;
-mod trigger;
+pub(crate) mod trigger;
 
 pub use aux_io::AuxIoDriver;
 pub use block::BlockDriver;

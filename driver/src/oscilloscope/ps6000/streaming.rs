@@ -1,5 +1,5 @@
 use super::*;
-use crate::oscilloscope::StreamingDriver;
+use crate::oscilloscope::{features::trigger::stream_offset, StreamingDriver};
 
 impl StreamingDriver for PS6000Driver {
     #[tracing::instrument(level = "trace", skip(self, buffer))]
@@ -73,7 +73,15 @@ impl StreamingDriver for PS6000Driver {
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
         let mut simplify_args =
-            |_: i16, sample_count: u32, start_index: u32, _: i16, _: u32, _: i16, _: i16| {
+            |_: i16, sample_count: u32, start_index: u32, _: i16, at: u32, triggered: i16, _: i16| {
+                let offset = stream_offset(
+                    triggered != 0,
+                    at.into(),
+                    start_index as usize,
+                    sample_count as usize,
+                    true,
+                );
+                super::trigger::STATES.streamed(handle, offset);
                 callback(start_index as usize, sample_count as usize);
             };
 

@@ -1,5 +1,5 @@
 use super::*;
-use crate::oscilloscope::StreamingDriver;
+use crate::oscilloscope::{features::trigger::stream_offset, StreamingDriver};
 
 impl StreamingDriver for PS6000ADriver {
     // SUM streaming is refused by the driver (RATIO_MODE_NOT_SUPPORTED
@@ -107,8 +107,7 @@ impl StreamingDriver for PS6000ADriver {
             .collect();
 
         unsafe {
-            let mut stream_trig: MaybeUninit<PICO_STREAMING_DATA_TRIGGER_INFO> =
-                MaybeUninit::uninit();
+            let mut stream_trig = MaybeUninit::<PICO_STREAMING_DATA_TRIGGER_INFO>::zeroed();
 
             let status = PicoStatus::from(self.bindings.ps6000aGetStreamingLatestValues(
                 handle,
@@ -117,8 +116,20 @@ impl StreamingDriver for PS6000ADriver {
                 stream_trig.as_mut_ptr(),
             ));
 
-            if info[0].noOfSamples_ > 0 {
-                callback(info[0].startIndex_ as usize, info[0].noOfSamples_ as usize);
+            let stream_trig = stream_trig.assume_init();
+            let (start, samples) = (info[0].startIndex_ as usize, info[0].noOfSamples_ as usize);
+            // triggerAt_ is an index into the buffer, as Pico's
+            // streaming example plots it.
+            let offset = stream_offset(
+                stream_trig.triggered_ != 0,
+                stream_trig.triggerAt_,
+                start,
+                samples,
+                false,
+            );
+            super::trigger::STATES.streamed(handle, offset);
+            if samples > 0 {
+                callback(start, samples);
             }
 
             match status {
