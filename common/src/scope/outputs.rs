@@ -104,38 +104,7 @@ impl OutputSpec {
 }
 
 fn sig_gen_fits(info: &SigGenInfo, config: &SigGenConfig) -> bool {
-    let within = |v: f64, (lo, hi): (f64, f64)| (lo..=hi).contains(&v);
-    let shape_listed = info.shapes.contains(&shape_kind(&config.shape));
-    let samples_fit = match (&config.shape, info.awg_samples) {
-        (SigGenShape::Arbitrary(samples), Some((lo, hi))) => {
-            (lo..=hi).contains(&(samples.len() as u64))
-        }
-        (SigGenShape::Arbitrary(_), None) => false,
-        _ => true,
-    };
-    shape_listed
-        && samples_fit
-        && within(config.frequency_hz, info.frequency_hz)
-        && within(config.amplitude_v, info.amplitude_v)
-        && within(config.offset_v, info.offset_v)
-}
-
-fn shape_kind(shape: &SigGenShape) -> crate::SigGenShapeKind {
-    use crate::SigGenShapeKind as K;
-    match shape {
-        SigGenShape::Sine => K::Sine,
-        SigGenShape::Square => K::Square,
-        SigGenShape::Triangle => K::Triangle,
-        SigGenShape::RampUp => K::RampUp,
-        SigGenShape::RampDown => K::RampDown,
-        SigGenShape::Sinc => K::Sinc,
-        SigGenShape::Gaussian => K::Gaussian,
-        SigGenShape::HalfSine => K::HalfSine,
-        SigGenShape::Dc => K::Dc,
-        SigGenShape::WhiteNoise => K::WhiteNoise,
-        SigGenShape::Prbs => K::Prbs,
-        SigGenShape::Arbitrary(_) => K::Arbitrary,
-    }
+    info.check(config).is_ok()
 }
 
 /// A signal generator setting for a steady level of `volts`.
@@ -237,7 +206,12 @@ mod tests {
             frequency_hz: (0.0, 20_000.0),
             amplitude_v: (0.0, 3.0),
             offset_v: (-1.5, 1.5),
+            output_v: (-1.5, 1.5),
             awg_samples: None,
+            awg_dac_hz: None,
+            duty_cycle: false,
+            filter: false,
+            trigger_sources: Vec::new(),
         };
         let spec = OutputSpec::new(
             "awg",

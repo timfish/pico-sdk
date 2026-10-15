@@ -91,6 +91,22 @@ pub struct DrDAQChannelInfo {
     pub min: f32,
     pub max: f32,
     pub decimal_places: i16,
+    /// What a value from `UsbDrDaqGetValues` or `UsbDrDaqGetValuesF` is divided by to give the
+    /// scaled value: a pH of 7.65 comes back as 765 with a divider of 100 (USB DrDAQ Programmer's
+    /// Guide, usbdrdaqpg.en r9, sections 2.6 and 3.3)
+    pub divider: i16,
+}
+
+impl DrDAQChannelInfo {
+    /// Scales a value read from the driver by the channel's divider; a divider of 0 or less is
+    /// taken as 1
+    pub fn scale(&self, value: f32) -> f32 {
+        if self.divider > 0 {
+            value / self.divider as f32
+        } else {
+            value
+        }
+    }
 }
 
 /// What was discovered about a USB DrDAQ unit once it was opened

@@ -1,21 +1,17 @@
 //! Safe wrapper for the ADC-20/ADC-24 high-resolution data logger driver (`Driver::PicoHRDL`).
 //!
-//! Like the PL1000/DrDAQ, the HRDL has a native streaming buffer: confirmed from the PicoLog 6
-//! reference (`driver-hrdl/src/driver.ts`), `HRDLRun` starts the device collecting continuously
-//! into its own buffer, and `HRDLGetValues` drains it.
+//! Like the PL1000/DrDAQ, the HRDL driver keeps a streaming buffer: "the driver constantly polls
+//! the device, and samples are placed in a buffer until retrieved by your application"
+//! (ADC-20/ADC-24 Programmer's Guide, adc20.en r2, section 4.1 Recording methods). `HRDLRun` with
+//! `BM_STREAM` starts it, and each `HRDLGetValues` call returns the readings since the last call
+//! (sections 5.15 and 6.1.2).
 //!
 //! HRDL's error model is different from every other driver in this crate, though: most calls
-//! return a bare `i16` success flag (0 = fail, non-zero = ok) instead of a `PICO_STATUS`, and the
-//! reason for a failure has to be fetched separately by reading the `HRDL_SETTINGS` info field
-//! back as a decimal string and parsing it into a [`HRDLError`]. [`HRDLDriverInternal::wrap_with_get_last_error`]
+//! return 1 on success and 0 on failure instead of a `PICO_STATUS`, and the reason for a failure
+//! is read separately from the `HRDL_SETTINGS` info field as a decimal string (sections 5.9,
+//! 5.16 and 5.18), parsed into a [`HRDLError`]. [`HRDLDriverInternal::wrap_with_get_last_error`]
 //! centralizes that, the same role [`crate::tc08::TC08DriverInternal::wrap_with_get_last_error`]
 //! plays for the TC-08 (different transport, same idea).
-//!
-//! One quirk carried over from the PicoLog 6 reference and worth flagging as uncertain: a call
-//! can report failure (return 0) while `HRDL_SETTINGS` reports `SE_OK`. The reference treats that
-//! combination as success rather than an error (`throwLastError` only throws when the settings
-//! error is not `SE_OK`), so this wrapper does the same - but the underlying reason for that
-//! combination is not documented anywhere accessible, so it is reproduced rather than explained.
 
 mod outputs;
 
@@ -28,8 +24,8 @@ use pico_common::{
     PicoError, PicoInfo, PicoResult, PicoStatus,
 };
 use pico_sys_dynamic::picohrdl::{
-    enBlockMethod_HRDL_BM_BLOCK, enBlockMethod_HRDL_BM_STREAM, enHRDLInfo_HRDL_SETTINGS,
-    HRDLLoader, HRDL_BLOCK_METHOD,
+    enBlockMethod_HRDL_BM_BLOCK, enBlockMethod_HRDL_BM_STREAM, enHRDLInfo_HRDL_ERROR,
+    enHRDLInfo_HRDL_SETTINGS, HRDLLoader, HRDL_BLOCK_METHOD,
 };
 use std::{cmp::Ordering, collections::HashMap, fmt, ops::Deref, path::Path, sync::Arc};
 
@@ -82,23 +78,29 @@ impl HRDLDriverInternal {
     /// Runs a driver call that reports success as a non-zero return, converting a failure into
     /// the reason reported via the `HRDL_SETTINGS` info field.
     ///
-    /// Reproduces a quirk from the PicoLog 6 reference: if the settings error reads back as
-    /// `SE_OK` despite the call reporting failure, that is treated as success too.
+    /// A 0 return is a failure (sections 5.16 and 5.18). If the settings field reads `SE_OK`
+    /// even so, no settings error caused it, and the call reports `OPERATION_FAILED`.
     fn wrap_with_get_last_error<F: FnOnce() -> i16>(&self, handle: i16, func: F) -> PicoStatus {
         if func() != 0 {
             return PicoStatus::OK;
         }
 
-        self.get_last_error(handle).to_status()
+        failed_status(self.get_last_error(handle))
+    }
+
+    /// Why the last `HRDLOpenUnit` failed: with a handle no unit has, `HRDLGetUnitInfo` gives
+    /// the `HRDL_ERROR` code of the last unit that failed to open (section 5.9)
+    fn get_open_error(&self) -> PicoStatus {
+        self.get_info_string_raw(0, enHRDLInfo_HRDL_ERROR as i16)
+            .and_then(|text| text.trim().parse::<i32>().ok())
+            .map(open_error_status)
+            .unwrap_or(PicoStatus::OPERATION_FAILED)
     }
 
     /// Opens the next unit that is not already open
     ///
-    /// `HRDLOpenUnit` takes no parameters and returns a handle directly: 0 when no unit is found,
-    /// a positive handle on success. A negative return is not documented for the plain (non-async)
-    /// open call in the published headers; it is treated here as "open in progress", matching the
-    /// meaning `HRDLOpenUnitProgress` gives a negative progress value - flagged as best-effort
-    /// rather than a confirmed behavior.
+    /// `HRDLOpenUnit` returns a handle, 0 when no unit is found, or -1 when a unit fails to open
+    /// (section 5.11); the driver supports up to 20 units.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_next_unit(&self) -> Result<i16, PicoStatus> {
         let result = unsafe { self.bindings.HRDLOpenUnit() };
@@ -106,18 +108,28 @@ impl HRDLDriverInternal {
         match result.cmp(&0) {
             Ordering::Greater => Ok(result),
             Ordering::Equal => Err(PicoStatus::NOT_FOUND),
-            Ordering::Less => Err(PicoStatus::OPEN_OPERATION_IN_PROGRESS),
+            Ordering::Less => Err(self.get_open_error()),
         }
     }
 
     /// Iterates every connected unit, opening each one
     ///
-    /// The caller owns every handle this yields and must close the ones it does not keep.
+    /// The caller owns every handle this yields and must close the ones it does not keep. The
+    /// iteration ends after the first error, as a unit that fails to open would fail again.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
-        std::iter::from_fn(|| match self.open_next_unit() {
-            Ok(handle) => Some(Ok(handle)),
-            Err(PicoStatus::NOT_FOUND) => None,
-            Err(status) => Some(Err(PicoError::from_status(status, "open_next_unit"))),
+        let mut done = false;
+        std::iter::from_fn(move || {
+            if done {
+                return None;
+            }
+            match self.open_next_unit() {
+                Ok(handle) => Some(Ok(handle)),
+                Err(PicoStatus::NOT_FOUND) => None,
+                Err(status) => {
+                    done = true;
+                    Some(Err(PicoError::from_status(status, "open_next_unit")))
+                }
+            }
         })
     }
 
@@ -158,7 +170,7 @@ impl HRDLDriverInternal {
         let serial = self
             .get_info_string_raw(handle, i16::from(PicoInfo::BATCH_AND_SERIAL))
             .ok_or_else(|| {
-                PicoError::from_status(self.get_last_error(handle).to_status(), "get_unit_info")
+                PicoError::from_status(failed_status(self.get_last_error(handle)), "get_unit_info")
             })?;
 
         Ok(HRDLInfo {
@@ -174,6 +186,8 @@ impl HRDLDriverInternal {
     }
 
     /// Pings the unit to check the connection is still alive
+    ///
+    /// Not to be called while the unit is collecting, after [`Self::run`] (section 5.1).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn ping_unit(&self, handle: i16) -> PicoResult<()> {
         self.wrap_with_get_last_error(handle, || unsafe { self.bindings.HRDLAcknowledge(handle) })
@@ -225,6 +239,9 @@ impl HRDLDriverInternal {
 
     /// Sets the sample interval (in milliseconds) and the conversion time used for every enabled
     /// channel
+    ///
+    /// The interval must be more than the conversion time times the analog channels that are
+    /// on, as conversion is sequential (section 5.18).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_interval(
         &self,
@@ -256,10 +273,11 @@ impl HRDLDriverInternal {
         .to_result((min, max), "min_max_adc_counts")
     }
 
-    /// Starts collecting samples into the device's internal buffer
+    /// Starts collecting samples into the driver's buffer
     ///
     /// `stream = true` runs continuously (`HRDL_BM_STREAM`); `false` collects a single block
-    /// (`HRDL_BM_BLOCK`) of `num_values` samples per channel.
+    /// (`HRDL_BM_BLOCK`) of `num_values` samples per channel. In a stream, `num_values` must hold
+    /// what arrives between two calls to [`Self::get_values`] (section 5.15).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn run(&self, handle: i16, num_values: i32, stream: bool) -> PicoResult<()> {
         let method: HRDL_BLOCK_METHOD = if stream {
@@ -283,12 +301,13 @@ impl HRDLDriverInternal {
         unsafe { self.bindings.HRDLReady(handle) > 0 }
     }
 
-    /// Drains whatever samples have landed in the device's buffer since the last call
+    /// Reads the samples taken since the last call
     ///
     /// Returns the raw interleaved ADC counts (channel-major within each sample set, i.e.
-    /// `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`) and an over-range bit field by channel number: the
-    /// least significant bit is channel 1, set when that channel is over range in at least one
-    /// returned sample.
+    /// `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`, in channel number order) and an over-range bit
+    /// field by channel number: the least significant bit is channel 1, set when that channel is
+    /// over range in at least one returned sample (section 5.10). `HRDLGetValues` returns 0 both
+    /// when it fails and when there are no new values, so a 0 reads as no values.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,
@@ -312,9 +331,10 @@ impl HRDLDriverInternal {
             )
         };
 
+        // The guide gives no negative return; read one as a failure.
         if sample_sets < 0 {
             return Err(PicoError::from_status(
-                self.get_last_error(handle).to_status(),
+                failed_status(self.get_last_error(handle)),
                 "get_values",
             ));
         }
@@ -323,6 +343,8 @@ impl HRDLDriverInternal {
         Ok((values, overflow))
     }
 
+    /// Ends a stream; needed in streaming mode for the unit to be ready for the next capture
+    /// (section 5.20)
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn stop(&self, handle: i16) {
         unsafe { self.bindings.HRDLStop(handle) };
@@ -333,6 +355,26 @@ impl HRDLDriverInternal {
         self.digital_io.lock().remove(&handle);
         self.wrap_with_get_last_error(handle, || unsafe { self.bindings.HRDLCloseUnit(handle) })
             .to_result((), "close_unit")
+    }
+}
+
+/// The status for a call that returned 0, from the `HRDL_SETTINGS` code read after it
+fn failed_status(error: HRDLError) -> PicoStatus {
+    match error.to_status() {
+        PicoStatus::OK => PicoStatus::OPERATION_FAILED,
+        status => status,
+    }
+}
+
+/// The status for an `HRDL_ERROR` code (section 5.9, Error codes)
+fn open_error_status(code: i32) -> PicoStatus {
+    match code {
+        1 => PicoStatus::KERNEL_DRIVER_TOO_OLD,
+        2 => PicoStatus::NOT_FOUND,
+        3 => PicoStatus::FW_FAIL,
+        4 => PicoStatus::OS_NOT_SUPPORTED,
+        5 => PicoStatus::MAX_UNITS_OPENED,
+        _ => PicoStatus::OPERATION_FAILED,
     }
 }
 
@@ -364,5 +406,26 @@ impl Deref for HRDLDriver {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_call_is_an_error_even_with_no_settings_error() {
+        assert_eq!(failed_status(HRDLError::OK), PicoStatus::OPERATION_FAILED);
+        assert_eq!(
+            failed_status(HRDLError::INVALID_CHANNEL),
+            PicoStatus::INVALID_CHANNEL
+        );
+    }
+
+    #[test]
+    fn open_errors_map_to_statuses() {
+        assert_eq!(open_error_status(2), PicoStatus::NOT_FOUND);
+        assert_eq!(open_error_status(5), PicoStatus::MAX_UNITS_OPENED);
+        assert_eq!(open_error_status(0), PicoStatus::OPERATION_FAILED);
     }
 }

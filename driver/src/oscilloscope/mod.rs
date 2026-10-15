@@ -11,6 +11,7 @@ mod dependencies;
 pub mod features;
 mod models;
 pub mod outputs;
+mod siggen;
 mod trampoline;
 
 mod ps2000;

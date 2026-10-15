@@ -1,11 +1,12 @@
 //! Safe wrapper for the USB DrDAQ educational data logger driver.
 //!
-//! Like the PL1000, the DrDAQ has a native streaming buffer: confirmed from the PicoLog 6
-//! reference (`driver-dr-daq/src/driver.ts`), `run` starts the device collecting continuously
-//! into its own buffer, and `getValues`/`getValuesF` drains it. DrDAQ's channels are fixed
-//! onboard sensors rather than generic analog inputs, and the driver returns already-scaled
-//! engineering-unit floats (`UsbDrDaqGetValuesF`) rather than raw ADC counts, so there is no
-//! separate max-value/scaling step like the PL1000.
+//! Like the PL1000, the DrDAQ driver keeps a streaming buffer: `UsbDrDaqRun` with `BM_STREAM`
+//! starts a continuous capture, and each `UsbDrDaqGetValues`/`UsbDrDaqGetValuesF` call returns
+//! the readings taken since the last call (USB DrDAQ Programmer's Guide, usbdrdaqpg.en r9,
+//! section 2.5 Capture modes). DrDAQ's channels are fixed onboard sensors rather than generic
+//! analog inputs, and the driver applies each sensor's scaling, but the values it returns may
+//! still need dividing by the channel's divider from `UsbDrDaqGetChannelInfo` to move the decimal
+//! point (sections 2.6, 3.3 and 3.12); [`DrDAQChannelInfo::scale`] does that.
 //!
 //! This wrapper only covers what continuous channel streaming needs (open/close/ping, unit info,
 //! channel capability info, interval/run/stop, and reading the float value buffer), and the
@@ -71,12 +72,22 @@ impl DrDAQDriverInternal {
 
     /// Iterates every connected unit, opening each one
     ///
-    /// The caller owns every handle this yields and must close the ones it does not keep.
+    /// The caller owns every handle this yields and must close the ones it does not keep. The
+    /// iteration ends after the first error, as an open that fails would fail again.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
-        iter::from_fn(|| match self.open_next_unit() {
-            Ok(handle) => Some(Ok(handle)),
-            Err(PicoStatus::NOT_FOUND) => None,
-            Err(status) => Some(Err(PicoError::from_status(status, "open_next_unit"))),
+        let mut done = false;
+        iter::from_fn(move || {
+            if done {
+                return None;
+            }
+            match self.open_next_unit() {
+                Ok(handle) => Some(Ok(handle)),
+                Err(PicoStatus::NOT_FOUND) => None,
+                Err(status) => {
+                    done = true;
+                    Some(Err(PicoError::from_status(status, "open_next_unit")))
+                }
+            }
         })
     }
 
@@ -139,7 +150,7 @@ impl DrDAQDriverInternal {
         PicoStatus::from(status).to_result((), "ping_unit")
     }
 
-    /// The valid engineering-unit range and display resolution for a channel
+    /// The range, decimal places and divider of the scaling a channel uses (section 3.3)
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn channel_info(&self, handle: i16, channel: DrDAQChannel) -> PicoResult<DrDAQChannelInfo> {
         let mut min: f32 = 0.0;
@@ -163,16 +174,20 @@ impl DrDAQDriverInternal {
                 min,
                 max,
                 decimal_places: places,
+                divider,
             },
             "channel_info",
         )
     }
 
-    /// Sets the sample interval and the channels to collect, returning the interval the driver
-    /// actually settled on, in microseconds
+    /// Sets the interval between sample sets and the channels to collect, returning the interval
+    /// the driver set, in microseconds
     ///
-    /// `ideal_samples` is a sizing hint for the block the driver prepares internally, not a
-    /// sample count limit - streaming keeps running past it.
+    /// `UsbDrDaqSetInterval` takes the time for a whole block of `ideal_samples` per channel and
+    /// returns the time it set (usbdrdaqpg.en r9, section 3.21), so the interval is multiplied up
+    /// on the way in and divided down on the way out. `ideal_samples` is used only for that timing
+    /// calculation; it does not limit a stream. In `BM_STREAM` mode the shortest interval between
+    /// two samples is 10 µs per channel.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_interval(
         &self,
@@ -181,26 +196,34 @@ impl DrDAQDriverInternal {
         interval_us: u32,
         ideal_samples: u32,
     ) -> PicoResult<u32> {
-        let mut interval_us = interval_us;
+        let ideal_samples = ideal_samples.max(1);
+        let mut us_for_block = interval_us.checked_mul(ideal_samples).ok_or_else(|| {
+            PicoError::from_status(PicoStatus::INVALID_SAMPLE_INTERVAL, "set_interval")
+        })?;
         let mut channel_ids: Vec<u32> = channels.iter().map(|&c| u32::from(c)).collect();
 
         let status = unsafe {
             self.bindings.UsbDrDaqSetInterval(
                 handle,
-                &mut interval_us as *mut u32,
+                &mut us_for_block as *mut u32,
                 ideal_samples,
                 channel_ids.as_mut_ptr(),
                 channel_ids.len() as i16,
             )
         };
 
-        PicoStatus::from(status).to_result(interval_us, "set_interval")
+        PicoStatus::from(status).to_result(
+            interval_from_block(us_for_block, ideal_samples),
+            "set_interval",
+        )
     }
 
-    /// Starts collecting samples into the device's internal buffer
+    /// Starts collecting samples into the driver's buffer
     ///
     /// `stream = true` runs continuously (`BM_STREAM`); `false` collects a single block
-    /// (`BM_SINGLE`) of `num_values` samples per channel.
+    /// (`BM_SINGLE`) of `num_values` samples per channel. In a stream, `num_values` must hold
+    /// what arrives between two calls to [`Self::get_values`], and the total over all channels is
+    /// at most 1,000,010 samples (sections 2.5 and 3.19).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn run(&self, handle: i16, num_values: u32, stream: bool) -> PicoResult<()> {
         let method: BLOCK_METHOD = if stream {
@@ -213,12 +236,13 @@ impl DrDAQDriverInternal {
         PicoStatus::from(status).to_result((), "run")
     }
 
-    /// Drains whatever samples have landed in the device's buffer since the last call
+    /// Reads the samples taken since the last call
     ///
-    /// Returns already-scaled engineering-unit values, interleaved channel-major within each
-    /// sample set (i.e. `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`), and a per-channel over-range
-    /// bitmask (bit `n` set means the `n`th requested channel is over-range in at least one
-    /// returned sample).
+    /// Returns the values from `UsbDrDaqGetValuesF`, before the channel's divider, interleaved
+    /// channel-major within each sample set (i.e. `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`) in
+    /// channel number order whatever order the channels were set in, and an over-range bit field
+    /// by channel number: the least significant bit is channel 1, set when that channel is over
+    /// range in at least one returned sample (sections 3.11 and 3.12).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,
@@ -268,6 +292,12 @@ impl DrDAQDriverInternal {
     }
 }
 
+/// The interval between sample sets from the time `UsbDrDaqSetInterval` gives for a block,
+/// rounded to the nearest microsecond
+fn interval_from_block(us_for_block: u32, ideal_samples: u32) -> u32 {
+    ((us_for_block as u64 + ideal_samples as u64 / 2) / ideal_samples as u64) as u32
+}
+
 /// A loaded USB DrDAQ driver
 #[derive(Clone)]
 pub struct DrDAQDriver(Arc<DrDAQDriverInternal>);
@@ -295,5 +325,16 @@ impl Deref for DrDAQDriver {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_block_time_divides_into_the_interval() {
+        assert_eq!(interval_from_block(2_000_000, 1_000), 2_000);
+        assert_eq!(interval_from_block(10_499, 1_000), 10);
     }
 }

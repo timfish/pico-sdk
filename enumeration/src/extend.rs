@@ -25,7 +25,11 @@ impl EnumerateDriver<DrDAQDevice> for DrDAQDriver {
             .map(|result| {
                 let handle = result?;
                 let info = self.get_unit_info(handle)?;
-                Ok(DrDAQDevice::new_closed(self, info.serial.clone(), Some(info)))
+                Ok(DrDAQDevice::new_closed(
+                    self,
+                    info.serial.clone(),
+                    Some(info),
+                ))
             })
             .collect())
     }
@@ -56,7 +60,11 @@ impl EnumerateDriver<HRDLDevice> for HRDLDriver {
             .map(|result| {
                 let handle = result?;
                 let info = self.get_unit_info(handle)?;
-                Ok(HRDLDevice::new_closed(self, info.serial.clone(), Some(info)))
+                Ok(HRDLDevice::new_closed(
+                    self,
+                    info.serial.clone(),
+                    Some(info),
+                ))
             })
             .collect())
     }
@@ -71,24 +79,30 @@ impl EnumerateDriver<PL1000Device> for PL1000Driver {
             .map(|result| {
                 let handle = result?;
                 let info = self.get_unit_info(handle)?;
-                Ok(PL1000Device::new_closed(self, info.serial.clone(), Some(info)))
+                Ok(PL1000Device::new_closed(
+                    self,
+                    info.serial.clone(),
+                    Some(info),
+                ))
             })
             .collect())
     }
 }
 
 impl EnumerateDriver<PLCM3Device> for PLCM3Driver {
-    /// The CM3 opens by serial filter directly, but a null-serial open still opens the next
-    /// unopened unit, so discovery uses the same open-every-unit loop as the other loggers.
-    /// (See [`pico_driver::cm3::PLCM3DriverInternal::open_unit_iter`]'s note on the assumed
-    /// repeated-null-open semantics -- to confirm on hardware.)
+    /// The CM3 lists the serials attached with `PLCM3Enumerate`, and discovery opens each one by
+    /// serial (PicoLog CM3 Programmer's Guide, plcm3pg r4, sections 2.3 and 2.7).
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<PLCM3Device>>> {
         Ok(self
             .open_unit_iter()
             .map(|result| {
                 let handle = result?;
                 let info = self.get_unit_info(handle)?;
-                Ok(PLCM3Device::new_closed(self, info.serial.clone(), Some(info)))
+                Ok(PLCM3Device::new_closed(
+                    self,
+                    info.serial.clone(),
+                    Some(info),
+                ))
             })
             .collect())
     }
@@ -103,7 +117,11 @@ impl EnumerateDriver<PT104Device> for PT104Driver {
             .map(|result| {
                 let handle = result?;
                 let info = self.get_unit_info(handle)?;
-                Ok(PT104Device::new_closed(self, info.serial.clone(), Some(info)))
+                Ok(PT104Device::new_closed(
+                    self,
+                    info.serial.clone(),
+                    Some(info),
+                ))
             })
             .collect())
     }

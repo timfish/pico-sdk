@@ -162,11 +162,13 @@
 
 pub mod prelude {
     pub use pico_common::{
-        AuxIoMode, Downsample, DownsampleKind, Driver, EtsConfig, EtsLimits, EtsMode, LedColour,
-        LedState, MainsRejectionFreq, OscilloscopeChannelConfig, OutputKind, OutputSpec,
-        OutputValue, Outputs, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed, PicoRange,
+        AuxIoMode, DigitalHysteresis, DigitalPort, DigitalPortConfig, DigitalThreshold, Downsample,
+        DownsampleKind, Driver, EtsConfig, EtsLimits, EtsMode, LedColour, LedState,
+        MainsRejectionFreq, OscilloscopeChannelConfig, OutputKind, OutputSpec, OutputValue,
+        Outputs, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed, PicoRange,
         PicoResolution, PicoStatus, PowerSource, RateLimit, SampleType, ScopeCapabilities,
-        SigGenConfig, SigGenShape, TC08Channel, TCType,
+        SigGenConfig, SigGenInfo, SigGenShape, SigGenShapeKind, SigGenTrigger, SigGenTriggerKind,
+        SigGenTriggerSource, Sweep, SweepKind, TC08Channel, TCType,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
@@ -188,10 +190,11 @@ pub mod prelude {
         DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
     };
     pub use pico_streaming::{
-        AfterPowerChange, DeviceNotice, DrDAQStreamingEvent, EventHandler, HRDLChannelScale,
-        HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice, LoggerPollState,
-        OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent, PT104StreamingEvent,
-        RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState, TC08StreamingEvent,
+        AfterPowerChange, DeviceNotice, DrDAQStreamState, DrDAQStreamingEvent, EventHandler,
+        HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice,
+        LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent,
+        PT104StreamingEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
+        TC08StreamingEvent,
     };
 }
 

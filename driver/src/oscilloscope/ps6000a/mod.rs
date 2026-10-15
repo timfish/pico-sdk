@@ -60,6 +60,8 @@ pub struct PS6000ADriver {
     bindings: PS6000ALoader,
     /// The ratio mode and data type of each handle's buffers.
     streams: RwLock<HashMap<i16, PicoStreamMode>>,
+    /// The digital ports with a stream buffer on each handle.
+    ports: super::features::StreamPorts,
 }
 
 impl std::fmt::Debug for PS6000ADriver {
@@ -79,6 +81,7 @@ impl PS6000ADriver {
             bindings,
             _dependencies: dependencies,
             streams: RwLock::new(HashMap::new()),
+            ports: Default::default(),
         })
     }
 }
@@ -327,6 +330,7 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn clear_data_buffers(&self, handle: i16) -> PicoResult<()> {
+        self.ports.clear(handle);
         PicoStatus::from(unsafe {
             self.bindings.ps6000aSetDataBuffer(
                 handle,

@@ -29,7 +29,12 @@ pub fn sig_gen_info() -> SigGenInfo {
         frequency_hz: (0.0, 20_000.0),
         amplitude_v: (0.0, 3.0),
         offset_v: (-1.5, 1.5),
+        output_v: (-1.5, 1.5),
         awg_samples: Some(AWG_POINTS),
+        awg_dac_hz: None,
+        duty_cycle: false,
+        filter: false,
+        trigger_sources: Vec::new(),
     }
 }
 
