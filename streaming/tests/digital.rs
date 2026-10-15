@@ -417,3 +417,53 @@ fn ports_go_off_before_a_resolution_change() {
     assert_eq!(*on.lock().unwrap(), [Port0].into());
     streaming.close();
 }
+
+/// A resolution change refused with nothing on is tried again with the
+/// config's channels on. The mock refuses 16 bits with no channel on,
+/// as the 5464E did after a stream of ports alone.
+#[test]
+fn a_failed_resolution_change_is_tried_again_with_channels_on() {
+    use DigitalPort::*;
+    let on = Arc::new(Mutex::new(std::collections::BTreeSet::new()));
+    let tries = Arc::new(Mutex::new(Vec::new()));
+    let given = Arc::new(Mutex::new(Given::default()));
+    let driver = OscilloscopeDriver::new(mock(given, |m| {
+        m.expect_enable_channel().returning({
+            let on = on.clone();
+            move |_, ch, _| {
+                on.lock().unwrap().insert(ch);
+                Ok(())
+            }
+        });
+        m.expect_disable_channel().returning({
+            let on = on.clone();
+            move |_, ch| {
+                on.lock().unwrap().remove(&ch);
+                Ok(())
+            }
+        });
+        m.expect_set_resolution().returning({
+            let (on, tries) = (on.clone(), tries.clone());
+            move |_, resolution| {
+                let none_on = on.lock().unwrap().is_empty();
+                tries.lock().unwrap().push((resolution, none_on));
+                match (none_on, resolution) {
+                    (true, DR_16BIT) => Err(PicoStatus::TIMEOUT.into()),
+                    _ => Ok(()),
+                }
+            }
+        });
+    }));
+    let streaming = driver.open_device(None).unwrap().into_streaming_device();
+
+    streaming.start(config(&[], &[Port0, Port1])).unwrap();
+    streaming.stop();
+    let mut sixteen = config(&[PicoChannel::A], &[Port0]);
+    sixteen.resolution = Some(DR_16BIT);
+    streaming.start(sixteen).unwrap();
+    assert_eq!(
+        *tries.lock().unwrap(),
+        vec![(DR_8BIT, true), (DR_16BIT, true), (DR_16BIT, false)]
+    );
+    streaming.close();
+}

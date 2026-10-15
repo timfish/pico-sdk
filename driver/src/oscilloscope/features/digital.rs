@@ -1,5 +1,6 @@
 use crate::oscilloscope::SampleBuffer;
 use pico_common::{DigitalPort, DigitalPortConfig, Downsample, PicoError, PicoResult};
+use std::collections::HashMap;
 
 /// The digital inputs of MSO models. Data comes in `i16` buffers like
 /// the analogue data, one per port, the port's 8 bits in the low byte
@@ -73,33 +74,82 @@ pub(crate) fn no_hysteresis(config: &DigitalPortConfig) -> PicoResult<()> {
 
 /// The ports with a stream buffer on each handle, for drivers whose
 /// `GetStreamingLatestValues` takes a list of what to read (ps6000a,
-/// psospa).
+/// psospa), and how far each buffer of the list is filled.
 #[derive(Default)]
-pub(crate) struct StreamPorts(
-    parking_lot::RwLock<std::collections::HashMap<i16, std::collections::BTreeSet<DigitalPort>>>,
-);
+pub(crate) struct StreamPorts {
+    ports: parking_lot::RwLock<HashMap<i16, std::collections::BTreeSet<DigitalPort>>>,
+    joined: parking_lot::Mutex<HashMap<i16, Joined>>,
+}
 
 impl StreamPorts {
     pub(crate) fn add(&self, handle: i16, port: DigitalPort) {
-        self.0.write().entry(handle).or_default().insert(port);
+        self.ports.write().entry(handle).or_default().insert(port);
     }
 
     pub(crate) fn remove(&self, handle: i16, port: DigitalPort) {
-        if let Some(ports) = self.0.write().get_mut(&handle) {
+        if let Some(ports) = self.ports.write().get_mut(&handle) {
             ports.remove(&port);
         }
     }
 
     pub(crate) fn clear(&self, handle: i16) {
-        self.0.write().remove(&handle);
+        self.ports.write().remove(&handle);
+        self.buffers_set(handle);
     }
 
     pub(crate) fn of(&self, handle: i16) -> Vec<DigitalPort> {
-        self.0
+        self.ports
             .read()
             .get(&handle)
             .map(|p| p.iter().copied().collect())
             .unwrap_or_default()
+    }
+
+    /// New buffers start at index 0.
+    pub(crate) fn buffers_set(&self, handle: i16) {
+        self.joined.lock().remove(&handle);
+    }
+
+    /// The samples every buffer of `handle` holds that were not given
+    /// before, from one call's `(channel, start, count)` entries.
+    pub(crate) fn join(
+        &self,
+        handle: i16,
+        entries: &[(u32, usize, usize)],
+    ) -> Option<(usize, usize)> {
+        self.joined.lock().entry(handle).or_default().join(entries)
+    }
+}
+
+/// How far each buffer of one stream is filled. On a 5464E the port
+/// buffers' samples came in other calls than channel A's, so samples
+/// go out once every buffer that has reported holds them.
+#[derive(Debug, Default)]
+pub(crate) struct Joined {
+    /// The end of the samples each buffer has, by channel code.
+    ends: HashMap<u32, usize>,
+    /// The end of the samples given out.
+    given: usize,
+}
+
+impl Joined {
+    pub(crate) fn join(&mut self, entries: &[(u32, usize, usize)]) -> Option<(usize, usize)> {
+        for &(channel, start, count) in entries {
+            if count > 0 {
+                self.ends.insert(channel, start + count);
+            }
+        }
+        let first = entries.first().map(|e| (e.1, e.2));
+        if entries.iter().any(|e| Some((e.1, e.2)) != first) {
+            tracing::debug!(?entries, "buffers returned samples in different calls");
+        }
+        // A buffer that never reported does not hold the others back.
+        let ready = self.ends.values().copied().min()?;
+        (ready > self.given).then(|| {
+            let range = (self.given, ready - self.given);
+            self.given = ready;
+            range
+        })
     }
 }
 
@@ -139,6 +189,33 @@ mod tests {
         assert!(no_hysteresis(&config).is_ok());
         config.hysteresis = Some(pico_common::DigitalHysteresis::Low);
         assert!(no_hysteresis(&config).is_err());
+    }
+
+    #[test]
+    fn samples_go_out_once_every_buffer_holds_them() {
+        let (a, port) = (0, 128);
+        let mut j = Joined::default();
+        // Both at once.
+        assert_eq!(j.join(&[(a, 0, 100), (port, 0, 100)]), Some((0, 100)));
+        // A first; the port's come in the next call.
+        assert_eq!(j.join(&[(a, 100, 50), (port, 0, 0)]), None);
+        assert_eq!(j.join(&[(a, 0, 0), (port, 100, 50)]), Some((100, 50)));
+        // The port ahead of A.
+        assert_eq!(j.join(&[(a, 150, 10), (port, 150, 30)]), Some((150, 10)));
+        assert_eq!(j.join(&[(a, 160, 20), (port, 0, 0)]), Some((160, 20)));
+        assert_eq!(j.join(&[(a, 0, 0), (port, 0, 0)]), None);
+
+        // A buffer that never reported holds nothing back.
+        let mut j = Joined::default();
+        assert_eq!(j.join(&[(a, 0, 0), (port, 0, 40)]), Some((0, 40)));
+    }
+
+    #[test]
+    fn new_buffers_start_again_at_zero() {
+        let ports = StreamPorts::default();
+        assert_eq!(ports.join(1, &[(0, 0, 100)]), Some((0, 100)));
+        ports.buffers_set(1);
+        assert_eq!(ports.join(1, &[(0, 0, 10)]), Some((0, 10)));
     }
 
     #[test]

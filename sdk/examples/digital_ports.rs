@@ -12,13 +12,15 @@
 //!    which no guide states; not a check.
 //!
 //! Checks in runs 1 and 2: each event has as many bytes for each port
-//! as samples, only the ports asked for, the samples counted are within
-//! 2% of the rate, and the stream did not start again. Each run also
-//! prints the driver's own counts over the same window: samples, start
-//! index gaps and the samples they skip, and buffer refills. In run 1, with AUX wired to D0, bit 0 should
-//! change about 16 times, once at each AUX change; the example prints
-//! the count and the share of time each bit was high, and counts it a
-//! failure only when `--wired` is given. Exits 1 on a failure.
+//! as samples, and only the ports asked for; the driver's sample index
+//! moved within 1% of the rate times the time between the two returns
+//! that bound the window; no start index gap (lost samples); and no
+//! restart. The samples that arrived in the window are printed only,
+//! as they are off by the samples in flight. In run 1, with AUX wired
+//! to D0, bit 0 should change about 16 times, once at each AUX change;
+//! the example prints the count and the share of time each bit was
+//! high, and counts it a failure only when `--wired` is given. Exits 1
+//! on a failure.
 //!
 //! `cargo run --release --example digital_ports -- [serial] [--wired]`
 
@@ -187,15 +189,12 @@ fn run(
     runner.stop();
     let tally = std::mem::take(&mut *counter.tally.lock().unwrap());
 
-    let expected = elapsed * stream.samples_per_second();
-    let share = tally.samples as f64 / expected;
-    checks.check(
-        (0.98..=1.02).contains(&share),
-        &format!(
-            "{} samples in {elapsed:.2} s, {:.1}% of the rate",
-            tally.samples,
-            share * 100.0
-        ),
+    let rate = stream.samples_per_second();
+    println!(
+        "  {} samples arrived in {elapsed:.2} s, {:.1}% of the rate (information only: \
+         off by the samples in flight)",
+        tally.samples,
+        tally.samples as f64 / (elapsed * rate) * 100.0
     );
     checks.check(
         tally.events > 0 && tally.bad_events == 0,
@@ -204,17 +203,32 @@ fn run(
             tally.events, tally.bad_events
         ),
     );
-    // The driver's own counts over the same window, to tell samples it
-    // skipped (start index gaps) or never sent from ones lost here.
-    let driver_samples = counts_after.samples - counts_before.samples;
-    println!(
-        "  driver: {driver_samples} samples ({:.1}% of the rate) in {} returns, {} index gaps \
-         skipping {} samples, {} buffer refills, stream restarted: {restarted}",
-        driver_samples as f64 / expected * 100.0,
-        counts_after.returns - counts_before.returns,
-        counts_after.index_gaps - counts_before.index_gaps,
-        counts_after.skipped - counts_before.skipped,
-        counts_after.refills - counts_before.refills,
+    // The driver's sample index at two returns against the rate over
+    // the time between those returns.
+    let samples = counts_after.samples - counts_before.samples;
+    match (counts_before.last_return, counts_after.last_return) {
+        (Some(t0), Some(t1)) if t1 > t0 => {
+            let span = (t1 - t0).as_secs_f64();
+            let share = samples as f64 / (span * rate);
+            checks.check(
+                (0.99..=1.01).contains(&share),
+                &format!(
+                    "driver index moved {samples} in {span:.3} s between returns, {:.2}% of the rate",
+                    share * 100.0
+                ),
+            );
+        }
+        _ => checks.check(false, "the driver returned samples in the window"),
+    }
+    let gaps = counts_after.index_gaps - counts_before.index_gaps;
+    checks.check(
+        gaps == 0,
+        &format!(
+            "{gaps} start index gaps skipping {} samples ({} returns, {} buffer refills)",
+            counts_after.skipped - counts_before.skipped,
+            counts_after.returns - counts_before.returns,
+            counts_after.refills - counts_before.refills,
+        ),
     );
     checks.check(!restarted, "the stream ran without a restart");
     for port in &ports {

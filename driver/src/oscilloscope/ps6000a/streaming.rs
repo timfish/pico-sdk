@@ -23,6 +23,7 @@ impl StreamingDriver for PS6000ADriver {
     ) -> PicoResult<()> {
         let stream = PicoStreamMode::new(downsample, buffer.sample_type())?;
         self.streams.write().insert(handle, stream);
+        self.ports.buffers_set(handle);
 
         PicoStatus::from(unsafe {
             self.bindings.ps6000aSetDataBuffer(
@@ -123,33 +124,13 @@ impl StreamingDriver for PS6000ADriver {
                 stream_trig.as_mut_ptr(),
             ));
 
-            let first = (info[0].startIndex_, info[0].noOfSamples_);
-            let first_channel = info[0].channel_;
-            for entry in &info[1..] {
-                let (channel, start, count) =
-                    (entry.channel_, entry.startIndex_, entry.noOfSamples_);
-                if (start, count) != first {
-                    tracing::warn!(
-                        channel,
-                        start,
-                        count,
-                        first_channel,
-                        first_start = first.0,
-                        first_count = first.1,
-                        "buffers of one stream returned different samples"
-                    );
-                }
-            }
-            tracing::trace!(
-                ?status,
-                start = first.0,
-                count = first.1,
-                entries = info.len(),
-                "latest values"
-            );
-
-            if info[0].noOfSamples_ > 0 {
-                callback(info[0].startIndex_ as usize, info[0].noOfSamples_ as usize);
+            let entries: Vec<(u32, usize, usize)> = info
+                .iter()
+                .map(|e| (e.channel_, e.startIndex_ as usize, e.noOfSamples_ as usize))
+                .collect();
+            tracing::trace!(?status, ?entries, "latest values");
+            if let Some((start, count)) = self.ports.join(handle, &entries) {
+                callback(start, count);
             }
 
             match status {

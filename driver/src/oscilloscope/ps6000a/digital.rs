@@ -118,6 +118,7 @@ impl DigitalPortDriver for PS6000ADriver {
     ) -> PicoResult<()> {
         self.set_port_buffer(handle, port, &buffer, 0, downsample, "set_digital_buffer")?;
         self.ports.add(handle, port);
+        self.ports.buffers_set(handle);
         Ok(())
     }
 

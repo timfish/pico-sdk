@@ -5,8 +5,8 @@ use super::state::{
 };
 use pico_common::{
     AuxIoMode, DigitalPort, Downsample, DownsampleKind, LedColour, LedState,
-    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoLed, PicoResult, PicoStatus, PowerSource,
-    SampleType,
+    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoLed, PicoResolution, PicoResult,
+    PicoStatus, PowerSource, SampleType,
 };
 use pico_device::{
     oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
@@ -275,6 +275,10 @@ pub struct StreamCounts {
     pub skipped: u64,
     /// Times the driver asked for buffers again.
     pub refills: u64,
+    /// When the last return came. The samples between two snapshots
+    /// over the time between their returns give the rate the driver
+    /// delivers, with no error from samples in flight.
+    pub last_return: Option<Instant>,
 }
 
 /// The start index each return should have. Only the poll thread
@@ -288,6 +292,8 @@ struct Continuity {
     refills: AtomicU64,
     /// The index after the last return, plus one; 0 for none.
     next: AtomicU64,
+    /// Microseconds from [`origin`] of the last return, plus one.
+    last_us: AtomicU64,
 }
 
 impl Continuity {
@@ -321,6 +327,8 @@ impl Continuity {
             .store((start + count + 1) as u64, Ordering::Relaxed);
         self.samples.fetch_add(count as u64, Ordering::Relaxed);
         self.returns.fetch_add(1, Ordering::Relaxed);
+        let us = Instant::now().duration_since(origin()).as_micros() as u64;
+        self.last_us.store(us + 1, Ordering::Relaxed);
     }
 
     /// The driver starts new buffers at index 0.
@@ -336,6 +344,10 @@ impl Continuity {
             index_gaps: self.index_gaps.load(Ordering::Relaxed),
             skipped: self.skipped.load(Ordering::Relaxed),
             refills: self.refills.load(Ordering::Relaxed),
+            last_return: match self.last_us.load(Ordering::Relaxed) {
+                0 => None,
+                us => Some(origin() + Duration::from_micros(us - 1)),
+            },
         }
     }
 }
@@ -578,7 +590,7 @@ fn start_stream(
     ports_off(device, info)?;
 
     if let Some(resolution) = info.effective_resolution(config) {
-        device.driver.set_resolution(*info.handle, resolution)?;
+        set_resolution(device, info, config, resolution)?;
         debug!(asked = ?resolution, set = ?device.driver.get_resolution(*info.handle), "resolution set");
     }
 
@@ -665,6 +677,57 @@ fn start_stream(
 
     Ok(Current::Streaming(info.clone(), state))
 }
+
+/// Sets the resolution. A 5464E answered `TIMEOUT` to 16 bits with no
+/// channel or port on, after a stream of ports alone. The guides give
+/// no rule for it (psospa guide §3.42, ps5000a §4.49), so after a
+/// failure the config's channels go on and the change is tried once
+/// more, after a short wait.
+fn set_resolution(
+    device: &OscilloscopeDevice,
+    info: &OscilloscopeInfo,
+    config: &OscilloscopeConfig,
+    resolution: PicoResolution,
+) -> PicoResult<()> {
+    let handle = *info.handle;
+    let first = match device.driver.set_resolution(handle, resolution) {
+        Ok(()) => return Ok(()),
+        Err(error) => error,
+    };
+    if matches!(
+        first.status,
+        PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT
+            | PicoStatus::INVALID_DEVICE_RESOLUTION
+            | PicoStatus::INVALID_NUMBER_CHANNELS_FOR_RESOLUTION
+            | PicoStatus::USE_8BIT_RESOLUTION
+    ) {
+        return Err(first);
+    }
+    let mut channels: Vec<_> = config.channels.iter().collect();
+    channels.sort_by_key(|(ch, _)| **ch);
+    warn!(
+        error = %first,
+        %resolution,
+        channels = channels.len(),
+        "resolution change failed; trying again with the channels on"
+    );
+    for (channel, channel_config) in channels {
+        if let Err(error) = device
+            .driver
+            .enable_channel(handle, *channel, channel_config)
+        {
+            debug!(%channel, %error, "channel not on before the resolution change");
+        }
+    }
+    sleep_ms(RESOLUTION_RETRY.as_millis() as u64);
+    device
+        .driver
+        .set_resolution(handle, resolution)
+        .inspect(|()| info!(%resolution, "resolution set at the second try"))
+}
+
+/// The wait before a failed resolution change is tried again.
+const RESOLUTION_RETRY: Duration = Duration::from_millis(200);
 
 /// A scope's streaming runner.
 pub type ScopeRunner = StreamingRunner<
@@ -997,16 +1060,20 @@ mod tests {
         c.record(0, 10, 1000);
         // Wrapped early: 990 skipped to the end, then 5 from 0.
         c.record(5, 1, 1000);
+        let counts = c.snapshot();
+        assert!(counts.last_return.is_some());
         assert_eq!(
-            c.snapshot(),
+            counts,
             StreamCounts {
                 samples: 1086,
                 returns: 6,
                 index_gaps: 2,
                 skipped: 25 + 995,
                 refills: 1,
+                last_return: counts.last_return,
             }
         );
+        assert_eq!(Continuity::default().snapshot().last_return, None);
     }
 
     #[test]
