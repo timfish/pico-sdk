@@ -120,7 +120,8 @@ mod serde_tests {
     /// compatibility for additive changes made on newer writers.
     #[test]
     fn tc08_config_tolerates_unknown_fields() {
-        let json = r#"{"interval_ms":250,"mains_rejection":"_60Hz","channels":{},"future_field":42}"#;
+        let json =
+            r#"{"interval_ms":250,"mains_rejection":"_60Hz","channels":{},"future_field":42}"#;
         let config: TC08Config = serde_json::from_str(json).expect("deserialize");
         assert_eq!(config.interval_ms, 250);
         assert_eq!(config.mains_rejection, MainsRejectionFreq::_60Hz);

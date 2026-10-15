@@ -23,7 +23,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let family = std::env::args().nth(1).unwrap_or_else(|| "pt104".to_string());
+    let family = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "pt104".to_string());
     let driver = match family.as_str() {
         "pt104" => Driver::PT104,
         "cm3" => Driver::PLCM3,
@@ -31,7 +33,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "hrdl" => Driver::PicoHRDL,
         other => return Err(format!("unknown family '{other}'").into()),
     };
-    let device = driver.load(&LibraryResolution::Default)?.open_device(None)?;
+    let device = driver
+        .load(&LibraryResolution::Default)?
+        .open_device(None)?;
     println!("Opened {}", device.get_serial());
 
     match device {
@@ -54,7 +58,11 @@ fn wait_for_enter() -> Result<(), Box<dyn std::error::Error>> {
 
 fn pt104(device: PT104Device) -> Result<(), Box<dyn std::error::Error>> {
     let mut config = PT104Config::default();
-    config.enable_channel(PT104Channel::CHANNEL_1, PT104DataType::PT100, PT104Wires::FourWire);
+    config.enable_channel(
+        PT104Channel::CHANNEL_1,
+        PT104DataType::PT100,
+        PT104Wires::FourWire,
+    );
     let types: Vec<_> = config.enabled_channels().map(|(c, t, _)| (c, t)).collect();
     let device = device.into_streaming_device();
 
@@ -63,7 +71,10 @@ fn pt104(device: PT104Device) -> Result<(), Box<dyn std::error::Error>> {
         fn new_data(&self, event: Arc<PT104StreamingEvent>) {
             for (channel, data_type) in &self.0 {
                 let raw = event.channels.get(channel).copied().flatten();
-                match (raw.and_then(|raw| data_type.to_unit(raw)), data_type.scale()) {
+                match (
+                    raw.and_then(|raw| data_type.to_unit(raw)),
+                    data_type.scale(),
+                ) {
                     (Some(value), Some((_, unit))) => println!("Channel {channel}: {value} {unit}"),
                     _ => println!("Channel {channel}: no new conversion"),
                 }
@@ -87,7 +98,10 @@ fn cm3(device: PLCM3Device) -> Result<(), Box<dyn std::error::Error>> {
         fn new_data(&self, event: Arc<PLCM3StreamingEvent>) {
             for (channel, data_type) in &self.0 {
                 let raw = event.channels.get(channel).copied().flatten();
-                match (raw.and_then(|raw| data_type.to_unit(raw)), data_type.scale()) {
+                match (
+                    raw.and_then(|raw| data_type.to_unit(raw)),
+                    data_type.scale(),
+                ) {
                     (Some(value), Some((_, unit))) => println!("Channel {channel}: {value} {unit}"),
                     _ => println!("Channel {channel}: no new conversion"),
                 }
@@ -102,7 +116,11 @@ fn cm3(device: PLCM3Device) -> Result<(), Box<dyn std::error::Error>> {
 
 fn pl1000(device: PL1000Device) -> Result<(), Box<dyn std::error::Error>> {
     let info = device.info.clone().ok_or("the unit is not open")?;
-    println!("{} with channels 1 to {}", info.model(), info.channels().len());
+    println!(
+        "{} with channels 1 to {}",
+        info.model(),
+        info.channels().len()
+    );
     let mut config = PL1000Config {
         sample_interval_us: 100_000,
         ..Default::default()
@@ -135,7 +153,10 @@ fn hrdl(device: HRDLDevice) -> Result<(), Box<dyn std::error::Error>> {
     let device = device.into_streaming_device();
     device.start(config)?;
     let state = device.get_stream().ok_or("the unit is not streaming")?;
-    println!("Streaming every {} ms: {:?}", state.interval_ms, state.channels);
+    println!(
+        "Streaming every {} ms: {:?}",
+        state.interval_ms, state.channels
+    );
 
     struct Print(HRDLStreamState);
     impl EventHandler<HRDLStreamingEvent> for Print {
@@ -143,7 +164,10 @@ fn hrdl(device: HRDLDevice) -> Result<(), Box<dyn std::error::Error>> {
             for (channel, counts) in &event.channels {
                 let scale = &self.0.channels[channel];
                 if let Some(&last) = counts.last() {
-                    println!("Channel {channel}: {:.6} V", last as f64 * scale.volts_per_count());
+                    println!(
+                        "Channel {channel}: {:.6} V",
+                        last as f64 * scale.volts_per_count()
+                    );
                 }
             }
         }

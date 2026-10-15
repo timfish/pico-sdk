@@ -1,5 +1,5 @@
 use crate::oscilloscope::SampleBuffer;
-use pico_common::{DigitalPort, DigitalPortConfig, Downsample, PicoError, PicoResult};
+use pico_common::{DigitalPort, DigitalPortConfig, Downsample, Overflow, PicoError, PicoResult};
 use std::collections::HashMap;
 
 /// The digital inputs of MSO models. Data comes in `i16` buffers like
@@ -119,6 +119,15 @@ impl StreamPorts {
     ) -> Option<(usize, usize)> {
         self.joined.lock().entry(handle).or_default().join(entries)
     }
+
+    /// One call's over-range flags, held until samples go out with them.
+    pub(crate) fn flags(&self, handle: i16, flags: Overflow, given: bool) -> Overflow {
+        self.joined
+            .lock()
+            .entry(handle)
+            .or_default()
+            .flags(flags, given)
+    }
 }
 
 /// How far each buffer of one stream is filled. On a 5464E the port
@@ -130,6 +139,8 @@ pub(crate) struct Joined {
     ends: HashMap<u32, usize>,
     /// The end of the samples given out.
     given: usize,
+    /// Over-range flags of calls whose samples have not gone out.
+    pending: Overflow,
 }
 
 impl Joined {
@@ -150,6 +161,18 @@ impl Joined {
             self.given = ready;
             range
         })
+    }
+
+    /// The flags to give with the samples going out, if any do. A flag
+    /// can come in a call whose samples go out in a later one, so it
+    /// waits for them rather than be lost.
+    pub(crate) fn flags(&mut self, flags: Overflow, given: bool) -> Overflow {
+        self.pending |= flags;
+        if given {
+            std::mem::take(&mut self.pending)
+        } else {
+            Overflow::default()
+        }
     }
 }
 
@@ -208,6 +231,19 @@ mod tests {
         // A buffer that never reported holds nothing back.
         let mut j = Joined::default();
         assert_eq!(j.join(&[(a, 0, 0), (port, 0, 40)]), Some((0, 40)));
+    }
+
+    #[test]
+    fn flags_wait_for_samples_to_go_out() {
+        let ports = StreamPorts::default();
+        assert_eq!(ports.flags(1, Overflow(0b01), false), Overflow::default());
+        assert_eq!(ports.flags(1, Overflow(0b10), true), Overflow(0b11));
+        assert_eq!(
+            ports.flags(1, Overflow::default(), true),
+            Overflow::default()
+        );
+        // Flags of one handle stay apart from another's.
+        assert_eq!(ports.flags(2, Overflow(0b100), true), Overflow(0b100));
     }
 
     #[test]

@@ -62,6 +62,7 @@ fn main() {
         RawChannelDataBlock {
             multiplier: 5.0 / 127.0,
             samples: Samples::I8(samples),
+            over_range: false,
         },
     );
     emitter.new_data(OscilloscopeStreamEvent {

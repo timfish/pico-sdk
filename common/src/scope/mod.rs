@@ -10,6 +10,7 @@ mod digital;
 mod ets;
 mod led;
 mod outputs;
+mod overflow;
 mod siggen;
 mod trigger;
 

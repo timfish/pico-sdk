@@ -49,7 +49,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fn new_data(&self, event: Arc<TC08StreamingEvent>) {
             for (channel, values) in &event.channels {
                 if let Some(latest) = values.last() {
-                    println!("Channel {channel}: {latest:.2} °C");
+                    let over = if event.over_range.contains(channel) {
+                        " (over range)"
+                    } else {
+                        ""
+                    };
+                    println!("Channel {channel}: {latest:.2} °C{over}");
                 }
             }
         }

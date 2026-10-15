@@ -192,7 +192,7 @@ pub mod prelude {
         HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice,
         LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent,
         PT104StreamingEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
-        TC08StreamingEvent,
+        TC08StreamState, TC08StreamingEvent,
     };
 }
 

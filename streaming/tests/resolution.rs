@@ -3,7 +3,7 @@
 
 use mockall::{mock, Sequence};
 use pico_common::{
-    Downsample, Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel,
+    Downsample, Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, Overflow, PicoChannel,
     PicoCoupling, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
 };
 use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
@@ -67,7 +67,7 @@ mock! {
             &self,
             handle: i16,
             channels: &[PicoChannel],
-            callback: Box<dyn FnMut(usize, usize) + 'a>,
+            callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
         ) -> PicoResult<()>;
     }
 }

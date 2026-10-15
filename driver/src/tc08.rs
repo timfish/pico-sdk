@@ -190,7 +190,8 @@ impl TC08DriverInternal {
         }
     }
 
-    /// Reads buffered samples for one channel, along with whether the buffer overflowed
+    /// Reads buffered samples for one channel, and whether any of them
+    /// was over the unit's input range (TC-08 guide §3.2.4).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,

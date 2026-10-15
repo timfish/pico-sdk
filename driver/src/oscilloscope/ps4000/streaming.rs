@@ -1,5 +1,6 @@
 use super::*;
 use crate::oscilloscope::StreamingDriver;
+use pico_common::Overflow;
 
 impl StreamingDriver for PS4000Driver {
     #[tracing::instrument(level = "trace", skip(self, buffer))]
@@ -97,11 +98,16 @@ impl StreamingDriver for PS4000Driver {
         &self,
         handle: i16,
         _channels: &[PicoChannel],
-        mut callback: Box<dyn FnMut(usize, usize) + 'a>,
+        mut callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
     ) -> PicoResult<()> {
         let mut simplify_args =
-            |_: i16, sample_count: i32, start_index: u32, _: i16, _: u32, _: i16, _: i16| {
-                callback(start_index as usize, sample_count as usize);
+            |_: i16, sample_count: i32, start_index: u32, overflow: i16, _: u32, _: i16, _: i16| {
+                // Bit 0 is channel A (ps4000 guide §5.63).
+                callback(
+                    start_index as usize,
+                    sample_count as usize,
+                    Overflow::from_bits(overflow),
+                );
             };
 
         let status = PicoStatus::from(unsafe {

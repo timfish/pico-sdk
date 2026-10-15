@@ -103,7 +103,8 @@ mod serde_tests {
         let serialized = serde_json::to_string(&config).expect("serialize");
         assert_eq!(serialized, GOLDEN, "DrDAQConfig wire shape changed");
 
-        let deserialized: DrDAQConfig = serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
+        let deserialized: DrDAQConfig =
+            serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
         assert_eq!(deserialized, config);
 
         // Channel PH was never inserted, so it must not appear on either side.

@@ -24,5 +24,6 @@ pub use extras::ChannelExtrasDriver;
 pub use led::LedDriver;
 pub use rapid_block::RapidBlockDriver;
 pub use siggen::SigGenDriver;
+pub(crate) use streaming::flagged_channels;
 pub use streaming::StreamingDriver;
 pub use trigger::TriggerDriver;

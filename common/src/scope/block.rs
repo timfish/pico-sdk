@@ -32,8 +32,8 @@ pub struct RapidBlockConfig {
     pub captures: u64,
 }
 
-/// Channels whose input went over range in a capture, one bit a channel
-/// from bit 0 for channel A.
+/// Channels whose input went over range in a capture or a streamed
+/// block, one bit a channel from bit 0 for channel A.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Overflow(pub u16);

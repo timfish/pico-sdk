@@ -1,5 +1,6 @@
 use super::*;
-use crate::oscilloscope::StreamingDriver;
+use crate::oscilloscope::{features::flagged_channels, StreamingDriver};
+use pico_common::Overflow;
 
 impl StreamingDriver for PS6000ADriver {
     // SUM streaming is refused by the driver (RATIO_MODE_NOT_SUPPORTED
@@ -86,7 +87,7 @@ impl StreamingDriver for PS6000ADriver {
         &self,
         handle: i16,
         channels: &[PicoChannel],
-        mut callback: Box<dyn FnMut(usize, usize) + 'a>,
+        mut callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
     ) -> PicoResult<()> {
         let ports = self.port_infos(handle);
         let stream = self.streams.read().get(&handle).copied();
@@ -129,8 +130,13 @@ impl StreamingDriver for PS6000ADriver {
                 .map(|e| (e.channel_, e.startIndex_ as usize, e.noOfSamples_ as usize))
                 .collect();
             tracing::trace!(?status, ?entries, "latest values");
-            if let Some((start, count)) = self.ports.join(handle, &entries) {
-                callback(start, count);
+            let flags: Vec<(u32, i16)> = info.iter().map(|e| (e.channel_, e.overflow_)).collect();
+            let joined = self.ports.join(handle, &entries);
+            let overflow = self
+                .ports
+                .flags(handle, flagged_channels(&flags), joined.is_some());
+            if let Some((start, count)) = joined {
+                callback(start, count, overflow);
             }
 
             match status {

@@ -4,8 +4,8 @@
 use mockall::{mock, predicate::eq, Sequence};
 use pico_common::{
     DigitalPort, DigitalPortConfig, Downsample, Driver, OscilloscopeChannelConfig,
-    OscilloscopeSampleConfig, PicoChannel, PicoCoupling, PicoInfo, PicoRange, PicoResolution,
-    PicoResult, PicoStatus, ScopeCapabilities,
+    OscilloscopeSampleConfig, Overflow, PicoChannel, PicoCoupling, PicoInfo, PicoRange,
+    PicoResolution, PicoResult, PicoStatus, ScopeCapabilities,
 };
 use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
 use pico_driver::{
@@ -76,7 +76,7 @@ mock! {
             &self,
             handle: i16,
             channels: &[PicoChannel],
-            callback: Box<dyn FnMut(usize, usize) + 'a>,
+            callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
         ) -> PicoResult<()>;
     }
     impl DigitalPortDriver for MsoDriver {
@@ -182,7 +182,7 @@ fn mock(given: Arc<Mutex<Given>>, extra: impl FnOnce(&mut MockMsoDriver)) -> Moc
                         *v = 0x7f00 | i as i16;
                     }
                 }
-                callback(0, 4);
+                callback(0, 4, Overflow::default());
             }
             Ok(())
         });
