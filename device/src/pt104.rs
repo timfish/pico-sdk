@@ -1,10 +1,10 @@
 use crate::DeviceOpen;
 use pico_common::{
-    MainsRejectionFreq, PicoResult, PT104Channel, PT104DataType, PT104Info, PT104Wires,
+    MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info, PT104Wires, PicoResult,
     LOGGER_CONVERSION_MS,
 };
-use std::collections::BTreeSet;
 use pico_driver::pt104::PT104Driver;
+use std::collections::BTreeSet;
 use std::{collections::BTreeMap, sync::Arc};
 
 /// Configuration for a USB PT-104 device
@@ -21,7 +21,12 @@ pub struct PT104Config {
 
 impl PT104Config {
     /// Enables a channel with a given sensor type and wire configuration
-    pub fn enable_channel(&mut self, channel: PT104Channel, data_type: PT104DataType, wires: PT104Wires) {
+    pub fn enable_channel(
+        &mut self,
+        channel: PT104Channel,
+        data_type: PT104DataType,
+        wires: PT104Wires,
+    ) {
         self.channels.insert(channel, (data_type, wires));
     }
 
@@ -31,7 +36,9 @@ impl PT104Config {
     }
 
     /// Returns all configured channels in channel order
-    pub fn enabled_channels(&self) -> impl Iterator<Item = (PT104Channel, PT104DataType, PT104Wires)> + '_ {
+    pub fn enabled_channels(
+        &self,
+    ) -> impl Iterator<Item = (PT104Channel, PT104DataType, PT104Wires)> + '_ {
         self.channels
             .iter()
             .map(|(channel, (data_type, wires))| (*channel, *data_type, *wires))
@@ -111,8 +118,16 @@ mod tests {
     fn a_single_ended_channel_also_converts_its_sister() {
         let mut config = PT104Config::default();
         assert_eq!(config.poll_interval_ms(), 720);
-        config.enable_channel(PT104Channel::CHANNEL_1, PT104DataType::PT100, PT104Wires::FourWire);
-        config.enable_channel(PT104Channel::CHANNEL_2, PT104DataType::Off, PT104Wires::FourWire);
+        config.enable_channel(
+            PT104Channel::CHANNEL_1,
+            PT104DataType::PT100,
+            PT104Wires::FourWire,
+        );
+        config.enable_channel(
+            PT104Channel::CHANNEL_2,
+            PT104DataType::Off,
+            PT104Wires::FourWire,
+        );
         assert_eq!(config.poll_interval_ms(), 720);
         config.enable_channel(
             PT104Channel::CHANNEL_3,
@@ -121,7 +136,11 @@ mod tests {
         );
         assert_eq!(
             config.converted_channels().into_iter().collect::<Vec<_>>(),
-            [PT104Channel::CHANNEL_1, PT104Channel::CHANNEL_3, PT104Channel::CHANNEL_7]
+            [
+                PT104Channel::CHANNEL_1,
+                PT104Channel::CHANNEL_3,
+                PT104Channel::CHANNEL_7
+            ]
         );
         assert_eq!(config.poll_interval_ms(), 3 * 720);
     }
@@ -136,7 +155,10 @@ mod serde_tests {
     /// `enabled` flag, so presence in the map *is* the enabled/disabled signal.
     fn sample_config() -> PT104Config {
         let mut channels = BTreeMap::new();
-        channels.insert(PT104Channel::CHANNEL_1, (PT104DataType::PT100, PT104Wires::FourWire));
+        channels.insert(
+            PT104Channel::CHANNEL_1,
+            (PT104DataType::PT100, PT104Wires::FourWire),
+        );
 
         PT104Config {
             mains_rejection: MainsRejectionFreq::_50Hz,
@@ -147,7 +169,8 @@ mod serde_tests {
     /// Pins the wire field names / enum tag spellings for `PT104Config` and everything it embeds
     /// (`PT104Channel`, `PT104DataType`, `PT104Wires`, `MainsRejectionFreq`). `BTreeMap` gives a
     /// deterministic key order, so this can be an exact string match rather than a structural one.
-    const GOLDEN: &str = r#"{"mains_rejection":"_50Hz","channels":{"CHANNEL_1":["PT100","FourWire"]}}"#;
+    const GOLDEN: &str =
+        r#"{"mains_rejection":"_50Hz","channels":{"CHANNEL_1":["PT100","FourWire"]}}"#;
 
     #[test]
     fn pt104_config_round_trips_and_pins_field_names() {
@@ -156,7 +179,8 @@ mod serde_tests {
         let serialized = serde_json::to_string(&config).expect("serialize");
         assert_eq!(serialized, GOLDEN, "PT104Config wire shape changed");
 
-        let deserialized: PT104Config = serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
+        let deserialized: PT104Config =
+            serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
         assert_eq!(deserialized, config);
 
         // Channel 2 was never inserted, so it must not appear on either side.
