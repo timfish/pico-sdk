@@ -72,6 +72,7 @@ pub use drdaq::DrDAQStreamingEvent;
 pub use hrdl::{HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent};
 pub use oscilloscope::{
     OscilloscopeStreamEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
+    StreamCounts,
 };
 pub use pl1000::PL1000StreamingEvent;
 pub use poll::LoggerPollState;

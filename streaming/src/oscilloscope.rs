@@ -1,4 +1,4 @@
-use super::digital::{port_buffers, read_ports, set_up_ports, PortBuffers};
+use super::digital::{port_buffers, ports_off, read_ports, set_up_ports, PortBuffers};
 use super::state::{
     sleep_ms, AfterPowerChange, Current, DeviceNotice, EventEmitter, IntoStreamingDevice, Notices,
     StreamDevice, StreamingRunner,
@@ -235,6 +235,7 @@ pub struct ScopeStreamState {
     /// The samples each channel's buffer holds.
     buffer_len: usize,
     polls: Arc<PollTimes>,
+    counts: Arc<Continuity>,
     /// Set once low bits of 8-bit codes were dropped.
     low_bits: Arc<AtomicBool>,
 }
@@ -253,7 +254,88 @@ impl Default for ScopeStreamState {
             digital_buffers: HashMap::new(),
             buffer_len: 0,
             polls: Arc::default(),
+            counts: Arc::default(),
             low_bits: Arc::default(),
+        }
+    }
+}
+
+/// What a stream delivered, from the driver's start indices and
+/// counts, to tell samples the driver skipped from samples lost later.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StreamCounts {
+    /// Samples the driver reported.
+    pub samples: u64,
+    /// Calls that returned samples.
+    pub returns: u64,
+    /// Returns whose start index was not where the one before ended.
+    pub index_gaps: u64,
+    /// Samples between the end of one return and the start of a later
+    /// one, summed over the gaps.
+    pub skipped: u64,
+    /// Times the driver asked for buffers again.
+    pub refills: u64,
+}
+
+/// The start index each return should have. Only the poll thread
+/// writes it; atomics, as the state is cloned each step.
+#[derive(Default)]
+struct Continuity {
+    samples: AtomicU64,
+    returns: AtomicU64,
+    index_gaps: AtomicU64,
+    skipped: AtomicU64,
+    refills: AtomicU64,
+    /// The index after the last return, plus one; 0 for none.
+    next: AtomicU64,
+}
+
+impl Continuity {
+    /// Records a return of `count` samples from `start` in buffers of
+    /// `len`. A return at 0 after one that ended the buffer, or after a
+    /// refill, is no gap.
+    fn record(&self, start: usize, count: usize, len: usize) {
+        let next = self.next.load(Ordering::Relaxed);
+        if next != 0 {
+            let expected = (next - 1) as usize;
+            let wrapped = start == 0 && expected >= len;
+            if start != expected && !wrapped {
+                let skipped = if start > expected {
+                    start - expected
+                } else {
+                    len.saturating_sub(expected) + start
+                };
+                self.index_gaps.fetch_add(1, Ordering::Relaxed);
+                self.skipped.fetch_add(skipped as u64, Ordering::Relaxed);
+                warn!(
+                    expected,
+                    start,
+                    count,
+                    buffer_len = len,
+                    skipped,
+                    "driver's start index skipped samples"
+                );
+            }
+        }
+        self.next
+            .store((start + count + 1) as u64, Ordering::Relaxed);
+        self.samples.fetch_add(count as u64, Ordering::Relaxed);
+        self.returns.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// The driver starts new buffers at index 0.
+    fn refilled(&self) {
+        self.refills.fetch_add(1, Ordering::Relaxed);
+        self.next.store(0, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> StreamCounts {
+        StreamCounts {
+            samples: self.samples.load(Ordering::Relaxed),
+            returns: self.returns.load(Ordering::Relaxed),
+            index_gaps: self.index_gaps.load(Ordering::Relaxed),
+            skipped: self.skipped.load(Ordering::Relaxed),
+            refills: self.refills.load(Ordering::Relaxed),
         }
     }
 }
@@ -355,6 +437,17 @@ impl ScopeStreamState {
     /// range's unit.
     pub fn multiplier(&self, channel: PicoChannel) -> Option<f64> {
         self.multipliers.get(&channel).copied()
+    }
+
+    /// What the stream delivered so far, by the driver's counts.
+    pub fn counts(&self) -> StreamCounts {
+        self.counts.snapshot()
+    }
+
+    /// Whether `other` is a state of the same stream, not of one
+    /// started again since.
+    pub fn same_stream(&self, other: &ScopeStreamState) -> bool {
+        Arc::ptr_eq(&self.counts, &other.counts)
     }
 
     /// The MSO ports the stream delivers.
@@ -474,12 +567,15 @@ fn start_stream(
 
     // A resolution that allows fewer channels is refused while more
     // are on, and channels are set up after a resolution change
-    // (ps5000a guide, 4.49), so: channels off, resolution, channels on.
+    // (ps5000a guide, 4.49), so: channels and ports off, resolution,
+    // channels and ports on.
     for (channel, ranges) in &info.valid_channel_ranges {
         if !ranges.is_empty() && !config.channels.contains_key(channel) {
             device.driver.disable_channel(*info.handle, *channel)?;
         }
     }
+
+    ports_off(device, info)?;
 
     if let Some(resolution) = info.effective_resolution(config) {
         device.driver.set_resolution(*info.handle, resolution)?;
@@ -712,6 +808,9 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         let mut returned = 0usize;
         let callback = |start_index, sample_count| {
             returned = sample_count;
+            state
+                .counts
+                .record(start_index, sample_count, state.buffer_len);
             let channels = config
                 .channels
                 .keys()
@@ -782,6 +881,8 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
 
         if let Err(error) = result {
             if error.status == PicoStatus::WAITING_FOR_DATA_BUFFERS {
+                state.counts.refilled();
+                debug!(counts = ?state.counts.snapshot(), "driver asked for buffers again");
                 for (channel, buffer) in &state.buffers {
                     self.driver
                         .set_data_buffer(
@@ -816,7 +917,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 notify_power(notices, info, &changed, to, after);
                 Current::Open(changed)
             } else {
-                warn!("Streaming stopped: '{:?}'", error);
+                warn!(%error, counts = ?state.counts.snapshot(), "streaming stopped; the device will open again");
 
                 let _ = self.driver.stop(*info.handle);
                 let _ = self.driver.close(*info.handle);
@@ -881,6 +982,31 @@ mod tests {
         // 32-bit sums at 5 MS/s on two channels: 128 MB allows 1.7 s.
         assert_eq!(buffer_len(5e6, 2, 4), 8_388_608);
         assert_eq!(buffer_bytes(8_388_608, 2, 4), 128 << 20);
+    }
+
+    #[test]
+    fn continuity_counts_skipped_indices() {
+        let c = Continuity::default();
+        c.record(0, 100, 1000);
+        c.record(100, 900, 1000);
+        // Wrapped at the buffer's end: no gap.
+        c.record(0, 50, 1000);
+        // 25 samples skipped.
+        c.record(75, 25, 1000);
+        c.refilled();
+        c.record(0, 10, 1000);
+        // Wrapped early: 990 skipped to the end, then 5 from 0.
+        c.record(5, 1, 1000);
+        assert_eq!(
+            c.snapshot(),
+            StreamCounts {
+                samples: 1086,
+                returns: 6,
+                index_gaps: 2,
+                skipped: 25 + 995,
+                refills: 1,
+            }
+        );
     }
 
     #[test]

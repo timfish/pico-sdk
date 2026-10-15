@@ -12,8 +12,10 @@
 //!    which no guide states; not a check.
 //!
 //! Checks in runs 1 and 2: each event has as many bytes for each port
-//! as samples, only the ports asked for, and the samples counted are
-//! within 2% of the rate. In run 1, with AUX wired to D0, bit 0 should
+//! as samples, only the ports asked for, the samples counted are within
+//! 2% of the rate, and the stream did not start again. Each run also
+//! prints the driver's own counts over the same window: samples, start
+//! index gaps and the samples they skip, and buffer refills. In run 1, with AUX wired to D0, bit 0 should
 //! change about 16 times, once at each AUX change; the example prints
 //! the count and the share of time each bit was high, and counts it a
 //! failure only when `--wired` is given. Exits 1 on a failure.
@@ -156,6 +158,7 @@ fn run(
     // Let the first second settle before counting.
     thread::sleep(Duration::from_secs(1));
     *counter.tally.lock().unwrap() = Tally::default();
+    let counts_before = stream.counts();
     let started = Instant::now();
     let mut high = false;
     while started.elapsed() < Duration::from_secs(seconds) {
@@ -174,6 +177,10 @@ fn run(
         thread::sleep(Duration::from_millis(250));
     }
     let elapsed = started.elapsed().as_secs_f64();
+    let counts_after = stream.counts();
+    let restarted = runner
+        .get_stream()
+        .is_none_or(|now| !now.same_stream(&stream));
     if toggle_aux {
         let _ = runner.set_aux_io_mode(AuxIoMode::Input);
     }
@@ -197,6 +204,19 @@ fn run(
             tally.events, tally.bad_events
         ),
     );
+    // The driver's own counts over the same window, to tell samples it
+    // skipped (start index gaps) or never sent from ones lost here.
+    let driver_samples = counts_after.samples - counts_before.samples;
+    println!(
+        "  driver: {driver_samples} samples ({:.1}% of the rate) in {} returns, {} index gaps \
+         skipping {} samples, {} buffer refills, stream restarted: {restarted}",
+        driver_samples as f64 / expected * 100.0,
+        counts_after.returns - counts_before.returns,
+        counts_after.index_gaps - counts_before.index_gaps,
+        counts_after.skipped - counts_before.skipped,
+        counts_after.refills - counts_before.refills,
+    );
+    checks.check(!restarted, "the stream ran without a restart");
     for port in &ports {
         let high = tally.high.get(port).copied().unwrap_or_default();
         let edges = tally.edges.get(port).copied().unwrap_or_default();
@@ -290,6 +310,12 @@ fn main() {
     );
 
     println!("4. channel A and PORT0 at 16 bits (driver's answer, not checked)");
+    println!(
+        "  resolution before: {:?}",
+        runner
+            .with_open(|d, i| d.driver.get_resolution(*i.handle))
+            .flatten()
+    );
     match runner.start(config(true, &[Port0], Some(PicoResolution::DR_16BIT))) {
         Ok(()) => {
             thread::sleep(Duration::from_secs(1));

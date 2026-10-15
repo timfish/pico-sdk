@@ -128,6 +128,31 @@ impl StreamingDriver for PSOSPADriver {
                 stream_trig.as_mut_ptr(),
             ));
 
+            let first = (info[0].startIndex_, info[0].noOfSamples_);
+            let first_channel = info[0].channel_;
+            for entry in &info[1..] {
+                let (channel, start, count) =
+                    (entry.channel_, entry.startIndex_, entry.noOfSamples_);
+                if (start, count) != first {
+                    tracing::warn!(
+                        channel,
+                        start,
+                        count,
+                        first_channel,
+                        first_start = first.0,
+                        first_count = first.1,
+                        "buffers of one stream returned different samples"
+                    );
+                }
+            }
+            tracing::trace!(
+                ?status,
+                start = first.0,
+                count = first.1,
+                entries = info.len(),
+                "latest values"
+            );
+
             if info[0].noOfSamples_ > 0 {
                 callback(info[0].startIndex_ as usize, info[0].noOfSamples_ as usize);
             }

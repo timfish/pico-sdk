@@ -221,14 +221,25 @@ fn first_event(events: &Events) -> Arc<OscilloscopeStreamEvent> {
     }
 }
 
-/// A port turns on with its threshold after the channels and before
-/// the buffers, the other port turns off, and the event carries the
+/// Ports go off before the resolution is set; then a port turns on
+/// with its threshold after the channels and before the buffers, the
+/// other port stays off, and the event carries the
 /// low byte of each port sample beside the channel's samples.
 #[test]
 fn ports_stream_beside_channels() {
     let given = Arc::new(Mutex::new(Given::default()));
     let mut seq = Sequence::new();
     let driver = OscilloscopeDriver::new(mock(given.clone(), |m| {
+        // Both ports off before the resolution is set.
+        m.expect_set_digital_port()
+            .withf(|_, _, config| config.is_none())
+            .times(2)
+            .in_sequence(&mut seq)
+            .return_const(Ok(()));
+        m.expect_set_resolution()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_const(Ok(()));
         m.expect_enable_channel()
             .times(1)
             .in_sequence(&mut seq)
@@ -364,5 +375,45 @@ fn a_start_after_stop_takes_the_new_config() {
         PicoStatus::USE_8BIT_RESOLUTION
     );
     assert!(streaming.get_stream().is_none());
+    streaming.close();
+}
+
+/// Ports left on from a stream of ports alone hold the unit at 8 bits,
+/// so a later change to 16 bits must come with the ports off. The mock
+/// refuses it as the 5464E did, with `TIMEOUT`.
+#[test]
+fn ports_go_off_before_a_resolution_change() {
+    use DigitalPort::*;
+    let on = Arc::new(Mutex::new(std::collections::BTreeSet::new()));
+    let given = Arc::new(Mutex::new(Given::default()));
+    let driver = OscilloscopeDriver::new(mock(given, |m| {
+        m.expect_set_digital_port().returning({
+            let on = on.clone();
+            move |_, port, config| {
+                let mut on = on.lock().unwrap();
+                match config {
+                    Some(_) => on.insert(port),
+                    None => on.remove(&port),
+                };
+                Ok(())
+            }
+        });
+        m.expect_set_resolution().returning({
+            let on = on.clone();
+            move |_, resolution| match (on.lock().unwrap().is_empty(), resolution) {
+                (false, r) if r != DR_8BIT => Err(PicoStatus::TIMEOUT.into()),
+                _ => Ok(()),
+            }
+        });
+    }));
+    let streaming = driver.open_device(None).unwrap().into_streaming_device();
+
+    streaming.start(config(&[], &[Port0, Port1])).unwrap();
+    streaming.stop();
+    let mut sixteen = config(&[PicoChannel::A], &[Port0]);
+    sixteen.resolution = Some(DR_16BIT);
+    streaming.start(sixteen).unwrap();
+    assert_eq!(streaming.get_stream().unwrap().digital_ports(), vec![Port0]);
+    assert_eq!(*on.lock().unwrap(), [Port0].into());
     streaming.close();
 }
