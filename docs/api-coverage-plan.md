@@ -90,6 +90,8 @@ The existing layering stays: `sys` (bindings), `common` (types), `driver` (one s
 
 ### 3.2 Block mode
 
+Built (T2, 2026-10-15) for all nine families, with these changes to the API below: `BlockConfig` has no downsample (a read takes it); `DownsampleKind` gains `Aggregate` and `Decimate`, for block reads only; `set_block_buffer` takes a second buffer for an aggregate's lows; `run_block` takes an optional ready callback (none: poll `is_ready`); `nearest_timebase` takes a resolution and, where the family has no stateless call (2000, 2000a, 3000a, 4000, 4000a, 6000), searches `timebase` by halving; `trigger_time_offset` reads one segment's offset. The ps2000 has one segment, no downsample, no callback and no pre-trigger samples (its trigger delay places the trigger). `BlockRunner` (`streaming/src/block.rs`) arms, waits, stops, reads trigger timing and a min and max overview, then raw spans on demand (`read`, `read_segments`), and arms again (`capture`, `run`). Examples: `sdk/examples/block_capture.rs`, `sdk/examples/rapid_block.rs`.
+
 Guides: ps2000 §3.1, §5.17; ps2000a §2.6.1, §3.37, §3.13–3.14, §3.18, §3.26; ps3000a §3.7.1, §4.40; ps5000a §3.5.1, §4.42; ps6000 §2.5.1, §3.32; ps6000a §2.6.1, §3.40, §3.17, §3.21, §3.27, §4.1; psospa topics blockmodeoverview, asynchronous_block_mode.
 
 Missing: everything. Timebase rules differ by family (ps2000a §2.7, ps3000a §3.6, ps5000a §3.6, ps6000 §2.7, ps6000a §2.7); `NearestSampleIntervalStateless` and `GetMinimumTimebaseStateless` exist on 4000a, 5000a, 6000a and psospa.
@@ -123,6 +125,8 @@ The ready callback reuses the trampoline in `driver/src/oscilloscope/trampoline.
 Size: L (9 families, timebase rules differ), M of it for the runner.
 
 ### 3.3 Rapid block and trigger timing
+
+Built (T6, 2026-10-15) for every family but ps2000. `RapidBlockDriver` also has `set_bulk_buffer` (ps4000 and ps6000 have separate bulk buffer calls), and `get_values_bulk` returns the values read. Both counters are free-running: ps5000a and the 3207A/B give a 48-bit counter, which the wrapper turns into `SincePrevious` deltas; ps6000a and psospa give the 56-bit counter as `SinceFirst`; `pico_common::trigger_times` turns either into seconds from the first segment. Where a family has no counter, `BlockRunner` times each segment by the host clock when the capture count rose, marked `estimated`. The ps6000 bindings have `GetTriggerInfoBulk`, which its guide does not describe, so it is not used.
 
 Guides: ps2000a §2.6.2 (gap < 2 µs), §3.9, §3.10–3.11, §3.20, §3.23–3.24, §3.29, §3.47; ps3000a §3.7.2, §4.18 (3207A/B only), §4.24, §4.27–4.28, §4.33, §4.50; ps5000a §3.5.2, §4.18 (`PS5000A_TRIGGER_INFO`, time stamping §4.18.2), §4.24, §4.33, §4.54, §4.79; ps6000 §2.5.2, §3.18–3.19, §3.22–3.23, §3.26, §3.43; ps6000a §2.6.2, §3.18 (`PICO_TRIGGER_INFO`), §3.18.2, §3.23–3.24, §3.26, §3.28–3.29, §3.36, §3.51; psospa topics rapidblockmode, usingrapidblockmode, psospagettriggerinfo, pico_trigger_info.
 
@@ -197,6 +201,8 @@ pub trait TriggerDriver {
 A wrapper refuses what its family lacks with a typed error (for example digital terms on ps4000a), not a driver status. `OscilloscopeConfig` gains `trigger: TriggerConfig`. A streaming trigger is the same config: on 6000a and psospa, `GetStreamingLatestValues` returns `PICO_STREAMING_DATA_TRIGGER_INFO` (§3.16.2), so `OscilloscopeStreamEvent` gains `trigger_at: Option<u64>`.
 
 Size: L (two models, nine families, V2 variants).
+
+Built (T3, 2026-10-15), with these changes to the sketch above: `ChannelTrigger` has no `mode`, as the direction gives it (`ThresholdDirection::mode`); digital inputs are `DigitalBit { bit, direction }`, bits 0–15 over the two ports, and a `Digital` condition becomes one condition per port used on the list model (as Pico's ps5000aBlockMSOCon example does); `PulseWidthQualifier` gains `digital`; `TriggerConfig::check` refuses, before any driver call, a kind that `TriggerCapabilities` lacks (new fields `window`, `runt`, `external`, `aux`, `streaming`) or a config that does not hold together. ps3000a uses its V2 calls only for digital terms; ps5000a uses its V2 calls throughout. ps2000, ps6000a and psospa have no `IsTriggerOrPulseWidthQualifierEnabled`, so `trigger_enabled` gives what the last `set_trigger` turned on. In a stream, `OscilloscopeConfig::trigger` is set before `start_streaming`, and `OscilloscopeStreamEvent::trigger_at` is the offset in the event's samples, from the stream callback's `triggerAt` (old families, counted from `startIndex`) or `PICO_STREAMING_DATA_TRIGGER_INFO` (ps6000a, psospa, read as an index into the buffer); ps2000 reports none. On the families with `IsTriggerOrPulseWidthQualifierEnabled`, off is `SetSimpleTrigger` with `enable` 0 and then no conditions, as no conditions alone left a 2208A reporting a trigger. `external` and `aux` follow the data sheets on ps2000 and ps2000a (EXT on the first 2206, 2207 and 2208 only; no AUX), and ps2000a has no runt, which a 2208A refused. Example: `sdk/examples/trigger_setup.rs`; on 2026-10-15 every counted case passed on a 5464E, and a 2208A failed runt, trigger off, EXT and AUX before these fixes.
 
 ### 3.5 ETS
 

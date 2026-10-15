@@ -1,5 +1,8 @@
 use super::*;
-use crate::oscilloscope::{features::flagged_channels, StreamingDriver};
+use crate::oscilloscope::{
+    features::{flagged_channels, trigger::stream_offset},
+    StreamingDriver,
+};
 use pico_common::Overflow;
 
 impl StreamingDriver for PSOSPADriver {
@@ -120,8 +123,7 @@ impl StreamingDriver for PSOSPADriver {
         }
 
         unsafe {
-            let mut stream_trig: MaybeUninit<PICO_STREAMING_DATA_TRIGGER_INFO> =
-                MaybeUninit::uninit();
+            let mut stream_trig = MaybeUninit::<PICO_STREAMING_DATA_TRIGGER_INFO>::zeroed();
 
             let status = PicoStatus::from(self.bindings.psospaGetStreamingLatestValues(
                 handle,
@@ -130,18 +132,30 @@ impl StreamingDriver for PSOSPADriver {
                 stream_trig.as_mut_ptr(),
             ));
 
+            let stream_trig = stream_trig.assume_init();
             let entries: Vec<(u32, usize, usize)> = info
                 .iter()
                 .map(|e| (e.channel_, e.startIndex_ as usize, e.noOfSamples_ as usize))
                 .collect();
             tracing::trace!(?status, ?entries, "latest values");
-            let flags: Vec<(u32, i16)> = info.iter().map(|e| (e.channel_, e.overflow_)).collect();
             let joined = self.ports.join(handle, &entries);
+            let (start, samples) = joined.unwrap_or((0, 0));
+            // triggerAt_ is an index into the buffer, as Pico's
+            // streaming example plots it.
+            let offset = stream_offset(
+                stream_trig.triggered_ != 0,
+                stream_trig.triggerAt_,
+                start,
+                samples,
+                false,
+            );
+            super::trigger::STATES.streamed(handle, offset);
+            let flags: Vec<(u32, i16)> = info.iter().map(|e| (e.channel_, e.overflow_)).collect();
             let overflow = self
                 .ports
-                .flags(handle, flagged_channels(&flags), joined.is_some());
-            if let Some((start, count)) = joined {
-                callback(start, count, overflow);
+                .flags(handle, flagged_channels(&flags), samples > 0);
+            if samples > 0 {
+                callback(start, samples, overflow);
             }
 
             match status {

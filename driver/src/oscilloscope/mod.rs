@@ -34,8 +34,8 @@ pub use ps6000a::PS6000ADriver;
 pub use psospa::PSOSPADriver;
 
 pub use features::{
-    AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EtsDriver, LedDriver,
-    RapidBlockDriver, SigGenDriver, StreamingDriver, TriggerDriver,
+    AuxIoDriver, BlockDriver, BlockReady, ChannelExtrasDriver, DigitalPortDriver, EtsDriver,
+    LedDriver, RapidBlockDriver, SigGenDriver, StreamingDriver, TriggerDriver,
 };
 
 use crate::DriverLoadError;
@@ -143,7 +143,8 @@ impl PicoStreamMode {
     ) -> PicoResult<PicoStreamMode> {
         use pico_sys_dynamic::psospa::{
             enPicoDataType_PICO_INT16_T, enPicoDataType_PICO_INT32_T, enPicoDataType_PICO_INT8_T,
-            enPicoRatioMode_PICO_RATIO_MODE_AVERAGE, enPicoRatioMode_PICO_RATIO_MODE_RAW,
+            enPicoRatioMode_PICO_RATIO_MODE_AGGREGATE, enPicoRatioMode_PICO_RATIO_MODE_AVERAGE,
+            enPicoRatioMode_PICO_RATIO_MODE_DECIMATE, enPicoRatioMode_PICO_RATIO_MODE_RAW,
             enPicoRatioMode_PICO_RATIO_MODE_SUM,
         };
 
@@ -158,11 +159,21 @@ impl PicoStreamMode {
                 ratio,
                 mode: DownsampleKind::Sum,
             }) => (ratio, enPicoRatioMode_PICO_RATIO_MODE_SUM),
+            Some(Downsample {
+                ratio,
+                mode: DownsampleKind::Aggregate,
+            }) => (ratio, enPicoRatioMode_PICO_RATIO_MODE_AGGREGATE),
+            Some(Downsample {
+                ratio,
+                mode: DownsampleKind::Decimate,
+            }) => (ratio, enPicoRatioMode_PICO_RATIO_MODE_DECIMATE),
         };
         let fits = matches!(
             (downsample.map(|d| d.mode), sample_type),
-            (None, SampleType::I8 | SampleType::I16)
-                | (Some(DownsampleKind::Average), SampleType::I16)
+            (
+                None | Some(DownsampleKind::Aggregate | DownsampleKind::Decimate),
+                SampleType::I8 | SampleType::I16
+            ) | (Some(DownsampleKind::Average), SampleType::I16)
                 | (Some(DownsampleKind::Sum), SampleType::I32)
         );
         if !fits {

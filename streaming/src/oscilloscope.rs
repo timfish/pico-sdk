@@ -184,6 +184,8 @@ pub(crate) fn layout(
     match downsample.map(|d| d.mode) {
         Some(DownsampleKind::Sum) => same(SampleType::I32),
         Some(DownsampleKind::Average) => same(SampleType::I16),
+        // Block reads only; no stream offers them.
+        Some(DownsampleKind::Aggregate | DownsampleKind::Decimate) => same(SampleType::I16),
         None if eight_bit && driver_types.contains(&SampleType::I8) => same(SampleType::I8),
         None if eight_bit && max_adc % 256 == 0 => Layout {
             buffer: SampleType::I16,
@@ -223,6 +225,10 @@ pub struct OscilloscopeStreamEvent {
     /// The rate the driver set, which can differ from the rate asked for.
     pub samples_per_second: f64,
     pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
+    /// Where the trigger of `OscilloscopeConfig::trigger` fired, as an
+    /// index into this event's samples. Families with
+    /// `TriggerCapabilities::streaming` report it.
+    pub trigger_at: Option<usize>,
     /// The 8 bits of each MSO port that is on, one byte a sample, D0 (or
     /// D8 on `Port1`) in bit 0.
     pub digital: HashMap<DigitalPort, Vec<u8>>,
@@ -638,6 +644,13 @@ fn start_stream(
         }
     }
 
+    // A family with no trigger calls refuses even `None`, which asks
+    // for nothing.
+    match device.driver.set_trigger(*info.handle, &config.trigger) {
+        Err(e) if e.is_not_supported() && config.trigger.is_none() => {}
+        result => result?,
+    }
+
     set_up_ports(device, info, config)?;
     state.digital_buffers = port_buffers(config, buffer_size);
     for (port, buffer) in &state.digital_buffers {
@@ -765,6 +778,12 @@ impl ScopeRunner {
     pub fn set_aux_io_mode(&self, mode: AuxIoMode) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.set_aux_io_mode(*info.handle, mode))
             .unwrap_or_else(|| Err(closed("set_aux_io_mode")))
+    }
+
+    /// Whether the trigger and the pulse width qualifier are on.
+    pub fn trigger_enabled(&self) -> PicoResult<(bool, bool)> {
+        self.with_open(|device, info| device.driver.trigger_enabled(*info.handle))
+            .unwrap_or_else(|| Err(closed("trigger_enabled")))
     }
 
     /// What the unit's signal generator can do
@@ -952,6 +971,10 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 })
                 .collect::<HashMap<_, _>>();
 
+            let trigger_at = self.driver.streaming_trigger(*info.handle);
+            if let Some(at) = trigger_at {
+                debug!(at, samples = sample_count, "trigger in stream");
+            }
             let digital = read_ports(
                 &state.digital_buffers,
                 start_index..(start_index + sample_count),
@@ -961,6 +984,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 samples_per_second: state.samples_per_second(),
                 length: sample_count,
                 channels,
+                trigger_at,
                 digital,
             });
         };

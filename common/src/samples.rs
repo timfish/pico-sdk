@@ -20,7 +20,7 @@ impl SampleType {
     }
 }
 
-/// How a streaming downsample joins each group of samples.
+/// How a downsample joins each group of samples.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DownsampleKind {
@@ -29,10 +29,15 @@ pub enum DownsampleKind {
     /// The sum of each group, as 32-bit values. Only the ps6000a and
     /// psospa drivers have it.
     Sum,
+    /// The lowest and the highest of each group, in two buffers. Block
+    /// reads only.
+    Aggregate,
+    /// The first sample of each group. Block reads only.
+    Decimate,
 }
 
-/// A streaming downsample: the driver joins each `ratio` samples into
-/// one, so the stored rate is the device's rate divided by `ratio`.
+/// A downsample: the driver joins each `ratio` samples into one, so the
+/// rate is the device's rate divided by `ratio`.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Downsample {
@@ -52,6 +57,20 @@ impl Downsample {
         Downsample {
             ratio,
             mode: DownsampleKind::Sum,
+        }
+    }
+
+    pub fn aggregate(ratio: u32) -> Self {
+        Downsample {
+            ratio,
+            mode: DownsampleKind::Aggregate,
+        }
+    }
+
+    pub fn decimate(ratio: u32) -> Self {
+        Downsample {
+            ratio,
+            mode: DownsampleKind::Decimate,
         }
     }
 

@@ -1,5 +1,5 @@
 use super::*;
-use crate::oscilloscope::StreamingDriver;
+use crate::oscilloscope::{features::trigger::stream_offset, StreamingDriver};
 use pico_common::Overflow;
 
 impl StreamingDriver for PS2000ADriver {
@@ -78,9 +78,17 @@ impl StreamingDriver for PS2000ADriver {
                                 no_of_samples: i32,
                                 start_index: u32,
                                 overflow: i16,
-                                _: u32,
-                                _: i16,
+                                at: u32,
+                                triggered: i16,
                                 _: i16| {
+            let offset = stream_offset(
+                triggered != 0,
+                at.into(),
+                start_index as usize,
+                no_of_samples as usize,
+                true,
+            );
+            super::trigger::STATES.streamed(handle, offset);
             // Bit 0 is channel A (ps2000a guide §3.66).
             callback(
                 start_index as usize,

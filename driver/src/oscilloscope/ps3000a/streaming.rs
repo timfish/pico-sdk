@@ -1,5 +1,5 @@
 use super::*;
-use crate::oscilloscope::StreamingDriver;
+use crate::oscilloscope::{features::trigger::stream_offset, StreamingDriver};
 use pico_common::Overflow;
 
 impl StreamingDriver for PS3000ADriver {
@@ -74,15 +74,28 @@ impl StreamingDriver for PS3000ADriver {
         _channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
     ) -> PicoResult<()> {
-        let mut simplify_args =
-            |_: i16, sample_count: i32, start_index: u32, overflow: i16, _: u32, _: i16, _: i16| {
-                // Bit 0 is channel A (ps3000a guide §4.70).
-                callback(
-                    start_index as usize,
-                    sample_count as usize,
-                    Overflow::from_bits(overflow),
-                );
-            };
+        let mut simplify_args = |_: i16,
+                                 sample_count: i32,
+                                 start_index: u32,
+                                 overflow: i16,
+                                 at: u32,
+                                 triggered: i16,
+                                 _: i16| {
+            let offset = stream_offset(
+                triggered != 0,
+                at.into(),
+                start_index as usize,
+                sample_count as usize,
+                true,
+            );
+            super::trigger::STATES.streamed(handle, offset);
+            // Bit 0 is channel A (ps3000a guide §4.70).
+            callback(
+                start_index as usize,
+                sample_count as usize,
+                Overflow::from_bits(overflow),
+            );
+        };
 
         let status = PicoStatus::from(unsafe {
             let (state, callback) = split_closure(&mut simplify_args);
