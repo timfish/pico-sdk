@@ -4,7 +4,9 @@
 //! event handler) for each stall in turn, and counts the samples that
 //! come against the time that passed. A stall the driver can hold
 //! loses nothing; past that the stream comes back short. A stall of 0
-//! only watches the stream.
+//! only watches the stream. Each line also gives the driver's own
+//! sample index against the time between returns, and its start index
+//! gaps, which tell lost samples from samples still in flight.
 //!
 //! `cargo run --release --example stall_probe -- [rate] [stall_ms ..]`
 //!
@@ -89,17 +91,23 @@ fn main() {
     let handler: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = counter.clone();
     runner.events.subscribe(&handler);
     runner.start(config).expect("start");
-    let hz = runner.get_stream().expect("streaming").samples_per_second();
+    let stream = runner.get_stream().expect("streaming");
+    let hz = stream.samples_per_second();
     println!("streaming at {hz} S/s");
     thread::sleep(Duration::from_secs(3));
 
     let (start, n_start) = (Instant::now(), counter.samples.load(Ordering::Relaxed));
     let measure = |what: &str, stall_ms: u64| {
         let (t0, n0) = (Instant::now(), counter.samples.load(Ordering::Relaxed));
+        let c0 = stream.counts();
         counter.last.lock().unwrap().1 = Duration::ZERO;
         counter.stall_ms.store(stall_ms, Ordering::Relaxed);
         thread::sleep(Duration::from_millis(stall_ms) + Duration::from_secs(4));
         let (t1, n1) = (Instant::now(), counter.samples.load(Ordering::Relaxed));
+        let c1 = stream.counts();
+        let restarted = runner
+            .get_stream()
+            .is_none_or(|now| !now.same_stream(&stream));
         let expected = (t1 - t0).as_secs_f64() * hz;
         let got = (n1 - n0) as f64;
         let total_short = (t1 - start).as_secs_f64() * hz - (n1 - n_start) as f64;
@@ -110,6 +118,19 @@ fn main() {
             total_short / hz,
             counter.last.lock().unwrap().1.as_secs_f64() * 1e3,
         );
+        // The driver's index between the two returns that bound the
+        // window: no error from samples in flight.
+        if let (Some(r0), Some(r1)) = (c0.last_return, c1.last_return) {
+            let moved = (c1.samples - c0.samples) as f64;
+            let expected = (r1 - r0).as_secs_f64() * hz;
+            println!(
+                "{:>16} driver index short {:>10.0}, {} index gaps skipping {}, restarted: {restarted}",
+                "",
+                expected - moved,
+                c1.index_gaps - c0.index_gaps,
+                c1.skipped - c0.skipped,
+            );
+        }
     };
     measure("none", 0);
     for stall in stalls {

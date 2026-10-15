@@ -23,6 +23,7 @@ impl StreamingDriver for PSOSPADriver {
     ) -> PicoResult<()> {
         let stream = PicoStreamMode::new(downsample, buffer.sample_type())?;
         self.streams.write().insert(handle, stream);
+        self.ports.buffers_set(handle);
 
         PicoStatus::from(unsafe {
             self.bindings.psospaSetDataBuffer(
@@ -92,24 +93,30 @@ impl StreamingDriver for PSOSPADriver {
         channels: &[PicoChannel],
         mut callback: Box<dyn FnMut(usize, usize) + 'a>,
     ) -> PicoResult<()> {
-        let stream = self.streams.read().get(&handle).copied().ok_or_else(|| {
-            PicoError::from_status(
+        let ports = self.port_infos(handle);
+        let stream = self.streams.read().get(&handle).copied();
+        let mut info: Vec<PICO_STREAMING_DATA_INFO> = match stream {
+            Some(stream) => channels
+                .iter()
+                .map(|ch| PICO_STREAMING_DATA_INFO {
+                    bufferIndex_: 0,
+                    channel_: (*ch).into(),
+                    mode_: stream.mode,
+                    noOfSamples_: 0,
+                    overflow_: 0,
+                    startIndex_: 0,
+                    type_: stream.data_type,
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        info.extend(ports);
+        if info.is_empty() {
+            return Err(PicoError::from_status(
                 PicoStatus::NO_SAMPLES_AVAILABLE,
                 "get_latest_streaming_values",
-            )
-        })?;
-        let mut info: Vec<PICO_STREAMING_DATA_INFO> = channels
-            .iter()
-            .map(|ch| PICO_STREAMING_DATA_INFO {
-                bufferIndex_: 0,
-                channel_: (*ch).into(),
-                mode_: stream.mode,
-                noOfSamples_: 0,
-                overflow_: 0,
-                startIndex_: 0,
-                type_: stream.data_type,
-            })
-            .collect();
+            ));
+        }
 
         unsafe {
             let mut stream_trig: MaybeUninit<PICO_STREAMING_DATA_TRIGGER_INFO> =
@@ -122,8 +129,13 @@ impl StreamingDriver for PSOSPADriver {
                 stream_trig.as_mut_ptr(),
             ));
 
-            if info[0].noOfSamples_ > 0 {
-                callback(info[0].startIndex_ as usize, info[0].noOfSamples_ as usize);
+            let entries: Vec<(u32, usize, usize)> = info
+                .iter()
+                .map(|e| (e.channel_, e.startIndex_ as usize, e.noOfSamples_ as usize))
+                .collect();
+            tracing::trace!(?status, ?entries, "latest values");
+            if let Some((start, count)) = self.ports.join(handle, &entries) {
+                callback(start, count);
             }
 
             match status {
