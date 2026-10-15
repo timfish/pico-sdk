@@ -1,7 +1,9 @@
 use pico_common::{PicoError, PicoResult, SigGenConfig, SigGenInfo};
 
 /// The signal generator, through the legacy or the properties API.
-/// It is an output: a change does not stop a stream.
+/// It does not stop a stream, but the ps2000a and psospa drivers answer
+/// `BUSY` to most changes while the scope streams (ps2000a guide
+/// §3.52); a change of frequency alone, or off on psospa, goes through.
 pub trait SigGenDriver {
     fn sig_gen_info(&self, _handle: i16) -> PicoResult<SigGenInfo> {
         Err(PicoError::not_supported("sig_gen_info"))

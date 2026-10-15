@@ -1,9 +1,11 @@
-//! Drives a scope's signal generator while it streams channel A, and
-//! checks each output from the samples. Wire the AWG output to
-//! channel A first.
+//! Drives a scope's signal generator and checks each output from the
+//! samples of channel A. Wire the AWG output to channel A first.
 //!
-//! Streams A at 100 kS/s on ±2 V DC and, without stopping the stream,
-//! sets in turn:
+//! Streams A at 100 kS/s on ±2 V DC. The ps2000a and psospa drivers
+//! answer `BUSY` to most generator changes while the scope streams
+//! (ps2000a guide §3.52: set up the generator before starting data
+//! acquisition), so each step stops the stream, sets the generator and
+//! starts the stream again. In turn:
 //!
 //! 1. a 1 kHz sine of 2 V pk-pk: frequency within 1%, pk-pk within 10%;
 //! 2. a 2 kHz square of 1 V pk-pk on a 0.5 V offset: frequency within
@@ -123,7 +125,7 @@ fn main() {
     let mut config = OscilloscopeConfig::default();
     config.set_sample_rate(RATE);
     config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-    runner.start(config).expect("start");
+    runner.start(config.clone()).expect("start");
     let rate = runner.get_stream().expect("streaming").samples_per_second();
     println!("streaming A at {rate} S/s");
 
@@ -146,9 +148,16 @@ fn main() {
     steps.push(("off", None));
 
     let mut failures = 0;
+    let stream = config;
     for (name, config) in steps {
+        // `stop` returns before the stream has ended.
+        runner.stop();
+        while runner.get_stream().is_some() {
+            thread::sleep(Duration::from_millis(10));
+        }
         let set = runner.set_sig_gen(config.as_ref());
         println!("\n{name}: set returned {set:?}");
+        runner.start(stream.clone()).expect("start");
         if set.is_err() {
             failures += 1;
             println!("{name}: FAIL");
