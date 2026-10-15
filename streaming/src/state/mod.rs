@@ -274,10 +274,11 @@ where
             "start took the device"
         );
 
-        // If we're already streaming we need to stop first so we reconfigure
+        // A stream runs until a step stops it, also after `stop`, which
+        // only sets the target; so stop it here before the new config.
         let streaming = {
             let mut state = self.state.write();
-            let streaming = matches!(state.target, Target::Streaming(_));
+            let streaming = matches!(state.current, Current::Streaming(..));
             if streaming {
                 state.target = Target::Open;
             }

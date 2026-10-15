@@ -163,6 +163,8 @@ pub struct PSOSPADriver {
     variant_details: RwLock<HashMap<String, Arc<JsonValue>>>,
     /// The ratio mode and data type of each handle's buffers.
     streams: RwLock<HashMap<i16, PicoStreamMode>>,
+    /// The digital ports with a stream buffer on each handle.
+    ports: super::features::StreamPorts,
     /// The power each handle reported at open.
     power: RwLock<HashMap<i16, PowerSource>>,
 }
@@ -186,6 +188,7 @@ impl PSOSPADriver {
             resolutions: RwLock::new(HashMap::new()),
             variant_details: RwLock::new(HashMap::new()),
             streams: RwLock::new(HashMap::new()),
+            ports: Default::default(),
             power: RwLock::new(HashMap::new()),
         })
     }
@@ -509,6 +512,7 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn clear_data_buffers(&self, handle: i16) -> PicoResult<()> {
+        self.ports.clear(handle);
         PicoStatus::from(unsafe {
             self.bindings.psospaSetDataBuffer(
                 handle,
