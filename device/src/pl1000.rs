@@ -1,5 +1,5 @@
 use crate::DeviceOpen;
-use pico_common::{PicoResult, PL1000Channel, PL1000Info};
+use pico_common::{PL1000Channel, PL1000Info, PicoResult};
 use pico_driver::pl1000::PL1000Driver;
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -103,7 +103,8 @@ mod serde_tests {
         let serialized = serde_json::to_string(&config).expect("serialize");
         assert_eq!(serialized, GOLDEN, "PL1000Config wire shape changed");
 
-        let deserialized: PL1000Config = serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
+        let deserialized: PL1000Config =
+            serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
         assert_eq!(deserialized, config);
 
         // Channel 2 was never inserted, so it must not appear on either side.

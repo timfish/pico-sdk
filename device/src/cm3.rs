@@ -1,6 +1,6 @@
 use crate::DeviceOpen;
 use pico_common::{
-    MainsRejectionFreq, PicoResult, PLCM3Channel, PLCM3DataType, PLCM3Info, LOGGER_CONVERSION_MS,
+    MainsRejectionFreq, PLCM3Channel, PLCM3DataType, PLCM3Info, PicoResult, LOGGER_CONVERSION_MS,
 };
 use pico_driver::cm3::PLCM3Driver;
 use std::{collections::BTreeMap, sync::Arc};
@@ -28,7 +28,9 @@ impl PLCM3Config {
 
     /// Returns all configured channels in channel order
     pub fn enabled_channels(&self) -> impl Iterator<Item = (PLCM3Channel, PLCM3DataType)> + '_ {
-        self.channels.iter().map(|(channel, data_type)| (*channel, *data_type))
+        self.channels
+            .iter()
+            .map(|(channel, data_type)| (*channel, *data_type))
     }
 
     /// How often each channel gets a new conversion: about 720 ms per channel that is not off
@@ -120,7 +122,8 @@ mod serde_tests {
     /// Pins the wire field names / enum tag spellings for `PLCM3Config` and everything it embeds
     /// (`PLCM3Channel`, `PLCM3DataType`, `MainsRejectionFreq`). `BTreeMap` gives a deterministic
     /// key order, so this can be an exact string match rather than a structural one.
-    const GOLDEN: &str = r#"{"mains_rejection":"_50Hz","channels":{"CHANNEL_1":"OneMillivoltPerAmp"}}"#;
+    const GOLDEN: &str =
+        r#"{"mains_rejection":"_50Hz","channels":{"CHANNEL_1":"OneMillivoltPerAmp"}}"#;
 
     #[test]
     fn plcm3_config_round_trips_and_pins_field_names() {
@@ -129,7 +132,8 @@ mod serde_tests {
         let serialized = serde_json::to_string(&config).expect("serialize");
         assert_eq!(serialized, GOLDEN, "PLCM3Config wire shape changed");
 
-        let deserialized: PLCM3Config = serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
+        let deserialized: PLCM3Config =
+            serde_json::from_str(GOLDEN).expect("deserialize golden JSON");
         assert_eq!(deserialized, config);
 
         // Channel 2 was never inserted, so it must not appear on either side.
