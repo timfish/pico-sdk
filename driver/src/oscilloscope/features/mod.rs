@@ -25,3 +25,5 @@ pub use rapid_block::RapidBlockDriver;
 pub use siggen::SigGenDriver;
 pub use streaming::StreamingDriver;
 pub use trigger::TriggerDriver;
+
+pub(crate) use ets::{ets_args, ets_buffer_len};
