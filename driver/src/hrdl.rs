@@ -17,19 +17,26 @@
 //! error is not `SE_OK`), so this wrapper does the same - but the underlying reason for that
 //! combination is not documented anywhere accessible, so it is reproduced rather than explained.
 
+mod outputs;
+
+pub use outputs::outputs;
+
 use crate::LibraryResolution;
+use parking_lot::Mutex;
 use pico_common::{
     Driver, HRDLChannel, HRDLConversionTime, HRDLError, HRDLInfo, HRDLRange, MainsRejectionFreq,
     PicoError, PicoInfo, PicoResult, PicoStatus,
 };
 use pico_sys_dynamic::picohrdl::{
-    HRDLLoader, enBlockMethod_HRDL_BM_BLOCK, enBlockMethod_HRDL_BM_STREAM,
-    enHRDLInfo_HRDL_SETTINGS, HRDL_BLOCK_METHOD,
+    enBlockMethod_HRDL_BM_BLOCK, enBlockMethod_HRDL_BM_STREAM, enHRDLInfo_HRDL_SETTINGS,
+    HRDLLoader, HRDL_BLOCK_METHOD,
 };
-use std::{cmp::Ordering, fmt, ops::Deref, path::Path, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, fmt, ops::Deref, path::Path, sync::Arc};
 
 pub struct HRDLDriverInternal {
     bindings: HRDLLoader,
+    /// The digital I/O pins of each open unit, as last set.
+    digital_io: Mutex<HashMap<i16, outputs::DigitalIo>>,
 }
 
 impl HRDLDriverInternal {
@@ -41,8 +48,12 @@ impl HRDLDriverInternal {
         let mut buffer = vec![0i8; 256];
 
         let len = unsafe {
-            self.bindings
-                .HRDLGetUnitInfo(handle, buffer.as_mut_ptr(), buffer.len() as i16, info_type)
+            self.bindings.HRDLGetUnitInfo(
+                handle,
+                buffer.as_mut_ptr(),
+                buffer.len() as i16,
+                info_type,
+            )
         };
 
         if len <= 0 {
@@ -50,7 +61,11 @@ impl HRDLDriverInternal {
         }
 
         let bytes: Vec<u8> = buffer[..len as usize].iter().map(|&b| b as u8).collect();
-        Some(String::from_utf8_lossy(&bytes).trim_matches(char::from(0)).to_string())
+        Some(
+            String::from_utf8_lossy(&bytes)
+                .trim_matches(char::from(0))
+                .to_string(),
+        )
     }
 
     /// Reads the last configuration error reported for the unit
@@ -142,7 +157,9 @@ impl HRDLDriverInternal {
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<HRDLInfo> {
         let serial = self
             .get_info_string_raw(handle, i16::from(PicoInfo::BATCH_AND_SERIAL))
-            .ok_or_else(|| PicoError::from_status(self.get_last_error(handle).to_status(), "get_unit_info"))?;
+            .ok_or_else(|| {
+                PicoError::from_status(self.get_last_error(handle).to_status(), "get_unit_info")
+            })?;
 
         Ok(HRDLInfo {
             handle: Arc::new(handle),
@@ -313,6 +330,7 @@ impl HRDLDriverInternal {
 
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
+        self.digital_io.lock().remove(&handle);
         self.wrap_with_get_last_error(handle, || unsafe { self.bindings.HRDLCloseUnit(handle) })
             .to_result((), "close_unit")
     }
@@ -326,6 +344,7 @@ impl HRDLDriver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(HRDLDriver(Arc::new(HRDLDriverInternal {
             bindings: unsafe { HRDLLoader::new(path.as_ref())? },
+            digital_io: Mutex::new(HashMap::new()),
         })))
     }
 

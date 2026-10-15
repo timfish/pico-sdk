@@ -163,9 +163,10 @@
 pub mod prelude {
     pub use pico_common::{
         AuxIoMode, Downsample, DownsampleKind, Driver, EtsConfig, EtsLimits, EtsMode, LedColour,
-        LedState, MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling,
-        PicoError, PicoInfo, PicoLed, PicoRange, PicoResolution, PicoStatus, PowerSource,
-        RateLimit, SampleType, ScopeCapabilities, TC08Channel, TCType,
+        LedState, MainsRejectionFreq, OscilloscopeChannelConfig, OutputKind, OutputSpec,
+        OutputValue, Outputs, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed, PicoRange,
+        PicoResolution, PicoStatus, PowerSource, RateLimit, SampleType, ScopeCapabilities,
+        SigGenConfig, SigGenShape, TC08Channel, TCType,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},

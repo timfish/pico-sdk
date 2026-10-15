@@ -5,6 +5,7 @@ use pico_sys_dynamic::psospa::{
     enPicoAuxIoMode_PICO_AUXIO_HIGH_OUT, enPicoAuxIoMode_PICO_AUXIO_INPUT,
     enPicoAuxIoMode_PICO_AUXIO_LOW_OUT, enPicoAuxIoMode_PICO_AUXIO_TRIGGER_OUT, PICO_AUXIO_MODE,
 };
+use tracing::warn;
 
 fn aux_io_mode(mode: AuxIoMode) -> PICO_AUXIO_MODE {
     match mode {
@@ -18,8 +19,16 @@ fn aux_io_mode(mode: AuxIoMode) -> PICO_AUXIO_MODE {
 impl AuxIoDriver for PSOSPADriver {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn set_aux_io_mode(&self, handle: i16, mode: AuxIoMode) -> PicoResult<()> {
-        PicoStatus::from(unsafe { self.bindings.psospaSetAuxIoMode(handle, aux_io_mode(mode)) })
-            .to_result((), "set_aux_io_mode")
+        match PicoStatus::from(unsafe {
+            self.bindings.psospaSetAuxIoMode(handle, aux_io_mode(mode))
+        }) {
+            // The mode is set; the scope or AWG triggers on it.
+            PicoStatus::WARNING_AUX_OUTPUT_CONFLICT => {
+                warn!(?mode, "AUX I/O is an output while a trigger reads it");
+                Ok(())
+            }
+            status => status.to_result((), "set_aux_io_mode"),
+        }
     }
 }
 

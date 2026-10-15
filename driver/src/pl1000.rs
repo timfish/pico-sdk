@@ -15,12 +15,16 @@
 //! - Every channel shares one input range; there is no per-channel range setting like the
 //!   oscilloscopes. `pl1000MaxValue` reports the full-scale ADC reading for the connected variant.
 
+mod outputs;
+
+pub use outputs::outputs;
+
 use crate::LibraryResolution;
 use pico_common::{
-    Driver, FromPicoStr, PicoError, PicoInfo, PicoResult, PicoStatus, PL1000Channel, PL1000Info,
+    Driver, FromPicoStr, PL1000Channel, PL1000Info, PicoError, PicoInfo, PicoResult, PicoStatus,
 };
 use pico_sys_dynamic::pl1000::{
-    PL1000Loader, BLOCK_METHOD, _BLOCK_METHOD_BM_SINGLE, _BLOCK_METHOD_BM_STREAM,
+    PL1000Loader, _BLOCK_METHOD_BM_SINGLE, _BLOCK_METHOD_BM_STREAM, BLOCK_METHOD,
 };
 use std::{iter, ops::Deref, path::Path, sync::Arc};
 
