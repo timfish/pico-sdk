@@ -1,8 +1,5 @@
 use super::*;
-use crate::oscilloscope::{
-    features::{flagged_channels, trigger::stream_offset},
-    StreamingDriver,
-};
+use crate::oscilloscope::{features::flagged_channels, StreamingDriver};
 use pico_common::Overflow;
 
 impl StreamingDriver for PSOSPADriver {
@@ -142,13 +139,10 @@ impl StreamingDriver for PSOSPADriver {
             let (start, samples) = joined.unwrap_or((0, 0));
             // triggerAt_ is an index into the buffer, as Pico's
             // streaming example plots it.
-            let offset = stream_offset(
-                stream_trig.triggered_ != 0,
-                stream_trig.triggerAt_,
-                start,
-                samples,
-                false,
-            );
+            let at = (stream_trig.triggered_ != 0)
+                .then(|| usize::try_from(stream_trig.triggerAt_).ok())
+                .flatten();
+            let offset = self.ports.trigger(handle, at, joined.filter(|j| j.1 > 0));
             super::trigger::STATES.streamed(handle, offset);
             let flags: Vec<(u32, i16)> = info.iter().map(|e| (e.channel_, e.overflow_)).collect();
             let overflow = self
