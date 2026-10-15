@@ -21,6 +21,8 @@
 //!
 //! `cargo run --release --example trigger_setup -- psospa 13474/0004`
 //! `cargo run --release --example trigger_setup -- 2000a CW356/055`
+//! or the built program with the same arguments: `trigger_setup psospa
+//! 13474/0004`. The driver type takes any case, with or without `ps`.
 
 use pico_sdk::{common::*, prelude::*};
 use std::{
@@ -202,9 +204,13 @@ fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
-    let mut args = env::args().skip(1);
-    let driver_type = Driver::from_str(&args.next().unwrap_or_else(|| "psospa".into()))
-        .expect("a driver type such as 2000a or psospa");
+    // A `--` copied from the cargo command line is not an argument.
+    let mut args = env::args().skip(1).filter(|a| a != "--");
+    let name = args.next().unwrap_or_else(|| "psospa".into());
+    let driver_type = Driver::from_str(&name).unwrap_or_else(|_| {
+        eprintln!("{name:?} is not a driver type; give one such as 2000a or psospa");
+        std::process::exit(2)
+    });
     let serial = args.next();
 
     let PicoDriver::Oscilloscope(driver) = driver_type

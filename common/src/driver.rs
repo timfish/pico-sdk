@@ -39,11 +39,13 @@ impl FromStr for Driver {
     type Err = ParseError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input
+        let input: String = input
             .to_uppercase()
             .replace("USB", "")
             .replace("PS", "")
-            .replace([' ', '-'], "");
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != '-')
+            .collect();
 
         match &input[..] {
             "2000" => Ok(Driver::PS2000),
@@ -213,6 +215,27 @@ mod tests {
         assert_eq!(Driver::from_str("usbpt104"), Ok(Driver::PT104));
         assert_eq!(Driver::from_str("PT-104"), Ok(Driver::PT104));
         assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
+        assert_eq!(Driver::from_str("--"), Err(ParseError));
+    }
+
+    /// The forms the scope examples' usage lines name, as a shell or
+    /// a script may pass them.
+    #[test]
+    fn parses_example_arguments() {
+        for (input, driver) in [
+            ("2000a", Driver::PS2000A),
+            ("2000A", Driver::PS2000A),
+            ("ps2000a", Driver::PS2000A),
+            ("psospa", Driver::PSOSPA),
+            ("PSOSPA", Driver::PSOSPA),
+            ("OSPA", Driver::PSOSPA),
+            ("ospa", Driver::PSOSPA),
+            ("2000a\r", Driver::PS2000A),
+            (" psospa\n", Driver::PSOSPA),
+            ("\tps-2000a ", Driver::PS2000A),
+        ] {
+            assert_eq!(Driver::from_str(input), Ok(driver), "{input:?}");
+        }
     }
 
     #[test]
