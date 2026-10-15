@@ -180,7 +180,7 @@ pub mod prelude {
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
         kernel_driver,
-        oscilloscope::{EnumerationResult, EtsDriver},
+        oscilloscope::{ChannelExtrasDriver, EnumerationResult, EtsDriver},
         DriverLoad, DriverLoadError, LibraryResolution, PicoDriver,
     };
     pub use pico_enumeration::{

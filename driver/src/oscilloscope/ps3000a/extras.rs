@@ -1,4 +1,19 @@
 use super::PS3000ADriver;
-use crate::oscilloscope::ChannelExtrasDriver;
+use crate::oscilloscope::{features::offset_limits_f32, ChannelExtrasDriver};
+use pico_common::{PicoCoupling, PicoRange, PicoResult};
 
-impl ChannelExtrasDriver for PS3000ADriver {}
+impl ChannelExtrasDriver for PS3000ADriver {
+    // ps3000apg.en-15 §4.8.
+    #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
+    fn offset_limits(
+        &self,
+        handle: i16,
+        range: PicoRange,
+        coupling: PicoCoupling,
+    ) -> PicoResult<(f64, f64)> {
+        offset_limits_f32("offset_limits", |max, min| unsafe {
+            self.bindings
+                .ps3000aGetAnalogueOffset(handle, range.into(), coupling.into(), max, min)
+        })
+    }
+}
