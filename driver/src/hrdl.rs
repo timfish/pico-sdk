@@ -13,7 +13,12 @@
 //! centralizes that, the same role [`crate::tc08::TC08DriverInternal::wrap_with_get_last_error`]
 //! plays for the TC-08 (different transport, same idea).
 
+mod outputs;
+
+pub use outputs::outputs;
+
 use crate::LibraryResolution;
+use parking_lot::Mutex;
 use pico_common::{
     Driver, HRDLChannel, HRDLConversionTime, HRDLError, HRDLInfo, HRDLRange, MainsRejectionFreq,
     PicoError, PicoInfo, PicoResult, PicoStatus,
@@ -22,10 +27,12 @@ use pico_sys_dynamic::picohrdl::{
     enBlockMethod_HRDL_BM_BLOCK, enBlockMethod_HRDL_BM_STREAM, enHRDLInfo_HRDL_ERROR,
     enHRDLInfo_HRDL_SETTINGS, HRDLLoader, HRDL_BLOCK_METHOD,
 };
-use std::{cmp::Ordering, fmt, ops::Deref, path::Path, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, fmt, ops::Deref, path::Path, sync::Arc};
 
 pub struct HRDLDriverInternal {
     bindings: HRDLLoader,
+    /// The digital I/O pins of each open unit, as last set.
+    digital_io: Mutex<HashMap<i16, outputs::DigitalIo>>,
 }
 
 impl HRDLDriverInternal {
@@ -345,6 +352,7 @@ impl HRDLDriverInternal {
 
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
+        self.digital_io.lock().remove(&handle);
         self.wrap_with_get_last_error(handle, || unsafe { self.bindings.HRDLCloseUnit(handle) })
             .to_result((), "close_unit")
     }
@@ -378,6 +386,7 @@ impl HRDLDriver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(HRDLDriver(Arc::new(HRDLDriverInternal {
             bindings: unsafe { HRDLLoader::new(path.as_ref())? },
+            digital_io: Mutex::new(HashMap::new()),
         })))
     }
 

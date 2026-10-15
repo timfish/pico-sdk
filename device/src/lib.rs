@@ -39,6 +39,7 @@ pub mod cm3;
 pub mod drdaq;
 pub mod hrdl;
 pub mod oscilloscope;
+pub mod outputs;
 pub mod pl1000;
 pub mod pt104;
 pub mod tc08;

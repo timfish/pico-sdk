@@ -32,3 +32,6 @@ pub(crate) use rapid_block::{
 pub use siggen::SigGenDriver;
 pub use streaming::StreamingDriver;
 pub use trigger::TriggerDriver;
+
+pub(crate) use ets::{ets_args, ets_buffer_len};
+pub(crate) use extras::{accessory_string, offset_limits_f32, tripped_channels};

@@ -163,12 +163,13 @@
 pub mod prelude {
     pub use pico_common::{
         AuxIoMode, BlockConfig, DigitalHysteresis, DigitalPort, DigitalPortConfig,
-        DigitalThreshold, Downsample, DownsampleKind, Driver, LedColour, LedState,
-        MainsRejectionFreq, OscilloscopeChannelConfig, PicoChannel, PicoCoupling, PicoError,
-        PicoInfo, PicoLed, PicoRange, PicoResolution, PicoStatus, PowerSource, RateLimit,
-        SampleType, ScopeCapabilities, SegmentTimestamp, SigGenConfig, SigGenInfo, SigGenShape,
-        SigGenShapeKind, SigGenTrigger, SigGenTriggerKind, SigGenTriggerSource, Sweep, SweepKind,
-        TC08Channel, TCType, Timebase, TriggerConfig, TriggerInfo,
+        DigitalThreshold, Downsample, DownsampleKind, Driver, EtsConfig, EtsLimits, EtsMode,
+        LedColour, LedState, MainsRejectionFreq, OscilloscopeChannelConfig, OutputKind, OutputSpec,
+        OutputValue, Outputs, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed, PicoRange,
+        PicoResolution, PicoStatus, PowerSource, RateLimit, SampleType, ScopeCapabilities,
+        SegmentTimestamp, SigGenConfig, SigGenInfo, SigGenShape, SigGenShapeKind, SigGenTrigger,
+        SigGenTriggerKind, SigGenTriggerSource, Sweep, SweepKind, TC08Channel, TCType, Timebase,
+        TriggerConfig, TriggerInfo,
     };
     pub use pico_device::{
         cm3::{PLCM3Config, PLCM3Device},
@@ -182,8 +183,9 @@ pub mod prelude {
     };
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
-        kernel_driver, oscilloscope::EnumerationResult, DriverLoad, DriverLoadError,
-        LibraryResolution, PicoDriver,
+        kernel_driver,
+        oscilloscope::{ChannelExtrasDriver, EnumerationResult, EtsDriver},
+        DriverLoad, DriverLoadError, LibraryResolution, PicoDriver,
     };
     pub use pico_enumeration::{
         DeviceEnumerator, EnumResultHelpers, EnumerationError, PicoDeviceHelpers,
