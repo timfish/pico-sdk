@@ -8,7 +8,10 @@ use std::{
     any::Any,
     fmt,
     panic::{catch_unwind, AssertUnwindSafe},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -206,6 +209,9 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     state: Arc<RwLock<StreamingState<Config, Info, Stream>>>,
     /// Held across each step's driver calls, so steps run one at a time.
     steps: Arc<Mutex<()>>,
+    /// While above 0, the background thread takes no step: a caller
+    /// drives the device through [`StreamingRunner::with_open`].
+    holds: Arc<AtomicUsize>,
     background_handle: Option<Arc<BackgroundThreadHandle>>,
     pub events: EventEmitter<Event>,
     /// Changes in the device that are not data, such as its power
@@ -232,6 +238,7 @@ where
             device,
             state,
             steps: Arc::new(Mutex::new(())),
+            holds: Arc::new(AtomicUsize::new(0)),
             events: EventEmitter::new(),
             notices: Notices::new(),
             background_handle: None,
@@ -383,6 +390,21 @@ where
         self.state.write().current = Current::Closed;
     }
 
+    /// Stops the background thread's steps until the guard drops, so
+    /// a caller can drive an open device for a while, such as a block
+    /// capture, with calls through [`with_open`](Self::with_open) and
+    /// no ping between them. Other callers of `with_open`, such as an
+    /// output set, still run between those calls.
+    pub fn hold_steps(&self) -> StepsHeld {
+        self.holds.fetch_add(1, Ordering::SeqCst);
+        // A step that runs now ends before the hold counts.
+        drop(self.steps.lock());
+        debug!("background steps held");
+        StepsHeld {
+            holds: self.holds.clone(),
+        }
+    }
+
     fn start_background_thread(&mut self) {
         let (tx_terminate, rx_terminate) = bounded::<()>(0);
 
@@ -405,6 +427,14 @@ where
         let mut wait_for_closed = false;
 
         loop {
+            if this.holds.load(Ordering::SeqCst) > 0 && !wait_for_closed {
+                sleep_ms(5);
+                if rx_terminate.try_recv().is_ok() {
+                    this.state.write().target = Target::Closed;
+                    wait_for_closed = true;
+                }
+                continue;
+            }
             let steps = this.steps.lock();
             let failed = match catch_unwind(AssertUnwindSafe(|| this.step(&steps))) {
                 Ok(result) => result.is_err(),
@@ -430,6 +460,19 @@ where
                 return;
             }
         }
+    }
+}
+
+/// Holds a runner's background steps; see
+/// [`StreamingRunner::hold_steps`].
+pub struct StepsHeld {
+    holds: Arc<AtomicUsize>,
+}
+
+impl Drop for StepsHeld {
+    fn drop(&mut self) {
+        self.holds.fetch_sub(1, Ordering::SeqCst);
+        debug!("background steps go on");
     }
 }
 

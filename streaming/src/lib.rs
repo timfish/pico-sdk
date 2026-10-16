@@ -85,6 +85,6 @@ pub use poll::LoggerPollState;
 pub use pt104::PT104StreamingEvent;
 pub use state::{
     AfterPowerChange, Current, DeviceNotice, EventEmitter, EventHandler, IntoStreamingDevice,
-    Notices, StreamDevice, StreamingRunner, Target,
+    Notices, StepsHeld, StreamDevice, StreamingRunner, Target,
 };
 pub use tc08::{TC08StreamState, TC08StreamingEvent};
