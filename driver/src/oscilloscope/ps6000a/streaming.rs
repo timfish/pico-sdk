@@ -129,7 +129,8 @@ impl StreamingDriver for PS6000ADriver {
                 .iter()
                 .map(|e| (e.channel_, e.startIndex_ as usize, e.noOfSamples_ as usize))
                 .collect();
-            tracing::trace!(?status, ?entries, "latest values");
+            let overflow: Vec<i16> = info.iter().map(|e| e.overflow_).collect();
+            tracing::trace!(?status, ?entries, ?overflow, "latest values");
             let joined = self.ports.join(handle, &entries);
             let (start, samples) = joined.unwrap_or((0, 0));
             // triggerAt_ is an index into the buffer, as Pico's
