@@ -1,7 +1,7 @@
 use crate::oscilloscope::SampleBuffer;
 use pico_common::{
-    status_from_raw, BlockConfig, Downsample, DownsampleKind, Overflow, PicoChannel, PicoError,
-    PicoResolution, PicoResult, PicoStatus, Timebase,
+    status_from_raw, BlockConfig, DigitalPort, Downsample, DownsampleKind, Overflow, PicoChannel,
+    PicoError, PicoResolution, PicoResult, PicoStatus, Timebase,
 };
 use std::ffi::c_void;
 
@@ -32,8 +32,9 @@ pub trait BlockDriver {
     fn max_timebase(&self) -> u32 {
         u32::MAX
     }
-    /// The timebase nearest to `interval_s` with `channels` on at
-    /// `resolution`. Families with a stateless call use the arguments;
+    /// The timebase nearest to `interval_s` with `channels` and `ports`
+    /// on at `resolution`. Families with a stateless call use the
+    /// arguments;
     /// the others search `timebase`, which reads the channels and
     /// resolution the unit has now, so set those first.
     fn nearest_timebase(
@@ -41,6 +42,7 @@ pub trait BlockDriver {
         handle: i16,
         interval_s: f64,
         _channels: &[PicoChannel],
+        _ports: &[DigitalPort],
         _resolution: Option<PicoResolution>,
     ) -> PicoResult<Timebase> {
         search_timebase(
@@ -273,9 +275,13 @@ impl ReadyParameter {
 }
 
 /// The channel flags of the stateless timebase calls: bit 0 for
-/// channel A (ps5000apg r4 §4.35; ps6000a §3.30).
-pub(crate) fn channel_flags(channels: &[PicoChannel]) -> u32 {
-    channels.iter().fold(0, |flags, ch| flags | 1 << *ch as u32)
+/// channel A, bit 16 for `PORT0` (ps5000apg r4 §4.35; ps6000a §3.30;
+/// `PICO_PORT0_FLAGS` in the ps5000a, ps6000a and psospa headers).
+pub(crate) fn channel_flags(channels: &[PicoChannel], ports: &[DigitalPort]) -> u32 {
+    let channels = channels.iter().fold(0, |flags, ch| flags | 1 << *ch as u32);
+    ports
+        .iter()
+        .fold(channels, |flags, port| flags | 1 << (16 + port.index()))
 }
 
 /// The resolution asked for, else the one the unit has now.
@@ -326,7 +332,11 @@ mod tests {
         assert_eq!(at(1.005e-6), 128);
         assert_eq!(at(1.0), 1000);
         assert!(search_timebase(fake, 0.0, u32::MAX).is_err());
-        assert_eq!(channel_flags(&[PicoChannel::A, PicoChannel::C]), 0b101);
+        assert_eq!(channel_flags(&[PicoChannel::A, PicoChannel::C], &[]), 0b101);
+        assert_eq!(
+            channel_flags(&[PicoChannel::B], &[DigitalPort::Port1]),
+            0x2_0002
+        );
     }
 
     #[test]

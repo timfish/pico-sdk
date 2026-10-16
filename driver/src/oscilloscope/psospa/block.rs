@@ -8,7 +8,7 @@ use crate::oscilloscope::{
     features::{channel_flags, resolution_or, ReadyParameter},
     BlockDriver, BlockReady,
 };
-use pico_common::{offset_seconds, BlockConfig, Overflow, Timebase};
+use pico_common::{offset_seconds, BlockConfig, DigitalPort, Overflow, Timebase};
 
 /// The ratio mode and data type of a block read. Sum is a streaming
 /// mode only (as in ps6000apg-9 §3.21, which psospa follows).
@@ -121,6 +121,7 @@ impl BlockDriver for PSOSPADriver {
         handle: i16,
         interval_s: f64,
         channels: &[PicoChannel],
+        ports: &[DigitalPort],
         resolution: Option<PicoResolution>,
     ) -> PicoResult<Timebase> {
         let resolution = resolution_or(resolution, self.get_resolution(handle))?;
@@ -131,7 +132,7 @@ impl BlockDriver for PSOSPADriver {
             PicoStatus::from(unsafe {
                 self.bindings.psospaNearestSampleIntervalStateless(
                     handle,
-                    channel_flags(channels),
+                    channel_flags(channels, ports),
                     interval_s,
                     round_faster,
                     resolution.to_driver_value(),

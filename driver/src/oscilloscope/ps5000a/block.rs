@@ -10,7 +10,7 @@ use crate::oscilloscope::{
     BlockDriver, BlockReady, OscilloscopeDriverInternal,
 };
 use pico_common::{
-    offset_seconds, BlockConfig, DownsampleKind, Overflow, PicoResolution, Timebase,
+    offset_seconds, BlockConfig, DigitalPort, DownsampleKind, Overflow, PicoResolution, Timebase,
 };
 use pico_sys_dynamic::ps5000a::{
     enPS5000ARatioMode_PS5000A_RATIO_MODE_AGGREGATE, enPS5000ARatioMode_PS5000A_RATIO_MODE_DECIMATE,
@@ -112,6 +112,7 @@ impl BlockDriver for PS5000ADriver {
         handle: i16,
         interval_s: f64,
         channels: &[PicoChannel],
+        ports: &[DigitalPort],
         resolution: Option<PicoResolution>,
     ) -> PicoResult<Timebase> {
         let resolution = resolution_or(resolution, self.get_resolution(handle))?;
@@ -120,7 +121,7 @@ impl BlockDriver for PS5000ADriver {
         PicoStatus::from(unsafe {
             self.bindings.ps5000aNearestSampleIntervalStateless(
                 handle,
-                channel_flags(channels),
+                channel_flags(channels, ports),
                 interval_s,
                 resolution.to_driver_value(),
                 0,
