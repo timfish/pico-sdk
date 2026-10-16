@@ -125,11 +125,23 @@ impl DigitalPortDriver for PSOSPADriver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pico_sys_dynamic::psospa::{enPicoChannel_PICO_PORT0, enPicoChannel_PICO_PORT1};
+    use crate::oscilloscope::features::channel_flags;
+    use pico_sys_dynamic::psospa::{
+        enPicoChannelFlags_PICO_PORT0_FLAGS, enPicoChannelFlags_PICO_PORT1_FLAGS,
+        enPicoChannel_PICO_PORT0, enPicoChannel_PICO_PORT1,
+    };
 
     #[test]
     fn port_codes_match_the_header() {
         assert_eq!(DigitalPort::Port0.code(), enPicoChannel_PICO_PORT0);
         assert_eq!(DigitalPort::Port1.code(), enPicoChannel_PICO_PORT1);
+        assert_eq!(
+            channel_flags(&[], &[DigitalPort::Port0]),
+            enPicoChannelFlags_PICO_PORT0_FLAGS
+        );
+        assert_eq!(
+            channel_flags(&[], &[DigitalPort::Port1]),
+            enPicoChannelFlags_PICO_PORT1_FLAGS
+        );
     }
 }

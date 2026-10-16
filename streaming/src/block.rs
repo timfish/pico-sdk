@@ -7,13 +7,21 @@
 //! another downsample mode is another `GetValues` of the same capture
 //! ("Retrieving stored data"), so an overview and raw spans come from
 //! one capture until the next arm.
+//!
+//! MSO ports go into a block as the analogue channels do: a data buffer
+//! for each port in each segment, the port's code as the source of
+//! `SetDataBuffer` (ps5000apg r4 §3.3, psospa-3 §2.4 "MSO digital
+//! data"). Raw reads only, as a mean or sum of bit patterns means
+//! nothing.
 
+use crate::digital::set_up_ports;
+use crate::oscilloscope::set_resolution;
 use crate::Samples;
 use crossbeam::channel::{bounded, Receiver, RecvTimeoutError};
 use pico_common::{
-    trigger_times, BlockConfig, Downsample, DownsampleKind, PicoChannel, PicoError, PicoResult,
-    PicoStatus, SampleType, SegmentTimestamp, Timebase, TimestampCounter, TriggerConfig,
-    TriggerInfo, SINCE_FIRST_MASK,
+    port_bytes, trigger_times, BlockConfig, DigitalPort, Downsample, DownsampleKind, PicoChannel,
+    PicoError, PicoResult, PicoStatus, SampleType, SegmentTimestamp, Timebase, TimestampCounter,
+    TriggerConfig, TriggerInfo, SINCE_FIRST_MASK,
 };
 use pico_device::oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo};
 use pico_driver::oscilloscope::SampleBuffer;
@@ -103,27 +111,37 @@ pub struct BlockData {
     /// How long the read took.
     pub transfer: Duration,
     pub channels: HashMap<PicoChannel, BlockChannel>,
+    /// Each port's samples, a byte each, one bit a line (bit 0 is D0 of
+    /// `Port0`, D8 of `Port1`). Raw reads only: a downsampled read
+    /// holds no ports.
+    pub digital: HashMap<DigitalPort, Vec<u8>>,
 }
 
 impl BlockData {
-    /// Values each channel holds.
+    /// Values each channel, or each port with no channel on, holds.
     pub fn len(&self) -> usize {
-        self.channels.values().next().map_or(0, |c| c.values.len())
+        match self.channels.values().next() {
+            Some(c) => c.values.len(),
+            None => self.digital.values().next().map_or(0, Vec::len),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Bytes read from the unit for all channels.
+    /// Bytes read from the unit for all channels and ports. A port's
+    /// sample comes as an `i16`.
     pub fn bytes(&self) -> usize {
-        self.channels
+        let channels: usize = self
+            .channels
             .values()
             .map(|c| {
                 let size = c.values.sample_type().size();
                 (c.values.len() + c.min.as_ref().map_or(0, Samples::len)) * size
             })
-            .sum()
+            .sum();
+        channels + self.digital.values().map(|p| p.len() * 2).sum::<usize>()
     }
 }
 
@@ -189,6 +207,7 @@ pub struct BlockRunner {
     settings: BlockSettings,
     plan: BlockPlan,
     channels: Vec<PicoChannel>,
+    ports: Vec<DigitalPort>,
     multipliers: HashMap<PicoChannel, f64>,
     armed: Option<Armed>,
     /// Segments captured and samples each, of the capture now held.
@@ -205,9 +224,28 @@ fn handle(info: &OscilloscopeInfo) -> i16 {
     *info.handle
 }
 
+type SegmentBuffers = HashMap<PicoChannel, SampleBuffer>;
+type PortList = Vec<(DigitalPort, SampleBuffer)>;
+
+/// The first `got` samples of each port's buffer as bytes.
+fn port_data(
+    buffers: &[(DigitalPort, SampleBuffer)],
+    got: usize,
+) -> PicoResult<HashMap<DigitalPort, Vec<u8>>> {
+    buffers
+        .iter()
+        .map(|(port, buffer)| {
+            let words = buffer.as_i16("read ports")?.read();
+            Ok((*port, port_bytes(&words[..got.min(words.len())])))
+        })
+        .collect()
+}
+
 impl BlockRunner {
-    /// Sets up the scope for `settings` with the channels and
+    /// Sets up the scope for `settings` with the channels, ports and
     /// resolution of `config`, whose rate and downsample are not used.
+    /// Ports alone run at 8 bits, as in a stream (psospa-3
+    /// psospaSetDigitalPortOn).
     #[tracing::instrument(level = "debug", skip_all, fields(serial = %device.serial))]
     pub fn new(
         mut device: OscilloscopeDevice,
@@ -217,10 +255,10 @@ impl BlockRunner {
         device.ensure_open()?;
         let info = device.info.clone().expect("device is open");
         info.check_config(config)?;
-        if config.channels.is_empty() {
+        if config.channels.is_empty() && config.digital.is_empty() {
             return Err(PicoError::from_status(
                 PicoStatus::INVALID_CHANNEL,
-                "no channel is on",
+                "no channel or port is on",
             ));
         }
         let caps = &info.capabilities;
@@ -240,16 +278,17 @@ impl BlockRunner {
         let driver = &device.driver;
         let h = handle(&info);
 
-        // As for a stream: channels off, resolution, channels on
-        // (ps5000apg r4 §4.49).
+        // As for a stream: channels and ports off, resolution, channels
+        // and ports on (ps5000apg r4 §4.49).
         for (channel, ranges) in &info.valid_channel_ranges {
             if !ranges.is_empty() && !config.channels.contains_key(channel) {
                 driver.disable_channel(h, *channel)?;
             }
         }
+        crate::digital::ports_off(&device, &info)?;
         let resolution = info.effective_resolution(config);
         if let Some(resolution) = resolution {
-            driver.set_resolution(h, resolution)?;
+            set_resolution(&device, &info, config, resolution)?;
         }
         let mut channels: Vec<PicoChannel> = config.channels.keys().copied().collect();
         channels.sort();
@@ -270,6 +309,12 @@ impl BlockRunner {
             }
             other => other?,
         }
+        // After the channels and before any buffer (ps2000a guide
+        // §2.6.4.1).
+        set_up_ports(&device, &info, config)?;
+        let mut ports: Vec<DigitalPort> = config.digital.keys().copied().collect();
+        ports.sort();
+        let driver = &device.driver;
 
         let segment_samples = if caps.rapid_block.is_some() {
             if rapid {
@@ -290,8 +335,13 @@ impl BlockRunner {
             None
         };
 
-        let nearest =
-            driver.nearest_timebase(h, 1.0 / settings.samples_per_second, &channels, resolution)?;
+        let nearest = driver.nearest_timebase(
+            h,
+            1.0 / settings.samples_per_second,
+            &channels,
+            &ports,
+            resolution,
+        )?;
         let timebase = driver.timebase(h, nearest.index, settings.samples(), 0)?;
         let most = segment_samples.map_or(timebase.max_samples, |s| s.min(timebase.max_samples));
         if most != 0 && settings.samples() > most {
@@ -312,6 +362,8 @@ impl BlockRunner {
             timebase = timebase.index,
             samples = settings.samples(),
             segments = settings.segments,
+            channels = channels.len(),
+            ports = ports.len(),
             ?segment_samples,
             "block capture set up"
         );
@@ -321,6 +373,7 @@ impl BlockRunner {
             settings,
             plan,
             channels,
+            ports,
             multipliers,
             armed: None,
             held: None,
@@ -512,12 +565,28 @@ impl BlockRunner {
         let ratio = Downsample::ratio_of(downsample);
         let values = count.div_ceil(ratio as u64) as usize;
         let aggregate = downsample.is_some_and(|d| d.mode == DownsampleKind::Aggregate);
+        let ports: &[DigitalPort] = match downsample {
+            None => &self.ports,
+            Some(_) => &[],
+        };
 
         let h = handle(&self.info);
         let driver = &self.device.driver;
         driver.clear_data_buffers(h)?;
         let mut buffers = HashMap::new();
         let mut kept = Vec::new();
+        if self.channels.is_empty() && ports.is_empty() {
+            debug!("a downsampled read of ports alone reads nothing");
+            return Ok(BlockData {
+                segment,
+                start,
+                ratio,
+                mode: downsample.map(|d| d.mode),
+                transfer: Duration::ZERO,
+                channels: HashMap::new(),
+                digital: HashMap::new(),
+            });
+        }
         for channel in &self.channels {
             let max = SampleBuffer::new(SampleType::I16, values);
             let min = aggregate.then(|| SampleBuffer::new(SampleType::I16, values));
@@ -525,6 +594,13 @@ impl BlockRunner {
             kept.push(max.clone());
             kept.extend(min.clone());
             buffers.insert(*channel, (max, min));
+        }
+        let mut port_buffers = Vec::with_capacity(ports.len());
+        for port in ports {
+            let buffer = SampleBuffer::new(SampleType::I16, values);
+            driver.set_digital_block_buffer(h, *port, buffer.clone(), segment, None)?;
+            kept.push(buffer.clone());
+            port_buffers.push((*port, buffer));
         }
         let started = Instant::now();
         let (got, overflow) = driver.get_values(h, start, count, downsample, segment)?;
@@ -555,9 +631,11 @@ impl BlockRunner {
             mode: downsample.map(|d| d.mode),
             transfer,
             channels,
+            digital: port_data(&port_buffers, got)?,
         };
         debug!(
             values = got,
+            ports = data.digital.len(),
             bytes = data.bytes(),
             elapsed_ms = transfer.as_secs_f64() * 1e3,
             "block read"
@@ -580,7 +658,7 @@ impl BlockRunner {
         let h = handle(&self.info);
         let driver = &self.device.driver;
         driver.clear_data_buffers(h)?;
-        let mut buffers: Vec<HashMap<PicoChannel, SampleBuffer>> = Vec::new();
+        let mut buffers: Vec<(SegmentBuffers, PortList)> = Vec::new();
         for segment in from..=to {
             let mut by_channel = HashMap::new();
             for channel in &self.channels {
@@ -588,14 +666,20 @@ impl BlockRunner {
                 driver.set_bulk_buffer(h, *channel, buffer.clone(), None, segment, None)?;
                 by_channel.insert(*channel, buffer);
             }
-            buffers.push(by_channel);
+            let mut by_port = Vec::with_capacity(self.ports.len());
+            for port in &self.ports {
+                let buffer = SampleBuffer::new(SampleType::I16, samples as usize);
+                driver.set_digital_block_buffer(h, *port, buffer.clone(), segment, None)?;
+                by_port.push((*port, buffer));
+            }
+            buffers.push((by_channel, by_port));
         }
         let started = Instant::now();
         let (got, overflows) = driver.get_values_bulk(h, samples, from, to, None)?;
         let transfer = started.elapsed();
         let got = (got as usize).min(samples as usize);
         let mut out = Vec::with_capacity(buffers.len());
-        for (i, by_channel) in buffers.iter().enumerate() {
+        for (i, (by_channel, by_port)) in buffers.iter().enumerate() {
             let segment = from + i as u64;
             let overflow = overflows.get(i).copied().unwrap_or_default();
             let mut channels = HashMap::new();
@@ -610,8 +694,12 @@ impl BlockRunner {
                     },
                 );
             }
-            self.buffers
-                .insert((segment, None), by_channel.values().cloned().collect());
+            let kept = by_channel
+                .values()
+                .chain(by_port.iter().map(|(_, b)| b))
+                .cloned()
+                .collect();
+            self.buffers.insert((segment, None), kept);
             out.push(BlockData {
                 segment,
                 start: 0,
@@ -619,11 +707,13 @@ impl BlockRunner {
                 mode: None,
                 transfer,
                 channels,
+                digital: port_data(by_port, got)?,
             });
         }
         debug!(
             segments = out.len(),
             values = got,
+            ports = self.ports.len(),
             elapsed_ms = transfer.as_secs_f64() * 1e3,
             "segments read"
         );

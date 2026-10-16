@@ -739,7 +739,7 @@ fn give_buffers(
 /// no rule for it (psospa guide §3.42, ps5000a §4.49), so after a
 /// failure the config's channels go on and the change is tried once
 /// more, after a short wait.
-fn set_resolution(
+pub(crate) fn set_resolution(
     device: &OscilloscopeDevice,
     info: &OscilloscopeInfo,
     config: &OscilloscopeConfig,

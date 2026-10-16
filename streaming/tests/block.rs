@@ -1,13 +1,14 @@
 //! The block runner against a fake driver that holds captures in
 //! memory: sample `i` of segment `s` on channel A is `s * 1000 + i`,
-//! and channel B is its negative.
+//! and channel B is its negative. Port `p` holds `s * 7 + i + p * 64`
+//! in its low byte, with junk in the high byte.
 
 use parking_lot::Mutex;
 use pico_common::{
-    BlockConfig, Downsample, DownsampleKind, Driver, OscilloscopeChannelConfig,
-    OscilloscopeSampleConfig, Overflow, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange,
-    PicoResolution, PicoResult, PicoStatus, RapidBlockCapabilities, ScopeCapabilities,
-    SegmentTimestamp, Timebase, TimestampCounter, TriggerInfo,
+    BlockConfig, DigitalPort, DigitalPortConfig, Downsample, DownsampleKind, Driver,
+    OscilloscopeChannelConfig, OscilloscopeSampleConfig, Overflow, PicoChannel, PicoCoupling,
+    PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, RapidBlockCapabilities,
+    ScopeCapabilities, SegmentTimestamp, Timebase, TimestampCounter, TriggerInfo,
 };
 use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
 use pico_driver::{
@@ -36,11 +37,17 @@ fn value(segment: u64, index: u64, channel: PicoChannel) -> i16 {
     }
 }
 
+fn port_value(segment: u64, index: u64, port: DigitalPort) -> u8 {
+    (segment * 7 + index + port.index() as u64 * 64) as u8
+}
+
 type Key = (u64, PicoChannel, Option<DownsampleKind>);
 
 #[derive(Default)]
 struct State {
     buffers: HashMap<Key, (SampleBuffer, Option<SampleBuffer>)>,
+    port_buffers: HashMap<(u64, DigitalPort), SampleBuffer>,
+    ports_on: Vec<DigitalPort>,
     armed: Option<(BlockConfig, Instant)>,
     segments: u64,
     captures: u64,
@@ -53,6 +60,8 @@ struct Fake {
     per_capture: Duration,
     /// The family counts timestamps like ps6000a.
     counter: bool,
+    /// MSO ports the unit has.
+    ports: u8,
     state: Mutex<State>,
 }
 
@@ -67,12 +76,18 @@ impl Fake {
         Fake {
             per_capture,
             counter,
+            ports: 0,
             state: Mutex::new(State {
                 segments: 1,
                 captures: 1,
                 ..Default::default()
             }),
         }
+    }
+
+    fn with_ports(mut self, ports: u8) -> Self {
+        self.ports = ports;
+        self
     }
 
     fn done(&self, state: &State) -> u64 {
@@ -90,6 +105,18 @@ impl Fake {
         let mode = downsample.map(|d| d.mode);
         let ratio = Downsample::ratio_of(downsample) as u64;
         let mut written = 0;
+        for port in DigitalPort::ALL {
+            let Some(buffer) = state.port_buffers.get(&(segment, port)) else {
+                continue;
+            };
+            assert!(mode.is_none(), "ports read raw only");
+            let mut words = buffer.as_i16("fake").unwrap().write();
+            written = (count as usize).min(words.len());
+            for (g, word) in words.iter_mut().take(written).enumerate() {
+                let byte = port_value(segment, start + g as u64, port);
+                *word = 0x5a00u16 as i16 | i16::from(byte);
+            }
+        }
         for channel in [PicoChannel::A, PicoChannel::B] {
             let Some((max, min)) = state.buffers.get(&(segment, channel, mode)) else {
                 continue;
@@ -154,6 +181,7 @@ impl OscilloscopeDriverInternal for Fake {
     fn capabilities(&self, _handle: i16) -> PicoResult<ScopeCapabilities> {
         Ok(ScopeCapabilities {
             block: true,
+            digital_ports: self.ports,
             rapid_block: Some(RapidBlockCapabilities {
                 trigger_offset: true,
                 timestamps: self.counter.then_some(TimestampCounter::SinceFirst),
@@ -174,7 +202,9 @@ impl OscilloscopeDriverInternal for Fake {
         Ok(())
     }
     fn clear_data_buffers(&self, _handle: i16) -> PicoResult<()> {
-        self.state.lock().buffers.clear();
+        let mut state = self.state.lock();
+        state.buffers.clear();
+        state.port_buffers.clear();
         Ok(())
     }
     fn stop(&self, _handle: i16) -> PicoResult<()> {
@@ -349,19 +379,59 @@ impl RapidBlockDriver for Fake {
 
 impl TriggerDriver for Fake {}
 impl EtsDriver for Fake {}
-impl DigitalPortDriver for Fake {}
+impl DigitalPortDriver for Fake {
+    fn set_digital_port(
+        &self,
+        _h: i16,
+        port: DigitalPort,
+        config: Option<&DigitalPortConfig>,
+    ) -> PicoResult<()> {
+        if port.index() >= self.ports {
+            return Err(PicoError::not_supported("set_digital_port"));
+        }
+        let mut state = self.state.lock();
+        state.ports_on.retain(|p| *p != port);
+        if config.is_some() {
+            state.ports_on.push(port);
+            state.calls.push("port_on");
+        }
+        Ok(())
+    }
+    fn set_digital_block_buffer(
+        &self,
+        _h: i16,
+        port: DigitalPort,
+        buffer: SampleBuffer,
+        segment: u64,
+        downsample: Option<Downsample>,
+    ) -> PicoResult<()> {
+        assert!(downsample.is_none());
+        let mut state = self.state.lock();
+        assert!(state.ports_on.contains(&port), "a buffer for a port off");
+        state.port_buffers.insert((segment, port), buffer);
+        Ok(())
+    }
+}
 impl SigGenDriver for Fake {}
 impl AuxIoDriver for Fake {}
 impl ChannelExtrasDriver for Fake {}
 impl LedDriver for Fake {}
 
 fn runner(fake: Arc<Fake>, settings: BlockSettings) -> PicoResult<BlockRunner> {
-    let driver = OscilloscopeDriver::new(FakeRef(fake));
-    let device = driver.open_device(None)?;
     let mut config = OscilloscopeConfig::default();
     config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
     config.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-    BlockRunner::new(device, &config, settings)
+    runner_with(fake, &config, settings)
+}
+
+fn runner_with(
+    fake: Arc<Fake>,
+    config: &OscilloscopeConfig,
+    settings: BlockSettings,
+) -> PicoResult<BlockRunner> {
+    let driver = OscilloscopeDriver::new(FakeRef(fake));
+    let device = driver.open_device(None)?;
+    BlockRunner::new(device, config, settings)
 }
 
 /// Lets a test keep the fake while the driver owns it.
@@ -491,7 +561,14 @@ forward! {
     }
     TriggerDriver {}
     EtsDriver {}
-    DigitalPortDriver {}
+    DigitalPortDriver {
+        fn set_digital_port(&self, h: i16, p: DigitalPort, c: Option<&DigitalPortConfig>) -> PicoResult<()> {
+            self.0.set_digital_port(h, p, c)
+        }
+        fn set_digital_block_buffer(&self, h: i16, p: DigitalPort, b: SampleBuffer, s: u64, d: Option<Downsample>) -> PicoResult<()> {
+            self.0.set_digital_block_buffer(h, p, b, s, d)
+        }
+    }
     SigGenDriver {}
     AuxIoDriver {}
     ChannelExtrasDriver {}
@@ -655,4 +732,83 @@ fn run_rearms_until_told_to_stop() {
         })
         .unwrap();
     assert_eq!(seen, vec![(0, 10), (1, 10), (2, 10)]);
+}
+
+fn port_config(ports: &[DigitalPort], channel: bool) -> OscilloscopeConfig {
+    let mut config = OscilloscopeConfig::default();
+    if channel {
+        config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+    }
+    for port in ports {
+        config.digital.insert(*port, DigitalPortConfig::volts(1.5));
+    }
+    config
+}
+
+#[test]
+fn a_block_reads_its_ports_with_the_channels() {
+    let fake = Arc::new(Fake::new(Duration::from_millis(1), false).with_ports(2));
+    let mut settings = BlockSettings::new(1e8, 1_000);
+    settings.overview_columns = 10;
+    let config = port_config(&DigitalPort::ALL, true);
+    let mut runner = runner_with(fake.clone(), &config, settings).unwrap();
+    assert_eq!(fake.state.lock().ports_on.len(), 2);
+
+    let capture = runner.capture(Duration::from_secs(5)).unwrap();
+    // The overview is downsampled, so it holds no ports.
+    assert_eq!(capture.overview[0].ratio, 100);
+    assert!(capture.overview[0].digital.is_empty());
+
+    let raw = runner.read(0, 300, 20, None).unwrap();
+    assert_eq!(raw.len(), 20);
+    assert_eq!(
+        raw.digital[&DigitalPort::Port0][0],
+        port_value(0, 300, DigitalPort::Port0)
+    );
+    assert_eq!(
+        raw.digital[&DigitalPort::Port1][19],
+        port_value(0, 319, DigitalPort::Port1)
+    );
+    assert_eq!(i16s(&raw.channels[&PicoChannel::A].values)[0], 300);
+    // 20 samples of A and of two ports, two bytes each.
+    assert_eq!(raw.bytes(), 20 * 2 * 3);
+}
+
+#[test]
+fn ports_alone_capture_in_rapid_block() {
+    let fake = Arc::new(Fake::new(Duration::from_millis(1), false).with_ports(2));
+    let mut settings = BlockSettings::new(1e9, 100);
+    settings.segments = 4;
+    settings.overview_columns = 10;
+    let config = port_config(&[DigitalPort::Port1], false);
+    let mut runner = runner_with(fake.clone(), &config, settings).unwrap();
+    assert_eq!(fake.state.lock().ports_on, [DigitalPort::Port1]);
+
+    let capture = runner.capture(Duration::from_secs(5)).unwrap();
+    assert_eq!(capture.segments.len(), 4);
+    assert!(capture.overview.iter().all(|o| o.is_empty()));
+
+    let all = runner.read_segments(0, 3).unwrap();
+    assert_eq!(all.len(), 4);
+    for (s, data) in all.iter().enumerate() {
+        assert!(data.channels.is_empty());
+        assert_eq!(data.len(), 100);
+        let port = &data.digital[&DigitalPort::Port1];
+        assert_eq!(port[5], port_value(s as u64, 5, DigitalPort::Port1));
+    }
+    assert!(!all[0].digital.contains_key(&DigitalPort::Port0));
+}
+
+#[test]
+fn ports_the_unit_lacks_are_refused() {
+    let fake = Arc::new(Fake::new(Duration::ZERO, false).with_ports(1));
+    let config = port_config(&[DigitalPort::Port1], true);
+    let refused = runner_with(fake.clone(), &config, BlockSettings::new(1e6, 10));
+    assert_eq!(
+        refused.err().unwrap().status,
+        PicoStatus::INVALID_DIGITAL_PORT
+    );
+    let none = OscilloscopeConfig::default();
+    let refused = runner_with(fake, &none, BlockSettings::new(1e6, 10));
+    assert_eq!(refused.err().unwrap().status, PicoStatus::INVALID_CHANNEL);
 }
