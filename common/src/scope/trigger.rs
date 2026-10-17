@@ -420,6 +420,24 @@ impl TriggerConfig {
         }
     }
 
+    /// The digital inputs the trigger and its pulse width qualifier
+    /// name, with the ports they are on (bit 0 to 7 port 0, 8 to 15
+    /// port 1).
+    pub fn digital_bits(&self) -> Vec<DigitalBit> {
+        match self {
+            TriggerConfig::Advanced {
+                digital,
+                pulse_width,
+                ..
+            } => digital
+                .iter()
+                .chain(pulse_width.iter().flat_map(|p| &p.digital))
+                .copied()
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
     /// Every kind of term the config uses.
     pub fn kinds(&self) -> Vec<TriggerKind> {
         let mut kinds = Vec::new();

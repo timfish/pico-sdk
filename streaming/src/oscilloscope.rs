@@ -1,4 +1,6 @@
-use super::digital::{port_buffers, ports_off, read_ports, set_up_ports, PortBuffers};
+use super::digital::{
+    check_trigger_ports, port_buffers, ports_off, read_ports, set_up_ports, PortBuffers,
+};
 use super::over_range::RangeLog;
 use super::state::{
     sleep_ms, AfterPowerChange, Current, DeviceNotice, EventEmitter, IntoStreamingDevice, Notices,
@@ -554,6 +556,7 @@ fn start_stream(
     config: &OscilloscopeConfig,
 ) -> PicoResult<Current<OscilloscopeInfo, ScopeStreamState>> {
     info.check_config(config)?;
+    check_trigger_ports(config, &config.trigger)?;
     let downsample = Downsample::effective(config.downsample)?;
     if let Some(downsample) = downsample {
         if !device.driver.downsample_modes().contains(&downsample.mode) {
@@ -644,14 +647,15 @@ fn start_stream(
         }
     }
 
+    // Ports before a digital trigger (ps5000apg r4 §3.5.4.1 steps 2a
+    // and 3a).
+    set_up_ports(device, info, config)?;
     // A family with no trigger calls refuses even `None`, which asks
     // for nothing.
     match device.driver.set_trigger(*info.handle, &config.trigger) {
         Err(e) if e.is_not_supported() && config.trigger.is_none() => {}
         result => result?,
     }
-
-    set_up_ports(device, info, config)?;
     state.digital_buffers = port_buffers(config, buffer_size);
     for (port, buffer) in &state.digital_buffers {
         device.driver.set_digital_buffer(

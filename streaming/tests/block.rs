@@ -5,10 +5,11 @@
 
 use parking_lot::Mutex;
 use pico_common::{
-    BlockConfig, DigitalPort, DigitalPortConfig, Downsample, DownsampleKind, Driver,
-    OscilloscopeChannelConfig, OscilloscopeSampleConfig, Overflow, PicoChannel, PicoCoupling,
-    PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus, RapidBlockCapabilities,
-    ScopeCapabilities, SegmentTimestamp, Timebase, TimestampCounter, TriggerInfo,
+    BlockConfig, DigitalBit, DigitalDirection, DigitalPort, DigitalPortConfig, Downsample,
+    DownsampleKind, Driver, OscilloscopeChannelConfig, OscilloscopeSampleConfig, Overflow,
+    PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult,
+    PicoStatus, RapidBlockCapabilities, ScopeCapabilities, SegmentTimestamp, Timebase,
+    TimestampCounter, TriggerConfig, TriggerInfo, TriggerSource, TriggerState,
 };
 use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
 use pico_driver::{
@@ -52,6 +53,7 @@ struct State {
     segments: u64,
     captures: u64,
     calls: Vec<&'static str>,
+    trigger: Option<TriggerConfig>,
     pending: Option<BlockReady>,
 }
 
@@ -377,7 +379,18 @@ impl RapidBlockDriver for Fake {
     }
 }
 
-impl TriggerDriver for Fake {}
+impl TriggerDriver for Fake {
+    fn set_trigger(&self, _h: i16, trigger: &TriggerConfig) -> PicoResult<()> {
+        let mut state = self.state.lock();
+        for bit in trigger.digital_bits() {
+            let on = state.ports_on.iter().any(|p| p.index() == bit.port());
+            assert!(on, "a digital trigger on a port that is off");
+        }
+        state.calls.push("trigger");
+        state.trigger = Some(trigger.clone());
+        Ok(())
+    }
+}
 impl EtsDriver for Fake {}
 impl DigitalPortDriver for Fake {
     fn set_digital_port(
@@ -559,7 +572,11 @@ forward! {
             self.0.trigger_info(h, f, t)
         }
     }
-    TriggerDriver {}
+    TriggerDriver {
+        fn set_trigger(&self, h: i16, t: &TriggerConfig) -> PicoResult<()> {
+            self.0.set_trigger(h, t)
+        }
+    }
     EtsDriver {}
     DigitalPortDriver {
         fn set_digital_port(&self, h: i16, p: DigitalPort, c: Option<&DigitalPortConfig>) -> PicoResult<()> {
@@ -615,8 +632,9 @@ fn a_block_gives_an_overview_then_raw_spans() {
     assert_eq!(runner.read(0, 9_990, 100, None).unwrap().len(), 10);
 
     let calls = fake.state.lock().calls.clone();
-    assert_eq!(calls[0], "run_block");
-    assert_eq!(calls[1], "stop", "reads follow a stop");
+    assert_eq!(calls[0], "trigger");
+    assert_eq!(calls[1], "run_block");
+    assert_eq!(calls[2], "stop", "reads follow a stop");
 }
 
 #[test]
@@ -811,4 +829,49 @@ fn ports_the_unit_lacks_are_refused() {
     let none = OscilloscopeConfig::default();
     let refused = runner_with(fake, &none, BlockSettings::new(1e6, 10));
     assert_eq!(refused.err().unwrap().status, PicoStatus::INVALID_CHANNEL);
+}
+
+fn line_trigger(bits: Vec<DigitalBit>) -> TriggerConfig {
+    TriggerConfig::Advanced {
+        channels: Vec::new(),
+        conditions: vec![vec![(TriggerSource::Digital, TriggerState::True)]],
+        digital: bits,
+        pulse_width: None,
+        delay: 0,
+        holdoff: None,
+        auto_trigger: None,
+    }
+}
+
+#[test]
+fn a_digital_trigger_is_set_once_its_port_is_on() {
+    let fake = Arc::new(Fake::new(Duration::from_millis(1), false).with_ports(2));
+    let mut settings = BlockSettings::new(1e8, 1_000);
+    settings.trigger = line_trigger(vec![
+        DigitalBit::new(9, DigitalDirection::Rising),
+        DigitalBit::new(10, DigitalDirection::Low),
+    ]);
+    let config = port_config(&[DigitalPort::Port1], true);
+    let mut runner = runner_with(fake.clone(), &config, settings.clone()).unwrap();
+    {
+        let state = fake.state.lock();
+        let on = state.calls.iter().position(|c| *c == "port_on").unwrap();
+        let trigger = state.calls.iter().position(|c| *c == "trigger").unwrap();
+        assert!(on < trigger, "ports go on before the trigger");
+        assert_eq!(state.trigger.as_ref(), Some(&settings.trigger));
+    }
+    let capture = runner.capture(Duration::from_secs(5)).unwrap();
+    assert_eq!(capture.samples, 1_000);
+}
+
+#[test]
+fn a_digital_trigger_on_a_port_that_is_off_is_refused() {
+    let fake = Arc::new(Fake::new(Duration::ZERO, false).with_ports(2));
+    let mut settings = BlockSettings::new(1e8, 1_000);
+    settings.trigger = line_trigger(vec![DigitalBit::new(3, DigitalDirection::High)]);
+    let config = port_config(&[DigitalPort::Port1], true);
+    let refused = runner_with(fake.clone(), &config, settings).err().unwrap();
+    assert_eq!(refused.status, PicoStatus::INVALID_DIGITAL_PORT);
+    assert!(refused.to_string().contains("D3"), "{refused}");
+    assert!(!fake.state.lock().calls.contains(&"trigger"));
 }
