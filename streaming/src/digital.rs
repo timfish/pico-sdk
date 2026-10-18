@@ -1,6 +1,8 @@
 //! MSO digital ports for scope streams and block captures.
 
-use pico_common::{port_bytes, DigitalPort, PicoResult, PicoStatus, SampleType};
+use pico_common::{
+    port_bytes, DigitalPort, PicoError, PicoResult, PicoStatus, SampleType, TriggerConfig,
+};
 use pico_device::oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo};
 use pico_driver::oscilloscope::SampleBuffer;
 use std::collections::HashMap;
@@ -45,6 +47,27 @@ pub fn set_up_ports(
                 Err(error) if error.status == PicoStatus::NO_MSO_POD_CONNECTED => {}
                 result => result?,
             },
+        }
+    }
+    Ok(())
+}
+
+/// Refuses a digital trigger on a port `config` leaves off: the unit
+/// compares only the inputs of a port that is on, with its threshold.
+pub fn check_trigger_ports(config: &OscilloscopeConfig, trigger: &TriggerConfig) -> PicoResult<()> {
+    for bit in trigger.digital_bits() {
+        let on = DigitalPort::ALL
+            .into_iter()
+            .any(|p| p.index() == bit.port() && config.digital.contains_key(&p));
+        if !on {
+            return Err(PicoError::from_status(
+                PicoStatus::INVALID_DIGITAL_PORT,
+                &format!(
+                    "the digital trigger names D{}, whose port {} is off",
+                    bit.bit,
+                    bit.port()
+                ),
+            ));
         }
     }
     Ok(())

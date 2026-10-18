@@ -14,7 +14,7 @@
 //! data"). Raw reads only, as a mean or sum of bit patterns means
 //! nothing.
 
-use crate::digital::set_up_ports;
+use crate::digital::{check_trigger_ports, set_up_ports};
 use crate::oscilloscope::set_resolution;
 use crate::Samples;
 use crossbeam::channel::{bounded, Receiver, RecvTimeoutError};
@@ -261,6 +261,7 @@ impl BlockRunner {
                 "no channel or port is on",
             ));
         }
+        check_trigger_ports(config, &settings.trigger)?;
         let caps = &info.capabilities;
         if !caps.block {
             return Err(PicoError::not_supported("block mode"));
@@ -303,15 +304,16 @@ impl BlockRunner {
             );
         }
 
+        // After the channels and before any buffer (ps2000a guide
+        // §2.6.4.1), and before a digital trigger (ps5000apg r4
+        // §3.5.1 steps 2a and 4a).
+        set_up_ports(&device, &info, config)?;
         match driver.set_trigger(h, &settings.trigger) {
             Err(e) if e.is_not_supported() && settings.trigger == TriggerConfig::None => {
                 debug!("no trigger call; the unit's default is none");
             }
             other => other?,
         }
-        // After the channels and before any buffer (ps2000a guide
-        // §2.6.4.1).
-        set_up_ports(&device, &info, config)?;
         let mut ports: Vec<DigitalPort> = config.digital.keys().copied().collect();
         ports.sort();
         let driver = &device.driver;

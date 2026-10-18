@@ -359,6 +359,8 @@ The owner has a 2208A (ps2000a) and a 5464E MSO (psospa). Every other family is 
 | ETS                                                                    | if the 2208A supports it (`SetEts` answers) | no | AWG sine at 10 MHz                |
 | Logger outputs (PicoLog 1000, DrDAQ, ADC-24)                           | –     | –         | not attached; needs a unit              |
 
+With nothing on the pod, the example `block_digital_trigger` checks digital level triggers in block mode by the port's threshold (an open input reads high below 0 V and low above it), whether a port's lines join by AND or OR (psospa-3 §3.59.1 reads as AND, ps5000apg r4 §4.74 says OR), and an analog and a digital term in one AND. Ports go on before the trigger is set (ps5000apg r4 §3.5.1, §3.5.4.1), and a trigger on a line whose port is off is refused before any driver call.
+
 One rig covers most of it: the scope's own AWG output wired to channel A (and, on the 5464E, AUX I/O to a digital input).
 
 ## 7. Open questions
