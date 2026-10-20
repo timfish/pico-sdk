@@ -30,7 +30,7 @@
 //! driver release, and users only re-download when the drivers actually change.
 
 use pico_common::Driver;
-use ring::digest::{Context, SHA256};
+use sha2::{Digest, Sha256};
 use std::{
     fmt::Write as _,
     fs,
@@ -565,11 +565,10 @@ fn xz_decompress(bytes: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    let mut context = Context::new(&SHA256);
-    context.update(bytes);
+    let hasher = Sha256::new_with_prefix(bytes);
 
     let mut hex = String::with_capacity(64);
-    for byte in context.finish().as_ref() {
+    for byte in hasher.finalize() {
         let _ = write!(hex, "{:02x}", byte);
     }
     hex
