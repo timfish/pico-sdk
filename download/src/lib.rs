@@ -35,7 +35,7 @@
 use http_req::{request::Request, uri::Uri};
 use pico_common::Driver;
 use pico_driver::LibraryResolution;
-use ring::digest::{Context, SHA256};
+use sha2::{Digest, Sha256};
 use std::{
     convert::TryFrom,
     fmt::Write as _,
@@ -246,7 +246,7 @@ fn download_to(url: &str, file: &mut fs::File) -> Result<(), DriverDownloadError
 fn sha256_hex_for_file<P: AsRef<Path>>(path: P) -> Result<String, DriverDownloadError> {
     let mut src_file = fs::File::open(&path)?;
 
-    let mut context = Context::new(&SHA256);
+    let mut hasher = Sha256::new();
     let mut buffer = [0; 8192];
 
     loop {
@@ -254,11 +254,11 @@ fn sha256_hex_for_file<P: AsRef<Path>>(path: P) -> Result<String, DriverDownload
         if count == 0 {
             break;
         }
-        context.update(&buffer[..count]);
+        hasher.update(&buffer[..count]);
     }
 
     let mut hex = String::with_capacity(64);
-    for byte in context.finish().as_ref() {
+    for byte in hasher.finalize() {
         let _ = write!(hex, "{:02x}", byte);
     }
 
