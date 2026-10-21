@@ -689,6 +689,31 @@ fn rapid_block_without_a_counter_estimates_by_the_host_clock() {
 }
 
 #[test]
+fn host_times_of_segments_hold_over_several_waits() {
+    let fake = Arc::new(Fake::new(Duration::from_millis(20), false));
+    let mut settings = BlockSettings::new(1e9, 1_000);
+    settings.segments = 4;
+    settings.overview_columns = 0;
+    let mut runner = runner(fake, settings).unwrap();
+    runner.arm().unwrap();
+    // Waits far shorter than a segment, so each sees at most one.
+    let capture = loop {
+        if let Some(capture) = runner.wait(Duration::from_millis(2)).unwrap() {
+            break capture;
+        }
+    };
+    let times: Vec<f64> = capture
+        .segments
+        .iter()
+        .map(|s| s.since_first_s.unwrap())
+        .collect();
+    assert!(times.windows(2).all(|w| w[1] >= w[0]), "{times:?}");
+    // 60 ms from the first to the last, late by the poll; only a test
+    // thread held up for 50 ms sees them closer.
+    assert!(times[3] > 0.01, "{times:?}");
+}
+
+#[test]
 fn a_capture_that_times_out_keeps_the_segments_it_filled() {
     let fake = Arc::new(Fake::new(Duration::from_millis(30), false));
     let mut settings = BlockSettings::new(1e9, 100);

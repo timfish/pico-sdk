@@ -190,6 +190,9 @@ struct Armed {
     at: Instant,
     ready: Receiver<PicoStatus>,
     indisposed_ms: f64,
+    /// When the host first saw each segment captured, kept over every
+    /// wait of this capture.
+    seen: Vec<Option<Instant>>,
 }
 
 /// The time a capture's first segment was triggered, for the next one.
@@ -424,6 +427,7 @@ impl BlockRunner {
             at,
             ready: rx,
             indisposed_ms,
+            seen: vec![None; self.plan.segments as usize],
         });
         Ok(())
     }
@@ -448,7 +452,7 @@ impl BlockRunner {
         } else {
             READY_POLL
         };
-        let mut seen: Vec<Option<Instant>> = vec![None; self.plan.segments as usize];
+        let mut seen = std::mem::take(&mut self.armed.as_mut().expect("armed").seen);
         let ready_at = loop {
             if count_captures {
                 if let Ok((done, _)) = driver.captures_done(h) {
@@ -471,6 +475,7 @@ impl BlockRunner {
                 break Instant::now();
             }
             if Instant::now() >= deadline {
+                self.armed.as_mut().expect("armed").seen = seen;
                 return Ok(None);
             }
         };
@@ -798,6 +803,15 @@ impl BlockRunner {
             ),
             (None, _) => (None, false),
         };
+        debug!(
+            sequence = self.sequence,
+            by_counter = segment_infos.iter().filter(|s| !s.estimated).count(),
+            by_host = segment_infos.iter().filter(|s| s.estimated).count(),
+            counter_reset = first.timestamp_reset,
+            since_last_s = ?since_last_capture_s,
+            since_last_estimated,
+            "capture timed"
+        );
         self.last = Some(LastTrigger {
             at: triggered_at,
             counter,
