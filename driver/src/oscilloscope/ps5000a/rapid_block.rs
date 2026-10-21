@@ -122,7 +122,6 @@ impl RapidBlockDriver for PS5000ADriver {
                 time: e.triggerTime,
                 units: e.timeUnits as i32,
                 counter: e.timeStampCounter,
-                missed: None,
             })
             .collect();
         let (before, entries) = if from > first {

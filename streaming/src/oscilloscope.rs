@@ -1116,6 +1116,29 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         let _ = self.driver.close(*info.handle);
         Current::Closed
     }
+
+    fn log_state(&self, current: &Current<OscilloscopeInfo, ScopeStreamState>) {
+        match current {
+            Current::Closed => {}
+            Current::Open(info) => debug!(
+                handle = *info.handle,
+                resolution = ?info.resolution,
+                power = ?info.power,
+                "scope open"
+            ),
+            Current::Streaming(info, stream) => debug!(
+                handle = *info.handle,
+                resolution = ?info.resolution,
+                interval = stream.sample_config.interval,
+                units = ?stream.sample_config.units,
+                buffer_type = ?stream.layout.buffer,
+                sample_type = ?stream.layout.delivered,
+                channels = stream.buffers.len(),
+                ports = stream.digital_buffers.len(),
+                "scope streaming"
+            ),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -221,6 +221,8 @@ pub struct BlockRunner {
     buffers: HashMap<(u64, Option<DownsampleKind>), Vec<SampleBuffer>>,
     sequence: u64,
     last: Option<LastTrigger>,
+    /// Set once a trigger info read failed, so the warning shows once.
+    trigger_info_failed: bool,
 }
 
 fn handle(info: &OscilloscopeInfo) -> i16 {
@@ -385,6 +387,7 @@ impl BlockRunner {
             buffers: HashMap::new(),
             sequence: 0,
             last: None,
+            trigger_info_failed: false,
         })
     }
 
@@ -805,8 +808,15 @@ impl BlockRunner {
         };
         debug!(
             sequence = self.sequence,
-            by_counter = segment_infos.iter().filter(|s| !s.estimated).count(),
+            by_counter = segment_infos
+                .iter()
+                .filter(|s| s.since_first_s.is_some() && !s.estimated)
+                .count(),
             by_host = segment_infos.iter().filter(|s| s.estimated).count(),
+            untimed = segment_infos
+                .iter()
+                .filter(|s| s.since_first_s.is_none())
+                .count(),
             counter_reset = first.timestamp_reset,
             since_last_s = ?since_last_capture_s,
             since_last_estimated,
@@ -864,7 +874,7 @@ impl BlockRunner {
     }
 
     /// Each segment's trigger info, or what the family gives of it.
-    fn trigger_infos(&self, segments: u64) -> Vec<TriggerInfo> {
+    fn trigger_infos(&mut self, segments: u64) -> Vec<TriggerInfo> {
         let h = handle(&self.info);
         let driver = &self.device.driver;
         let blank = |segment| TriggerInfo {
@@ -876,6 +886,10 @@ impl BlockRunner {
             match driver.trigger_info(h, 0, segments - 1) {
                 Ok(infos) if infos.len() == segments as usize => return infos,
                 Ok(_) => warn!("trigger info gave the wrong count"),
+                Err(e) if !self.trigger_info_failed => {
+                    self.trigger_info_failed = true;
+                    warn!(error = %e, "no trigger info; segments have no counter times");
+                }
                 Err(e) => debug!(error = %e, "no trigger info"),
             }
         }
