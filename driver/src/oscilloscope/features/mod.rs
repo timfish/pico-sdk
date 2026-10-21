@@ -28,6 +28,7 @@ pub use led::LedDriver;
 pub use rapid_block::RapidBlockDriver;
 pub(crate) use rapid_block::{
     offsets_only, overflows, segment_count, since_first, since_previous, CounterEntry,
+    SinceFirstEntry,
 };
 pub use siggen::SigGenDriver;
 pub(crate) use streaming::flagged_channels;

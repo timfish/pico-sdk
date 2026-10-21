@@ -95,7 +95,6 @@ pub(crate) struct CounterEntry {
     pub time: i64,
     pub units: i32,
     pub counter: u64,
-    pub missed: Option<u64>,
 }
 
 /// Trigger info from the 48-bit counters of segments `from` on, given
@@ -134,11 +133,23 @@ pub(crate) fn since_previous(
         .collect()
 }
 
+/// One segment's entry of a ps6000a or psospa trigger info struct.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct SinceFirstEntry {
+    pub status: u32,
+    pub trigger_index: u64,
+    pub trigger_time: f64,
+    pub units: i32,
+    pub counter: u64,
+    pub missed: u64,
+}
+
+const TRIGGER_TIME: u32 = 0x0200_0000;
+
 /// Whether a ps6000a or psospa trigger info entry holds a counter: its
 /// status, less the reset flag and the trigger time flags, is OK
 /// (ps6000a §3.18.1).
 fn counter_valid(raw: u32) -> bool {
-    const TRIGGER_TIME: u32 = 0x0200_0000;
     let mut raw = raw & !(PicoStatus::DEVICE_TIME_STAMP_RESET as u32);
     if raw & TRIGGER_TIME != 0 {
         raw &= !(TRIGGER_TIME | 0x7);
@@ -146,20 +157,24 @@ fn counter_valid(raw: u32) -> bool {
     raw == 0
 }
 
-/// Trigger info of ps6000a and psospa: the trigger time offsets of
-/// `offsets` with the 56-bit counters and missed triggers of `entries`.
-pub(crate) fn since_first(offsets: Vec<TriggerInfo>, entries: &[CounterEntry]) -> Vec<TriggerInfo> {
-    offsets
-        .into_iter()
-        .zip(entries)
-        .map(|(info, entry)| {
+/// Trigger info of ps6000a and psospa for segments from `from`, from
+/// their trigger info structs alone. A raw read never asks for trigger
+/// data, so each status holds `PICO_TRIGGER_TIME_NOT_REQUESTED` and
+/// the trigger time is 0; the counter is still good (ps6000a §3.18.1).
+pub(crate) fn since_first(from: u64, entries: &[SinceFirstEntry]) -> Vec<TriggerInfo> {
+    entries
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| {
             let ok = counter_valid(entry.status);
+            let timed = ok && entry.status & TRIGGER_TIME == 0;
             TriggerInfo {
-                trigger_index: entry.trigger_index.filter(|_| ok),
+                segment: from + i as u64,
+                trigger_index: ok.then_some(entry.trigger_index),
+                offset_s: timed.then(|| entry.trigger_time * offset_seconds(1, entry.units)),
                 timestamp: ok.then_some(SegmentTimestamp::SinceFirst(entry.counter)),
-                missed_triggers: entry.missed.filter(|_| ok),
+                missed_triggers: ok.then_some(entry.missed),
                 timestamp_reset: timestamp_reset(entry.status),
-                ..info
             }
         })
         .collect()
@@ -214,23 +229,42 @@ mod tests {
 
     #[test]
     fn since_first_keeps_counters_with_trigger_time_flags() {
-        let entry = |status, counter| CounterEntry {
+        let entry = |status, counter| SinceFirstEntry {
             status,
             counter,
-            trigger_index: Some(10),
-            missed: Some(3),
-            ..Default::default()
+            trigger_index: 10,
+            trigger_time: 250.0,
+            units: 2,
+            missed: 3,
         };
-        let offsets = offsets_only(0, &[0, 0, 0], &[2, 2, 2]);
         // Reset and trigger time not requested (ps6000a §3.18.1).
-        let infos = since_first(
-            offsets,
-            &[entry(0x0300_0001, 7), entry(0, 9), entry(0x16, 11)],
-        );
+        let infos = since_first(4, &[entry(0x0300_0001, 7), entry(0, 9), entry(0x16, 11)]);
+        assert_eq!(infos[0].segment, 4);
         assert_eq!(infos[0].timestamp, Some(SegmentTimestamp::SinceFirst(7)));
         assert!(infos[0].timestamp_reset);
+        assert_eq!(infos[0].offset_s, None);
         assert_eq!(infos[1].missed_triggers, Some(3));
         assert_eq!(infos[1].trigger_index, Some(10));
+        assert!((infos[1].offset_s.unwrap() - 250e-9).abs() < 1e-18);
         assert_eq!(infos[2].timestamp, None);
+    }
+
+    /// The shape of a psospa rapid block run read raw: ten segments,
+    /// each status `PICO_TRIGGER_TIME_NOT_REQUESTED`, no reset.
+    #[test]
+    fn a_raw_rapid_block_run_keeps_every_counter() {
+        let not_requested = PicoStatus::TRIGGER_TIME_NOT_REQUESTED as u32;
+        let entries: Vec<_> = (0..10)
+            .map(|k| SinceFirstEntry {
+                status: not_requested,
+                counter: 1_000 + k * 2_200,
+                ..Default::default()
+            })
+            .collect();
+        let infos = since_first(0, &entries);
+        let times = pico_common::trigger_times(&infos, 1e-7);
+        assert!(times.iter().all(Option::is_some), "{times:?}");
+        assert!((times[9].unwrap() - 9.0 * 2_200.0 * 1e-7).abs() < 1e-12);
+        assert!(infos.iter().all(|i| i.offset_s.is_none()));
     }
 }

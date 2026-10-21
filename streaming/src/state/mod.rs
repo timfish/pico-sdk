@@ -156,6 +156,9 @@ pub trait StreamDevice<Config, Info, Stream, Event> {
     ) -> Current<Info, Stream>;
     fn stop(&self, info: &Info) -> Current<Info, Stream>;
     fn close(&self, info: &Info) -> Current<Info, Stream>;
+    /// Logs at debug the fields of a state just entered that a log
+    /// reader needs, never the whole info or stream.
+    fn log_state(&self, _current: &Current<Info, Stream>) {}
 }
 
 pub struct StreamingState<Config, Info, Stream> {
@@ -273,7 +276,7 @@ where
                 to = next.name(),
                 "stream state changed"
             );
-            debug!(previous_state = ?current, next_state = ?next, "stream state detail");
+            self.device.log_state(&next);
         }
         self.state.write().current = next;
         Ok(())

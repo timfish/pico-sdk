@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::oscilloscope::{
-    features::{offsets_only, overflows, segment_count, since_first, CounterEntry},
+    features::{overflows, segment_count, since_first, SinceFirstEntry},
     RapidBlockDriver,
 };
 use pico_common::{Overflow, TriggerInfo};
@@ -79,20 +79,6 @@ impl RapidBlockDriver for PSOSPADriver {
 
     fn trigger_info(&self, handle: i16, from: u64, to: u64) -> PicoResult<Vec<TriggerInfo>> {
         let n = segment_count(from, to)?;
-        let mut times = vec![0i64; n];
-        let mut units = vec![0u32; n];
-        PicoStatus::from(unsafe {
-            self.bindings.psospaGetValuesTriggerTimeOffsetBulk(
-                handle,
-                times.as_mut_ptr(),
-                units.as_mut_ptr(),
-                from,
-                to,
-            )
-        })
-        .to_result((), "trigger_info")?;
-        let offsets = offsets_only(from, &times, &units);
-
         let blank = PICO_TRIGGER_INFO {
             status: 0,
             segmentIndex: 0,
@@ -103,21 +89,26 @@ impl RapidBlockDriver for PSOSPADriver {
             timeStampCounter: 0,
         };
         let mut raw = vec![blank; n];
-        PicoStatus::from(unsafe {
+        let status = PicoStatus::from(unsafe {
             self.bindings
                 .psospaGetTriggerInfo(handle, raw.as_mut_ptr(), from, n as u64)
-        })
-        .to_result((), "trigger_info")?;
-        let entries: Vec<CounterEntry> = raw
+        });
+        // Each entry has its own status; with none set, the call wrote
+        // nothing.
+        if status != PicoStatus::OK && raw.iter().all(|e| e.status == 0) {
+            return Err(PicoError::from_status(status, "trigger_info"));
+        }
+        let entries: Vec<SinceFirstEntry> = raw
             .iter()
-            .map(|e| CounterEntry {
+            .map(|e| SinceFirstEntry {
                 status: e.status,
-                trigger_index: Some(e.triggerIndex),
+                trigger_index: e.triggerIndex,
+                trigger_time: e.triggerTime,
+                units: e.timeUnits as i32,
                 counter: e.timeStampCounter,
-                missed: Some(e.missedTriggers),
-                ..Default::default()
+                missed: e.missedTriggers,
             })
             .collect();
-        Ok(since_first(offsets, &entries))
+        Ok(since_first(from, &entries))
     }
 }

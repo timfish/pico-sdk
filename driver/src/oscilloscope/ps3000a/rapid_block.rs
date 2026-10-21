@@ -123,7 +123,6 @@ impl RapidBlockDriver for PS3000ADriver {
                 time: e.triggerTime,
                 units: e.timeUnits as i32,
                 counter: e.timeStampCounter,
-                missed: None,
             })
             .collect();
         let (before, entries) = if from > first {
