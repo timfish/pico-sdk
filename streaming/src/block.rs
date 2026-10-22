@@ -294,7 +294,7 @@ impl BlockRunner {
         crate::digital::ports_off(&device, &info)?;
         let resolution = info.effective_resolution(config);
         if let Some(resolution) = resolution {
-            set_resolution(&device, &info, config, resolution)?;
+            set_resolution(&device, &info, resolution)?;
         }
         let mut channels: Vec<PicoChannel> = config.channels.keys().copied().collect();
         channels.sort();

@@ -608,7 +608,7 @@ fn start_stream(
     ports_off(device, info)?;
 
     if let Some(resolution) = info.effective_resolution(config) {
-        set_resolution(device, info, config, resolution)?;
+        set_resolution(device, info, resolution)?;
         debug!(asked = ?resolution, set = ?device.driver.get_resolution(*info.handle), "resolution set");
     }
 
@@ -704,12 +704,18 @@ fn start_stream(
     Ok(Current::Streaming(info.clone(), state))
 }
 
-/// A status that says the driver lost the unit, so only a close and an
-/// open again can make it work.
-fn lost(status: PicoStatus) -> bool {
+/// A status that says the driver lost the unit, or left it in a state
+/// no call clears, so only a close and an open again can make it work
+/// (see [`StreamingRunner::reopen`](crate::StreamingRunner::reopen)).
+/// `TIMEOUT` is one: a 5464E that timed out a resolution change read
+/// every channel over range until it opened again.
+pub fn unit_lost(status: PicoStatus) -> bool {
     matches!(
         status,
-        PicoStatus::NOT_RESPONDING | PicoStatus::INVALID_HANDLE | PicoStatus::NOT_FOUND
+        PicoStatus::NOT_RESPONDING
+            | PicoStatus::INVALID_HANDLE
+            | PicoStatus::NOT_FOUND
+            | PicoStatus::TIMEOUT
     )
 }
 
@@ -742,55 +748,27 @@ fn give_buffers(
 }
 
 /// Sets the resolution. A 5464E answered `TIMEOUT` to 16 bits with no
-/// channel or port on, after a stream of ports alone. The guides give
-/// no rule for it (psospa guide §3.42, ps5000a §4.49), so after a
-/// failure the config's channels go on and the change is tried once
-/// more, after a short wait.
+/// channel or port on, after a stream of ports alone. A second try
+/// with the channels on then worked, but every channel read over range
+/// until the unit opened again; so a failure is returned as it came,
+/// and a `TIMEOUT` is a lost unit ([`unit_lost`]).
 pub(crate) fn set_resolution(
     device: &OscilloscopeDevice,
     info: &OscilloscopeInfo,
-    config: &OscilloscopeConfig,
     resolution: PicoResolution,
 ) -> PicoResult<()> {
-    let handle = *info.handle;
-    let first = match device.driver.set_resolution(handle, resolution) {
-        Ok(()) => return Ok(()),
-        Err(error) => error,
-    };
-    if matches!(
-        first.status,
-        PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT
-            | PicoStatus::INVALID_DEVICE_RESOLUTION
-            | PicoStatus::INVALID_NUMBER_CHANNELS_FOR_RESOLUTION
-            | PicoStatus::USE_8BIT_RESOLUTION
-    ) {
-        return Err(first);
-    }
-    let mut channels: Vec<_> = config.channels.iter().collect();
-    channels.sort_by_key(|(ch, _)| **ch);
-    warn!(
-        error = %first,
-        %resolution,
-        channels = channels.len(),
-        "resolution change failed; trying again with the channels on"
-    );
-    for (channel, channel_config) in channels {
-        if let Err(error) = device
-            .driver
-            .enable_channel(handle, *channel, channel_config)
-        {
-            debug!(%channel, %error, "channel not on before the resolution change");
-        }
-    }
-    sleep_ms(RESOLUTION_RETRY.as_millis() as u64);
     device
         .driver
-        .set_resolution(handle, resolution)
-        .inspect(|()| info!(%resolution, "resolution set at the second try"))
+        .set_resolution(*info.handle, resolution)
+        .inspect_err(|error| {
+            warn!(
+                %error,
+                %resolution,
+                lost = unit_lost(error.status),
+                "resolution change failed"
+            )
+        })
 }
-
-/// The wait before a failed resolution change is tried again.
-const RESOLUTION_RETRY: Duration = Duration::from_millis(200);
 
 /// A scope's streaming runner.
 pub type ScopeRunner = StreamingRunner<
@@ -951,7 +929,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                     notify_power(notices, info, &changed, to, after);
                     Ok(Current::Open(changed))
                 }
-                None if lost(error.status) => {
+                None if unit_lost(error.status) => {
                     // A 5464E gave NOT_RESPONDING to every start after
                     // one, until it was closed and opened again.
                     warn!(%error, "stream start failed; the device will open again");

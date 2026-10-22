@@ -344,6 +344,38 @@ where
         }
     }
 
+    /// Closes the device and opens it again, for a unit that a call left
+    /// in a state no other call clears. Runs while the background steps
+    /// are held too, as by a block capture's set-up. The target stays.
+    pub fn reopen(&self) -> PicoResult<()> {
+        let started = Instant::now();
+        let steps = self.steps.lock();
+        let current = self.state.read().current.clone();
+        if let Some(info) = current.get_info() {
+            if matches!(current, Current::Streaming(..)) {
+                self.device.stop(&info);
+            }
+            self.device.close(&info);
+        }
+        self.state.write().current = Current::Closed;
+        if matches!(self.state.read().target, Target::Closed) {
+            return Ok(());
+        }
+        let mut tries = 0;
+        while matches!(self.state.read().current, Current::Closed) {
+            tries += 1;
+            if tries > 3 {
+                return Err(PicoStatus::NOT_FOUND.into());
+            }
+            self.step(&steps)?;
+        }
+        info!(
+            elapsed_ms = started.elapsed().as_secs_f64() * 1e3,
+            "device opened again"
+        );
+        Ok(())
+    }
+
     pub fn stop(&self) {
         self.state.write().target = Target::Open;
         self.wake();

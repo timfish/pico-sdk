@@ -418,16 +418,25 @@ fn ports_go_off_before_a_resolution_change() {
     streaming.close();
 }
 
-/// A resolution change refused with nothing on is tried again with the
-/// config's channels on. The mock refuses 16 bits with no channel on,
-/// as the 5464E did after a stream of ports alone.
+/// A resolution change the unit times out leaves it in a state no call
+/// clears: a 5464E read every channel over range after it. The stream
+/// start opens the unit again and goes on. The mock times out 16 bits
+/// with no channel on until it opens again.
 #[test]
-fn a_failed_resolution_change_is_tried_again_with_channels_on() {
+fn a_timed_out_resolution_change_opens_the_unit_again() {
     use DigitalPort::*;
-    let on = Arc::new(Mutex::new(std::collections::BTreeSet::new()));
+    let opens = Arc::new(Mutex::new(0));
     let tries = Arc::new(Mutex::new(Vec::new()));
+    let on = Arc::new(Mutex::new(std::collections::BTreeSet::new()));
     let given = Arc::new(Mutex::new(Given::default()));
     let driver = OscilloscopeDriver::new(mock(given, |m| {
+        m.expect_open_unit().returning({
+            let opens = opens.clone();
+            move |_| {
+                *opens.lock().unwrap() += 1;
+                Ok(1)
+            }
+        });
         m.expect_enable_channel().returning({
             let on = on.clone();
             move |_, ch, _| {
@@ -443,12 +452,12 @@ fn a_failed_resolution_change_is_tried_again_with_channels_on() {
             }
         });
         m.expect_set_resolution().returning({
-            let (on, tries) = (on.clone(), tries.clone());
+            let (opens, on, tries) = (opens.clone(), on.clone(), tries.clone());
             move |_, resolution| {
-                let none_on = on.lock().unwrap().is_empty();
-                tries.lock().unwrap().push((resolution, none_on));
-                match (none_on, resolution) {
-                    (true, DR_16BIT) => Err(PicoStatus::TIMEOUT.into()),
+                let opens = *opens.lock().unwrap();
+                tries.lock().unwrap().push((resolution, opens));
+                match (on.lock().unwrap().is_empty(), resolution, opens) {
+                    (true, DR_16BIT, 1) => Err(PicoStatus::TIMEOUT.into()),
                     _ => Ok(()),
                 }
             }
@@ -461,9 +470,42 @@ fn a_failed_resolution_change_is_tried_again_with_channels_on() {
     let mut sixteen = config(&[PicoChannel::A], &[Port0]);
     sixteen.resolution = Some(DR_16BIT);
     streaming.start(sixteen).unwrap();
+    assert!(streaming.get_stream().is_some());
     assert_eq!(
         *tries.lock().unwrap(),
-        vec![(DR_8BIT, true), (DR_16BIT, true), (DR_16BIT, false)]
+        vec![(DR_8BIT, 1), (DR_16BIT, 1), (DR_16BIT, 2)]
     );
+    streaming.close();
+}
+
+/// `reopen` closes the unit and opens it again while a caller holds the
+/// background steps, as a block capture's set-up does.
+#[test]
+fn reopen_opens_the_unit_again_while_steps_are_held() {
+    let opens = Arc::new(Mutex::new(0));
+    let closes = Arc::new(Mutex::new(0));
+    let given = Arc::new(Mutex::new(Given::default()));
+    let driver = OscilloscopeDriver::new(mock(given, |m| {
+        m.expect_open_unit().returning({
+            let opens = opens.clone();
+            move |_| {
+                *opens.lock().unwrap() += 1;
+                Ok(1)
+            }
+        });
+        m.expect_close().returning({
+            let closes = closes.clone();
+            move |_| {
+                *closes.lock().unwrap() += 1;
+                Ok(())
+            }
+        });
+    }));
+    let streaming = driver.open_device(None).unwrap().into_streaming_device();
+    let held = streaming.hold_steps();
+    streaming.reopen().unwrap();
+    assert!(streaming.get_info().is_some());
+    assert_eq!((*opens.lock().unwrap(), *closes.lock().unwrap()), (2, 1));
+    drop(held);
     streaming.close();
 }
