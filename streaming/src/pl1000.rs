@@ -6,14 +6,12 @@
 //! The state machine still polls for data on a background thread rather than being driven by a
 //! native callback, so it plugs into the same [`StreamDevice`] shape as the other loggers.
 
-use super::poll::drain_wait_ms;
-use super::state::{
-    sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
-};
+use super::poll::{drain_polls, drain_wait, IDLE_WAIT};
+use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
 use pico_common::{PL1000Channel, PL1000Info, PicoResult};
 use pico_device::pl1000::{PL1000Config, PL1000Device};
-use std::collections::BTreeMap;
-use tracing::warn;
+use std::{collections::BTreeMap, time::Duration};
+use tracing::{trace, warn};
 
 /// Sample sets per channel the driver's buffer is asked to hold
 ///
@@ -34,6 +32,14 @@ fn run_buffer_samples(channels: usize) -> u32 {
 
 /// Number of sample sets drained per poll; a full poll is followed by another at once
 const POLL_BUFFER_SAMPLES: u32 = 1_000;
+
+/// How long the runner waits between stream steps with `config` at `interval_us`
+fn wait_after(config: &PL1000Config, interval_us: u32) -> Duration {
+    if config.enabled_channels().next().is_none() {
+        return IDLE_WAIT;
+    }
+    drain_wait(interval_us as u64, POLL_BUFFER_SAMPLES as u64)
+}
 
 /// A block of samples read back from the device's streaming buffer
 #[derive(Clone, Debug)]
@@ -119,51 +125,62 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
         let channels: Vec<PL1000Channel> = config.enabled_channels().collect();
 
         if channels.is_empty() {
-            sleep_ms(200);
             return Current::Streaming(info.clone(), *interval_us);
         }
 
-        match self
-            .driver
-            .get_values(*info.handle, channels.len(), POLL_BUFFER_SAMPLES)
-        {
-            Ok((values, overflow_bits)) => {
-                let sample_sets = values.len() / channels.len();
-                let mut per_channel: BTreeMap<PL1000Channel, Vec<u16>> = channels
-                    .iter()
-                    .map(|&channel| (channel, Vec::with_capacity(sample_sets)))
-                    .collect();
+        let poll = || -> PicoResult<usize> {
+            let (values, overflow_bits) =
+                self.driver
+                    .get_values(*info.handle, channels.len(), POLL_BUFFER_SAMPLES)?;
+            let sample_sets = values.len() / channels.len();
+            let mut per_channel: BTreeMap<PL1000Channel, Vec<u16>> = channels
+                .iter()
+                .map(|&channel| (channel, Vec::with_capacity(sample_sets)))
+                .collect();
 
-                for set in values.chunks_exact(channels.len()) {
-                    for (i, &channel) in channels.iter().enumerate() {
-                        per_channel
-                            .get_mut(&channel)
-                            .expect("channel just inserted")
-                            .push(set[i]);
-                    }
+            for set in values.chunks_exact(channels.len()) {
+                for (i, &channel) in channels.iter().enumerate() {
+                    per_channel
+                        .get_mut(&channel)
+                        .expect("channel just inserted")
+                        .push(set[i]);
                 }
+            }
 
-                // Bit 0 is channel 1 (pl1000pg-8, section 4.5).
-                let over_range = channels
-                    .iter()
-                    .filter(|&&channel| overflow_bits & (1 << (i16::from(channel) - 1)) != 0)
-                    .copied()
-                    .collect();
+            // Bit 0 is channel 1 (pl1000pg-8, section 4.5).
+            let over_range = channels
+                .iter()
+                .filter(|&&channel| overflow_bits & (1 << (i16::from(channel) - 1)) != 0)
+                .copied()
+                .collect();
 
-                if sample_sets > 0 {
-                    events.new_data(PL1000StreamingEvent {
-                        interval_us: *interval_us,
-                        max_value: info.max_value,
-                        channels: per_channel,
-                        over_range,
-                    });
-                }
+            if sample_sets > 0 {
+                events.new_data(PL1000StreamingEvent {
+                    interval_us: *interval_us,
+                    max_value: info.max_value,
+                    channels: per_channel,
+                    over_range,
+                });
+            }
+            Ok(sample_sets)
+        };
 
-                sleep_ms(drain_wait_ms(
-                    *interval_us as u64,
-                    POLL_BUFFER_SAMPLES as u64,
-                    sample_sets as u64,
-                ));
+        let run_sets = run_buffer_samples(channels.len()) as u64;
+        let mut polls = 0;
+        let result = loop {
+            polls += 1;
+            match poll() {
+                Ok(sets) if sets as u32 >= POLL_BUFFER_SAMPLES => {}
+                other => break other,
+            }
+            if polls >= drain_polls(run_sets, POLL_BUFFER_SAMPLES as u64) {
+                break Ok(POLL_BUFFER_SAMPLES as usize);
+            }
+        };
+
+        match result {
+            Ok(sample_sets) => {
+                trace!(polls, sample_sets, "PL1000 buffer drained");
                 Current::Streaming(info.clone(), *interval_us)
             }
             Err(e) => {
@@ -173,6 +190,10 @@ impl StreamDevice<PL1000Config, PL1000Info, u32, PL1000StreamingEvent> for PL100
                 Current::Closed
             }
         }
+    }
+
+    fn stream_wait(&self, config: &PL1000Config, interval_us: &u32) -> Duration {
+        wait_after(config, *interval_us)
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
@@ -197,5 +218,13 @@ mod tests {
         assert_eq!(run_buffer_samples(1), 64_000);
         assert_eq!(run_buffer_samples(15), 64_000);
         assert_eq!(run_buffer_samples(16), 62_500);
+    }
+
+    #[test]
+    fn a_unit_with_no_channels_waits_the_idle_time() {
+        let mut config = PL1000Config::default();
+        assert_eq!(wait_after(&config, 10), IDLE_WAIT);
+        config.enable_channel(PL1000Channel::CHANNEL_1);
+        assert_eq!(wait_after(&config, 10), Duration::from_millis(10));
     }
 }

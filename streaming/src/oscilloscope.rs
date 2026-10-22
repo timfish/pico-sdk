@@ -251,6 +251,8 @@ pub struct ScopeStreamState {
     /// Set once low bits of 8-bit codes were dropped.
     low_bits: Arc<AtomicBool>,
     over_range: Arc<RangeLog<PicoChannel>>,
+    /// How long the runner waits before the next poll.
+    wait: Duration,
 }
 
 impl Default for ScopeStreamState {
@@ -270,6 +272,7 @@ impl Default for ScopeStreamState {
             counts: Arc::default(),
             low_bits: Arc::default(),
             over_range: Arc::default(),
+            wait: Duration::ZERO,
         }
     }
 }
@@ -1091,12 +1094,23 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 Current::Closed
             }
         } else {
-            if !behind && !refilled {
-                sleep_ms(POLL.as_millis() as u64);
-            }
-
-            Current::Streaming(info.clone(), state.clone())
+            let wait = if behind || refilled {
+                Duration::ZERO
+            } else {
+                POLL
+            };
+            Current::Streaming(
+                info.clone(),
+                ScopeStreamState {
+                    wait,
+                    ..state.clone()
+                },
+            )
         }
+    }
+
+    fn stream_wait(&self, _config: &OscilloscopeConfig, state: &ScopeStreamState) -> Duration {
+        state.wait
     }
 
     #[tracing::instrument(level = "debug", skip_all)]

@@ -8,7 +8,7 @@ use super::poll::LoggerPollState;
 use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
 use pico_common::{PT104Channel, PT104DataType, PT104Info, PicoError, PicoResult};
 use pico_device::pt104::{PT104Config, PT104Device};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 use tracing::{debug, warn};
 
 /// A block of temperature readings, one entry per enabled channel
@@ -125,6 +125,10 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
                 Current::Closed
             }
         }
+    }
+
+    fn stream_wait(&self, _config: &PT104Config, state: &LoggerPollState) -> Duration {
+        state.wait()
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
