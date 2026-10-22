@@ -1,6 +1,6 @@
 mod events;
 
-use crossbeam::channel::{bounded, Receiver, Sender};
+use crossbeam::channel::{bounded, select, Receiver, Sender};
 pub use events::{EventEmitter, EventHandler};
 use parking_lot::{Mutex, MutexGuard, RwLock};
 use pico_common::{PicoChannel, PicoResult, PicoStatus, PowerSource};
@@ -20,6 +20,14 @@ use tracing::{debug, error, info, warn};
 /// The longest [`StreamingRunner::start`] waits for the step that runs
 /// now, such as a driver's open or stop.
 const START_WAIT: Duration = Duration::from_secs(30);
+
+/// How long the background thread waits between pings of an open,
+/// idle device.
+const PING_INTERVAL: Duration = Duration::from_millis(200);
+
+/// How long the background thread waits between steps of a closed
+/// device that should stay closed.
+const CLOSED_INTERVAL: Duration = Duration::from_millis(10);
 
 pub fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -182,18 +190,12 @@ fn next_state<Config, Info, Stream, Event>(
 ) -> PicoResult<Current<Info, Stream>> {
     Ok(match current {
         Current::Closed => match target {
-            Target::Closed => {
-                sleep_ms(10);
-                Current::Closed
-            }
+            Target::Closed => Current::Closed,
             Target::Open | Target::Streaming { .. } => device.open(device.serial())?,
         },
         Current::Open(info) => match target {
             Target::Closed => device.close(info),
-            Target::Open => {
-                sleep_ms(200);
-                device.ping(info, notices)
-            }
+            Target::Open => device.ping(info, notices),
             Target::Streaming(config) => device.start(info, config, notices)?,
         },
         Current::Streaming(info, stream) => match target {
@@ -215,6 +217,9 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     /// While above 0, the background thread takes no step: a caller
     /// drives the device through [`StreamingRunner::with_open`].
     holds: Arc<AtomicUsize>,
+    /// Ends the background thread's wait between idle steps, when the
+    /// target changes.
+    wake: (Sender<()>, Receiver<()>),
     background_handle: Option<Arc<BackgroundThreadHandle>>,
     pub events: EventEmitter<Event>,
     /// Changes in the device that are not data, such as its power
@@ -242,6 +247,7 @@ where
             state,
             steps: Arc::new(Mutex::new(())),
             holds: Arc::new(AtomicUsize::new(0)),
+            wake: bounded(1),
             events: EventEmitter::new(),
             notices: Notices::new(),
             background_handle: None,
@@ -311,6 +317,7 @@ where
         }
 
         self.state.write().target = Target::Streaming(config);
+        self.wake();
 
         // Drive the state until we're streaming or we get an error we can return
         let mut count = 0;
@@ -331,10 +338,16 @@ where
 
     pub fn stop(&self) {
         self.state.write().target = Target::Open;
+        self.wake();
     }
 
     pub fn close(&self) {
         self.state.write().target = Target::Closed;
+        self.wake();
+    }
+
+    fn wake(&self) {
+        let _ = self.wake.0.try_send(());
     }
 
     pub fn get_config(&self) -> Option<Config> {
@@ -408,6 +421,17 @@ where
         }
     }
 
+    /// How long the background thread waits before its next step, when
+    /// the device is where its target asks and not streaming.
+    fn idle_wait(&self) -> Option<Duration> {
+        let state = self.state.read();
+        match (&state.current, &state.target) {
+            (Current::Open(_), Target::Open) => Some(PING_INTERVAL),
+            (Current::Closed, Target::Closed) => Some(CLOSED_INTERVAL),
+            _ => None,
+        }
+    }
+
     fn start_background_thread(&mut self) {
         let (tx_terminate, rx_terminate) = bounded::<()>(0);
 
@@ -451,10 +475,22 @@ where
                 sleep_ms(500);
             }
 
-            // Each step waits on its own when it has nothing to do. A
-            // wait here would slow a scope's backlog drain: Windows
-            // rounds even 1 ms up to about 15 ms.
-            if !wait_for_closed && rx_terminate.try_recv().is_ok() {
+            // A stream step waits on its own when it has nothing to
+            // do. A wait here would slow a scope's backlog drain:
+            // Windows rounds even 1 ms up to about 15 ms. An idle wait
+            // is here, with the steps lock free, so a call through
+            // `with_open` runs in the driver's own time.
+            let terminate = match this.idle_wait() {
+                Some(wait) if !wait_for_closed => {
+                    select! {
+                        recv(rx_terminate) -> _ => true,
+                        recv(this.wake.1) -> _ => false,
+                        default(wait) => false,
+                    }
+                }
+                _ => rx_terminate.try_recv().is_ok(),
+            };
+            if !wait_for_closed && terminate {
                 this.state.write().target = Target::Closed;
                 wait_for_closed = true;
             }

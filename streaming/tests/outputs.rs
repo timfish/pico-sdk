@@ -233,3 +233,25 @@ fn a_closed_runner_has_no_outputs() {
         PicoStatus::INVALID_HANDLE
     );
 }
+
+#[test]
+fn outputs_of_an_idle_scope_set_in_the_drivers_time() {
+    let unit = Arc::new(Unit::default());
+    let driver = OscilloscopeDriver::new(mock(&unit));
+    let runner = driver.open_device(None).unwrap().into_streaming_device();
+
+    let mut took = Vec::new();
+    for id in ["led-a", "led-b", "aux"].repeat(5) {
+        // A real caller spends a few ms between sets, which lets the
+        // background thread take its next step.
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        let started = std::time::Instant::now();
+        runner.set_output(id, &OutputValue::Off).unwrap();
+        took.push(started.elapsed().as_secs_f64() * 1e3);
+    }
+    // The mock driver answers at once. A set that waited for the
+    // runner's idle ping interval took about 200 ms.
+    let mean_ms = took.iter().sum::<f64>() / took.len() as f64;
+    assert!(mean_ms < 20.0, "sets took {took:.1?} ms");
+    runner.close();
+}
