@@ -19,6 +19,13 @@ An open device waits 200 ms between pings, and a stream waits what its device's 
 `start`, `stop` and `close` end a wait, so a new target runs at once.
 A buffered logger's step polls until a poll does not fill its poll buffer, so the drain keeps up with the device's buffer.
 
+## A unit opened again
+
+A scope stream start that fails with a status `unit_lost` names (`NOT_RESPONDING`, `INVALID_HANDLE`, `NOT_FOUND`, `TIMEOUT`) closes the unit, and the next steps open it and start again.
+`StreamingRunner::reopen` does the same at once for a caller, also while it holds the steps, as a block capture's set-up does after `BlockRunner::new` fails so.
+A 5464E timed out a change to 16 bits with nothing on, after a stream of ports alone; a second try with the channels on then worked, but every channel read over range until the unit opened again (2026-10-22).
+So a failed resolution change is not tried again: the unit opens again.
+
 ## Example
 ```rust
 // Get a streaming device from a PicoDevice
