@@ -2,7 +2,7 @@
 
 Status: plan, 2026-10-14. Docs only; nothing is built.
 
-Goal: pico-sdk covers all of Pico's published scope API, and the outputs of the data loggers, even where daq-db will not use a feature soon. Today pico-sdk covers streaming only.
+Goal: pico-sdk covers all of Pico's published scope API, and the outputs of the data loggers, even where no user needs a feature soon. Today pico-sdk covers streaming only.
 
 ## 0. Sources and rules
 
@@ -282,7 +282,7 @@ Built (T4): `SigGenDriver` on every family with a generator, with `sig_gen_pause
 
 ## 4. Outputs
 
-daq-db wants to drive outputs, for example as alarm outputs. From the headers and guides:
+Applications want to drive outputs, for example as alarm outputs. From the headers and guides:
 
 | Device                     | Output                                       | Source                                                                                                                         | Range                                                                                     | pico-sdk today |
 | -------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | -------------- |
@@ -338,7 +338,7 @@ T0 and T1 go first, alone. After them, tasks by feature across families run in p
 
 Order: T0 ∥ T1 → T2 ∥ T3 ∥ T4a ∥ T4b ∥ T5 ∥ T7 ∥ T8 (at most 3 building at once, by the repository rule) → T6 ∥ T9 → T10.
 
-Total about 10–14 weeks of agent time; T0–T5 plus T8, the part daq-db would use first, about 6–8.
+Total about 10–14 weeks of agent time; T0–T5 plus T8, the part most likely to be used first, about 6–8.
 
 ## 6. Hardware checks
 
@@ -370,4 +370,4 @@ One rig covers most of it: the scope's own AWG output wired to channel A (and, o
 | Make the bindings again from the SDK headers now (T0) or wrap the old ones? | Now: psospa's `SetDigitalPortOn` already differs, and the 2026 ps6000a guide adds seven functions.      |
 | Feature traits or one big trait with "not supported" defaults?           | Feature traits: a caller learns at compile time what it must handle, and the big trait stays as now.    |
 | Buy or borrow a unit of another family (ps5000a, ps6000a) for checks?     | A ps5000a (5000D MSO): it has the other trigger-info layout, ETS and MSO, none of which the two units cover. |
-| Logger outputs: wrap now or with the first daq-db output work?           | Now, in T8: it is small, and daq-db's output design (alarm outputs) needs the API shape.                |
+| Logger outputs: wrap now or with the first output user?           | Now, in T8: it is small, and alarm outputs need the API shape.                |
