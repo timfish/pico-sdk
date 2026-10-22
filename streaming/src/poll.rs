@@ -2,9 +2,6 @@
 
 use std::time::{Duration, Instant};
 
-/// The longest a poll step sleeps, so `start` and `close` never wait long for the step lock
-const MAX_WAIT: Duration = Duration::from_millis(50);
-
 /// The stream state of a poll-only logger
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LoggerPollState {
@@ -23,14 +20,14 @@ impl LoggerPollState {
         }
     }
 
-    /// Whether a poll is due. When it is not, sleeps for at most [`MAX_WAIT`].
+    /// Whether a poll is due
     pub(crate) fn due(&self) -> bool {
-        let now = Instant::now();
-        if now >= self.next_poll {
-            return true;
-        }
-        std::thread::sleep((self.next_poll - now).min(MAX_WAIT));
-        false
+        Instant::now() >= self.next_poll
+    }
+
+    /// The time until the next poll is due
+    pub(crate) fn wait(&self) -> Duration {
+        self.next_poll.saturating_duration_since(Instant::now())
     }
 
     /// The state after a poll. Polls keep to the interval's grid; after a stall the next poll
@@ -49,16 +46,21 @@ impl LoggerPollState {
     }
 }
 
-/// How long a buffered logger (PL1000, HRDL) waits after a poll that did not fill the poll
-/// buffer: the time to fill half of it, from 10 ms to 200 ms. A full poll is followed by
-/// another at once, so the drain keeps up with any rate the device buffer holds, and no step
-/// holds the step lock for long.
-pub(crate) fn drain_wait_ms(interval_us: u64, poll_sets: u64, sets: u64) -> u64 {
-    if sets >= poll_sets {
-        return 0;
-    }
-    (interval_us * poll_sets / 2 / 1_000).clamp(10, 200)
+/// How long a buffered logger (PL1000, HRDL, DrDAQ) waits between stream steps: the time to
+/// fill half its poll buffer, from 10 ms to 200 ms. A step polls until a poll does not fill the
+/// buffer, so the drain keeps up with any rate the device buffer holds.
+pub(crate) fn drain_wait(interval_us: u64, poll_sets: u64) -> Duration {
+    Duration::from_millis((interval_us * poll_sets / 2 / 1_000).clamp(10, 200))
 }
+
+/// The most polls one stream step of a buffered logger takes: enough to drain its whole device
+/// buffer, so a step ends even if the device fills each poll.
+pub(crate) fn drain_polls(run_sets: u64, poll_sets: u64) -> u64 {
+    run_sets.div_ceil(poll_sets.max(1)).max(1)
+}
+
+/// How long a logger with no channels on waits between stream steps
+pub(crate) const IDLE_WAIT: Duration = Duration::from_millis(200);
 
 #[cfg(test)]
 mod tests {
@@ -78,11 +80,23 @@ mod tests {
     }
 
     #[test]
-    fn a_full_drain_polls_again_at_once() {
-        assert_eq!(drain_wait_ms(10, 1_000, 1_000), 0);
-        assert_eq!(drain_wait_ms(10, 1_000, 3), 10);
-        assert_eq!(drain_wait_ms(100, 1_000, 3), 50);
-        assert_eq!(drain_wait_ms(1_000_000, 1_000, 0), 200);
+    fn a_drain_waits_half_a_poll_buffer() {
+        assert_eq!(drain_wait(10, 1_000), Duration::from_millis(10));
+        assert_eq!(drain_wait(100, 1_000), Duration::from_millis(50));
+        assert_eq!(drain_wait(1_000_000, 1_000), Duration::from_millis(200));
+        assert_eq!(drain_polls(64_000, 1_000), 64);
+        assert_eq!(drain_polls(62_500, 1_000), 63);
+    }
+
+    #[test]
+    fn a_state_waits_until_its_poll_is_due() {
+        let state = LoggerPollState::new(10_000);
+        assert!(state.wait() > Duration::from_secs(9));
+        let past = LoggerPollState {
+            poll_interval_ms: 1_000,
+            next_poll: Instant::now() - Duration::from_secs(5),
+        };
+        assert_eq!(past.wait(), Duration::ZERO);
     }
 
     #[test]

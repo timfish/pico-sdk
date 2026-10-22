@@ -15,7 +15,7 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// The longest [`StreamingRunner::start`] waits for the step that runs
 /// now, such as a driver's open or stop.
@@ -162,6 +162,14 @@ pub trait StreamDevice<Config, Info, Stream, Event> {
         events: &EventEmitter<Event>,
         notices: &Notices,
     ) -> Current<Info, Stream>;
+    /// How long the background thread waits, with the steps lock
+    /// free, before the stream step after one that left `stream`.
+    /// `start`, `stop` and `close` end the wait. A stream step does
+    /// not sleep, so a call through [`StreamingRunner::with_open`]
+    /// runs in the driver's own time.
+    fn stream_wait(&self, _config: &Config, _stream: &Stream) -> Duration {
+        Duration::ZERO
+    }
     fn stop(&self, info: &Info) -> Current<Info, Stream>;
     fn close(&self, info: &Info) -> Current<Info, Stream>;
     /// Logs at debug the fields of a state just entered that a log
@@ -422,12 +430,15 @@ where
     }
 
     /// How long the background thread waits before its next step, when
-    /// the device is where its target asks and not streaming.
-    fn idle_wait(&self) -> Option<Duration> {
+    /// the device is where its target asks.
+    fn step_wait(&self) -> Option<Duration> {
         let state = self.state.read();
         match (&state.current, &state.target) {
             (Current::Open(_), Target::Open) => Some(PING_INTERVAL),
             (Current::Closed, Target::Closed) => Some(CLOSED_INTERVAL),
+            (Current::Streaming(_, stream), Target::Streaming(config)) => {
+                Some(self.device.stream_wait(config, stream)).filter(|wait| !wait.is_zero())
+            }
             _ => None,
         }
     }
@@ -475,16 +486,20 @@ where
                 sleep_ms(500);
             }
 
-            // A stream step waits on its own when it has nothing to
-            // do. A wait here would slow a scope's backlog drain:
-            // Windows rounds even 1 ms up to about 15 ms. An idle wait
-            // is here, with the steps lock free, so a call through
-            // `with_open` runs in the driver's own time.
-            let terminate = match this.idle_wait() {
+            // No wait when a step asks for none: Windows rounds even
+            // 1 ms up to about 15 ms, which would slow a backlog drain.
+            let terminate = match this.step_wait() {
                 Some(wait) if !wait_for_closed => {
+                    trace!(
+                        wait_ms = wait.as_secs_f64() * 1e3,
+                        "waiting for the next step"
+                    );
                     select! {
                         recv(rx_terminate) -> _ => true,
-                        recv(this.wake.1) -> _ => false,
+                        recv(this.wake.1) -> _ => {
+                            debug!("wait for the next step ended by a new target");
+                            false
+                        }
                         default(wait) => false,
                     }
                 }

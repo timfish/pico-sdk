@@ -4,14 +4,12 @@
 //! capture, and each `HRDLGetValues` call returns the readings since the last call (ADC-20/ADC-24
 //! Programmer's Guide, adc20.en r2, sections 4.1, 5.15 and 6.1.2).
 
-use super::poll::drain_wait_ms;
-use super::state::{
-    sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
-};
+use super::poll::{drain_polls, drain_wait, IDLE_WAIT};
+use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
 use pico_common::{HRDLChannel, HRDLInfo, HRDLRange, PicoError, PicoResult, PicoStatus};
 use pico_device::hrdl::{HRDLConfig, HRDLDevice};
-use std::collections::BTreeMap;
-use tracing::{debug, warn};
+use std::{collections::BTreeMap, time::Duration};
+use tracing::{debug, trace, warn};
 
 /// Sample sets per channel the driver's buffer is asked to hold
 ///
@@ -22,6 +20,17 @@ const RUN_BUFFER_SAMPLES: i32 = 64_000;
 
 /// Number of sample sets drained per poll; a full poll is followed by another at once
 const POLL_BUFFER_SAMPLES: i32 = 1_000;
+
+/// How long the runner waits between stream steps with `config` and `state`
+fn wait_after(config: &HRDLConfig, state: &HRDLStreamState) -> Duration {
+    if config.enabled_channels().next().is_none() {
+        return IDLE_WAIT;
+    }
+    drain_wait(
+        state.interval_ms.max(0) as u64 * 1_000,
+        POLL_BUFFER_SAMPLES as u64,
+    )
+}
 
 /// One channel's scale while the unit streams
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -168,11 +177,10 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
             .collect();
 
         if channels.is_empty() {
-            sleep_ms(200);
             return Current::Streaming(info.clone(), state.clone());
         }
 
-        let result: PicoResult<usize> = (|| {
+        let poll = || -> PicoResult<usize> {
             let (values, overflow_bits) =
                 self.driver
                     .get_values(*info.handle, channels.len(), POLL_BUFFER_SAMPLES)?;
@@ -207,16 +215,24 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
                 });
             }
 
-            Ok::<usize, PicoError>(sample_sets)
-        })();
+            Ok(sample_sets)
+        };
+
+        let mut polls = 0;
+        let result = loop {
+            polls += 1;
+            match poll() {
+                Ok(sets) if sets as i32 >= POLL_BUFFER_SAMPLES => {}
+                other => break other,
+            }
+            if polls >= drain_polls(RUN_BUFFER_SAMPLES as u64, POLL_BUFFER_SAMPLES as u64) {
+                break Ok(POLL_BUFFER_SAMPLES as usize);
+            }
+        };
 
         match result {
             Ok(sample_sets) => {
-                sleep_ms(drain_wait_ms(
-                    state.interval_ms.max(0) as u64 * 1_000,
-                    POLL_BUFFER_SAMPLES as u64,
-                    sample_sets as u64,
-                ));
+                trace!(polls, sample_sets, "HRDL buffer drained");
                 Current::Streaming(info.clone(), state.clone())
             }
             Err(e) => {
@@ -226,6 +242,10 @@ impl StreamDevice<HRDLConfig, HRDLInfo, HRDLStreamState, HRDLStreamingEvent> for
                 Current::Closed
             }
         }
+    }
+
+    fn stream_wait(&self, config: &HRDLConfig, state: &HRDLStreamState) -> Duration {
+        wait_after(config, state)
     }
 
     /// The guide asks for `HRDLStop` at the end of a stream, for the unit to be ready for the
@@ -259,5 +279,17 @@ mod tests {
             max_count: 10,
         };
         assert_eq!(ten.volts_per_count(), 0.25);
+    }
+
+    #[test]
+    fn a_unit_with_no_channels_waits_the_idle_time() {
+        let mut config = HRDLConfig::default();
+        let state = HRDLStreamState {
+            interval_ms: 60,
+            channels: BTreeMap::new(),
+        };
+        assert_eq!(wait_after(&config, &state), IDLE_WAIT);
+        config.enable_channel(HRDLChannel::CHANNEL_1, HRDLRange::Range2500mV, true);
+        assert_eq!(wait_after(&config, &state), Duration::from_millis(200));
     }
 }

@@ -5,26 +5,33 @@
 //! (USB DrDAQ Programmer's Guide, usbdrdaqpg.en r9, section 2.5 Capture modes). Each value is
 //! divided by its channel's divider from `UsbDrDaqGetChannelInfo` (sections 2.6 and 3.12).
 
-use super::state::{
-    sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
-};
+use super::poll::{drain_polls, drain_wait, IDLE_WAIT};
+use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
 use pico_common::{DrDAQChannel, DrDAQChannelInfo, DrDAQInfo, PicoResult};
 use pico_device::drdaq::{DrDAQConfig, DrDAQDevice};
-use std::collections::BTreeMap;
-use tracing::{debug, warn};
+use std::{collections::BTreeMap, time::Duration};
+use tracing::{debug, trace, warn};
 
 /// Sample sets per channel the driver's buffer is asked to hold
 ///
 /// The guide asks for enough to hold what arrives between two `UsbDrDaqGetValues` calls, and
-/// preferably twice that (section 2.5). Polls come about 1 s apart, so this holds more than that
-/// at the rates the unit streams at, and rides out a stalled host.
+/// preferably twice that (section 2.5). Polls come at most 200 ms apart, so this holds more than
+/// that at the rates the unit streams at, and rides out a stalled host.
 const RUN_BUFFER_SAMPLES: u32 = 64_000;
 
 /// The most samples, over all channels, the driver's buffer takes below 1 MS/s (section 3.19)
 const MAX_TOTAL_SAMPLES: u32 = 1_000_010;
 
-/// Number of sample sets drained per poll
+/// Number of sample sets drained per poll; a full poll is followed by another at once
 const POLL_BUFFER_SAMPLES: u32 = 1_000;
+
+/// How long the runner waits between stream steps with `config` at `interval_us`
+fn wait_after(config: &DrDAQConfig, interval_us: u32) -> Duration {
+    if config.enabled_channels().next().is_none() {
+        return IDLE_WAIT;
+    }
+    drain_wait(interval_us as u64, POLL_BUFFER_SAMPLES as u64)
+}
 
 /// Sample sets per channel for the driver's buffer, within [`MAX_TOTAL_SAMPLES`]
 fn run_buffer_samples(channels: usize) -> u32 {
@@ -135,48 +142,65 @@ impl StreamDevice<DrDAQConfig, DrDAQInfo, DrDAQStreamState, DrDAQStreamingEvent>
         let channels: Vec<DrDAQChannel> = config.enabled_channels().collect();
 
         if channels.is_empty() {
-            sleep_ms(1_000);
             return Current::Streaming(info.clone(), state.clone());
         }
 
-        match self
-            .driver
-            .get_values(*info.handle, channels.len(), POLL_BUFFER_SAMPLES)
-        {
-            Ok((values, overflow_bits)) => {
-                let sample_sets = values.len() / channels.len();
-                let mut per_channel: BTreeMap<DrDAQChannel, Vec<f32>> = channels
-                    .iter()
-                    .map(|&channel| (channel, Vec::with_capacity(sample_sets)))
-                    .collect();
+        let poll = || -> PicoResult<usize> {
+            let (values, overflow_bits) =
+                self.driver
+                    .get_values(*info.handle, channels.len(), POLL_BUFFER_SAMPLES)?;
+            let sample_sets = values.len() / channels.len();
+            let mut per_channel: BTreeMap<DrDAQChannel, Vec<f32>> = channels
+                .iter()
+                .map(|&channel| (channel, Vec::with_capacity(sample_sets)))
+                .collect();
 
-                for set in values.chunks_exact(channels.len()) {
-                    for (i, &channel) in channels.iter().enumerate() {
-                        let value = match state.channels.get(&channel) {
-                            Some(scale) => scale.scale(set[i]),
-                            None => set[i],
-                        };
-                        per_channel
-                            .get_mut(&channel)
-                            .expect("channel just inserted")
-                            .push(value);
-                    }
+            for set in values.chunks_exact(channels.len()) {
+                for (i, &channel) in channels.iter().enumerate() {
+                    let value = match state.channels.get(&channel) {
+                        Some(scale) => scale.scale(set[i]),
+                        None => set[i],
+                    };
+                    per_channel
+                        .get_mut(&channel)
+                        .expect("channel just inserted")
+                        .push(value);
                 }
+            }
 
-                // Bit 0 is channel 1 (section 3.11).
-                let over_range = channels
-                    .iter()
-                    .filter(|&&channel| overflow_bits & (1 << (u32::from(channel) - 1)) != 0)
-                    .copied()
-                    .collect();
+            // Bit 0 is channel 1 (section 3.11).
+            let over_range = channels
+                .iter()
+                .filter(|&&channel| overflow_bits & (1 << (u32::from(channel) - 1)) != 0)
+                .copied()
+                .collect();
 
+            if sample_sets > 0 {
                 events.new_data(DrDAQStreamingEvent {
                     interval_us: state.interval_us,
                     channels: per_channel,
                     over_range,
                 });
+            }
+            Ok(sample_sets)
+        };
 
-                sleep_ms(1_000);
+        let run_sets = run_buffer_samples(channels.len()) as u64;
+        let mut polls = 0;
+        let result = loop {
+            polls += 1;
+            match poll() {
+                Ok(sets) if sets as u32 >= POLL_BUFFER_SAMPLES => {}
+                other => break other,
+            }
+            if polls >= drain_polls(run_sets, POLL_BUFFER_SAMPLES as u64) {
+                break Ok(POLL_BUFFER_SAMPLES as usize);
+            }
+        };
+
+        match result {
+            Ok(sample_sets) => {
+                trace!(polls, sample_sets, "DrDAQ buffer drained");
                 Current::Streaming(info.clone(), state.clone())
             }
             Err(e) => {
@@ -186,6 +210,10 @@ impl StreamDevice<DrDAQConfig, DrDAQInfo, DrDAQStreamState, DrDAQStreamingEvent>
                 Current::Closed
             }
         }
+    }
+
+    fn stream_wait(&self, config: &DrDAQConfig, state: &DrDAQStreamState) -> Duration {
+        wait_after(config, state.interval_us)
     }
 
     /// The guide asks for `UsbDrDaqStop` after every stream, to make the unit ready for the next
@@ -225,5 +253,13 @@ mod tests {
         assert_eq!(ph.scale(765.0), 7.65);
         let none = DrDAQChannelInfo { divider: 0, ..ph };
         assert_eq!(none.scale(765.0), 765.0);
+    }
+
+    #[test]
+    fn a_unit_with_no_channels_waits_the_idle_time() {
+        let mut config = DrDAQConfig::default();
+        assert_eq!(wait_after(&config, 100), IDLE_WAIT);
+        config.enable_channel(DrDAQChannel::CHANNEL_EXT1);
+        assert_eq!(wait_after(&config, 100), Duration::from_millis(50));
     }
 }

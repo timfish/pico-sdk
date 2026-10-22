@@ -1,10 +1,8 @@
 use super::over_range::RangeLog;
-use super::state::{
-    sleep_ms, Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner,
-};
+use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
 use pico_common::{PicoError, PicoResult, TC08Channel, TC08Info, TCType};
 use pico_device::tc08::{TC08Config, TC08Device};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tracing::warn;
 
 /// A block of temperature readings, one entry per enabled channel
@@ -15,6 +13,9 @@ pub struct TC08StreamingEvent {
     /// Channels with a reading in this block over the unit's input range
     pub over_range: Vec<TC08Channel>,
 }
+
+/// How long the runner waits between reads of the unit's buffers
+const POLL_WAIT: Duration = Duration::from_secs(1);
 
 /// A running TC-08 stream
 #[derive(Clone, Debug)]
@@ -140,7 +141,6 @@ impl StreamDevice<TC08Config, TC08Info, TC08StreamState, TC08StreamingEvent> for
             Ok(()) => {
                 stream.over_range.update(event.over_range.iter().copied());
                 events.new_data(event);
-                sleep_ms(1_000);
 
                 Current::Streaming(info.clone(), stream.clone())
             }
@@ -152,6 +152,10 @@ impl StreamDevice<TC08Config, TC08Info, TC08StreamState, TC08StreamingEvent> for
                 Current::Closed
             }
         }
+    }
+
+    fn stream_wait(&self, _config: &TC08Config, _stream: &TC08StreamState) -> Duration {
+        POLL_WAIT
     }
 
     #[tracing::instrument(level = "debug", skip_all)]

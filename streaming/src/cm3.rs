@@ -10,7 +10,7 @@ use super::poll::LoggerPollState;
 use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
 use pico_common::{PLCM3Channel, PLCM3DataType, PLCM3Info, PicoError, PicoResult};
 use pico_device::cm3::{PLCM3Config, PLCM3Device};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 use tracing::{debug, warn};
 
 /// A block of current/voltage readings, one entry per enabled channel
@@ -124,6 +124,10 @@ impl StreamDevice<PLCM3Config, PLCM3Info, LoggerPollState, PLCM3StreamingEvent> 
                 Current::Closed
             }
         }
+    }
+
+    fn stream_wait(&self, _config: &PLCM3Config, state: &LoggerPollState) -> Duration {
+        state.wait()
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
