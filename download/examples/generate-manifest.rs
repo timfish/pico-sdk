@@ -2,7 +2,7 @@
 //! crate compiles against, plus a `release/` directory of assets ready to publish.
 //!
 //! ```text
-//! cargo run --example generate-manifest -- drivers-2026.07.22
+//! cargo run --example generate-manifest -- drivers-2026.10.25
 //! ```
 //!
 //! Pico distribute their drivers three different ways, so this fetches from all three:
@@ -14,15 +14,22 @@
 //!    whose `data.tar.xz` holds the `.so`).
 //!
 //! The URLs are hardcoded below; when Pico ship a new SDK, bump [`SDK_VERSION`] (and the Debian
-//! codename if it changes) and re-run.
+//! codename if it changes) and re-run. Downloaded installers and packages stay in `installers/`
+//! and are read from there on the next run.
 //!
 //! What it produces:
 //!  - `drivers/` — every extracted binary, laid out by platform and architecture. This is the
-//!    complete set, including libraries this SDK has no bindings for (usbtc08, pl1000, ...).
-//!  - `download/src/manifest.rs` — the committed catalogue, covering only the drivers this SDK
-//!    wraps (plus `picoipp`, which a couple of them load at runtime).
+//!    complete set, including libraries this SDK has no bindings for (the plain ps3000, ps5000,
+//!    picocv, ...).
+//!  - `download/src/manifest.rs` — the committed catalogue, covering every driver this SDK
+//!    wraps: the scopes and the data loggers (usbtc08, pl1000, picohrdl, usbpt104, usbdrdaq,
+//!    plcm3), plus `picoipp`, which ps4000 and ps6000 load at runtime. The set comes from
+//!    `pico_common::Driver`, so a new variant there is picked up on the next run.
 //!  - `release/` — exactly the binaries the manifest references, named for upload:
-//!    `gh release create drivers-2026.07.22 ./release/* --title "Pico drivers 2026.07.22"`
+//!    `gh release create drivers-2026.10.25 ./release/* --title "Pico drivers 2026.10.25"`
+//!
+//! The run ends with a table of which drivers each target has, so a driver Pico do not build
+//! for some target (no Linux arm64 usbdrdaq, for example) is visible rather than silent.
 //!
 //! The argument you pass becomes [`manifest::BUNDLE`](../src/manifest.rs): both the release tag
 //! the assets hang off and the cache directory they download into. Give it its own dated tag so
@@ -67,6 +74,10 @@ const LINUX_TARGETS: &[(&str, &str, &str)] = &[
 
 const LINUX_REPO: &str = "https://labs.picotech.com/rc/picoscope7/debian";
 
+/// Where downloaded installers and packages are kept between runs. The Pico servers are slow
+/// and the five installers come to about 430 MB, so a second run must not fetch them again.
+const INSTALLERS_DIR: &str = "installers";
+
 /// One platform we extract drivers for.
 struct Target {
     /// Matches `std::env::consts::OS`
@@ -108,7 +119,7 @@ fn main() -> ExitCode {
              \n\
              <bundle-id> identifies this driver set. It becomes the tag of the GitHub release\n\
              the binaries are published under and the cache directory they download into, so\n\
-             give it its own dated tag, e.g. drivers-2026.07.22."
+             give it its own dated tag, e.g. drivers-2026.10.25."
         );
         return ExitCode::FAILURE;
     };
@@ -140,7 +151,7 @@ fn run(bundle_id: &str) -> Result<(), String> {
             "https://www.picotech.com/download/software/sr/PicoSDK_{token}_{SDK_VERSION}.exe"
         );
         eprintln!("windows {arch}: {url}");
-        let exe = fetch(&url)?;
+        let exe = fetch_cached(&url)?;
         for (file_name, bytes) in extract_windows(&exe)? {
             record(
                 &mut binaries,
@@ -163,7 +174,7 @@ fn run(bundle_id: &str) -> Result<(), String> {
             "https://www.picotech.com/download/software/sr/PicoSDK-{infix}{SDK_VERSION}.pkg"
         );
         eprintln!("macos {arch}: {url}");
-        let pkg = fetch(&url)?;
+        let pkg = fetch_cached(&url)?;
         for (file_name, bytes) in extract_macos(&pkg)? {
             record(
                 &mut binaries,
@@ -188,7 +199,7 @@ fn run(bundle_id: &str) -> Result<(), String> {
         let packages = parse_packages(&gunzip(&fetch(&packages_url)?)?)?;
 
         for pkg in packages.iter().filter(|p| p.name.starts_with("lib")) {
-            let deb = fetch(&format!("{LINUX_REPO}/{}", pkg.filename))?;
+            let deb = fetch_cached(&format!("{LINUX_REPO}/{}", pkg.filename))?;
             let file_name = format!("{}.so", pkg.name);
             let bytes = extract_deb(&deb, &file_name)
                 .map_err(|e| format!("{} ({}): {}", pkg.name, deb_arch, e))?;
@@ -273,30 +284,12 @@ fn lib_of(file_name: &str) -> &str {
 }
 
 /// Maps a Pico library name onto the `Driver` it backs. Libraries this SDK has no bindings for
-/// (the plain ps3000/ps5000, ...) return `None` and stay out of the manifest.
+/// (the plain ps3000/ps5000, picocv, ...) return `None` and stay out of the manifest.
 ///
-/// `picoipp` maps to `Driver::PicoIPP`: it isn't a device driver, but ps4000/ps6000 load it at
-/// runtime, so it has to travel with them.
+/// `Driver`'s `Display` is the library's base name (`ps5000a`, `usbtc08`, `picoipp`), so every
+/// variant of the enum is a candidate, loggers and the `picoipp` dependency included.
 fn driver_for(lib: &str) -> Option<Driver> {
-    Some(match lib {
-        "pl1000" => Driver::PL1000,
-        "picohrdl" => Driver::PicoHRDL,
-        "plcm3" => Driver::PLCM3,
-        "ps2000" => Driver::PS2000,
-        "ps2000a" => Driver::PS2000A,
-        "ps3000a" => Driver::PS3000A,
-        "ps4000" => Driver::PS4000,
-        "ps4000a" => Driver::PS4000A,
-        "ps5000a" => Driver::PS5000A,
-        "ps6000" => Driver::PS6000,
-        "ps6000a" => Driver::PS6000A,
-        "psospa" => Driver::PSOSPA,
-        "usbdrdaq" => Driver::DrDAQ,
-        "usbpt104" => Driver::PT104,
-        "usbtc08" => Driver::TC08,
-        "picoipp" => Driver::PicoIPP,
-        _ => return None,
-    })
+    enum_iterator::all::<Driver>().find(|driver| driver.to_string() == lib)
 }
 
 // ---- Windows: .exe -> outer CAB -> MSI -> embedded CAB -> DLLs -----------------------------
@@ -539,6 +532,24 @@ fn fetch(url: &str) -> Result<Vec<u8>, String> {
     Ok(body)
 }
 
+/// Like [`fetch`], but keeps a copy in `installers/` under the file's own name and reads that
+/// copy on the next run. Installer and package names carry their version, so a cached file
+/// never goes stale; delete the directory to start again.
+fn fetch_cached(url: &str) -> Result<Vec<u8>, String> {
+    let name = url.rsplit('/').next().unwrap_or(url);
+    let path = Path::new(INSTALLERS_DIR).join(name);
+    if let Ok(bytes) = fs::read(&path) {
+        eprintln!("  cached: {}", path.display());
+        return Ok(bytes);
+    }
+    let bytes = fetch(url)?;
+    fs::create_dir_all(INSTALLERS_DIR).map_err(|e| format!("{INSTALLERS_DIR}: {e}"))?;
+    let tmp = path.with_extension("part");
+    fs::write(&tmp, &bytes).map_err(|e| format!("{}: {}", tmp.display(), e))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("{}: {}", path.display(), e))?;
+    Ok(bytes)
+}
+
 fn last_signature(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
@@ -701,9 +712,38 @@ fn report(binaries: &[Binary], bundle_id: &str, manifest_path: &Path, release_di
         );
     }
 
+    // One row per target: the drivers Pico build for it, and the ones they do not.
+    let mut targets: Vec<(&str, &str)> = binaries.iter().map(|b| (b.os, b.arch)).collect();
+    targets.sort();
+    targets.dedup();
+    println!("\nPer target:");
+    for (os, arch) in targets {
+        let absent: Vec<String> = enum_iterator::all::<Driver>()
+            .filter(|d| {
+                !binaries
+                    .iter()
+                    .any(|b| b.driver == *d && b.os == os && b.arch == arch)
+            })
+            .map(|d| d.to_string())
+            .collect();
+        let have = binaries
+            .iter()
+            .filter(|b| b.os == os && b.arch == arch)
+            .count();
+        if absent.is_empty() {
+            println!("  {os}-{arch}: {have} drivers, complete");
+        } else {
+            println!(
+                "  {os}-{arch}: {have} drivers, missing {}",
+                absent.join(", ")
+            );
+        }
+    }
+
     println!(
-        "\nTo publish:\n  gh release create {0} --title \"Pico drivers {0}\" ./{1}/*",
+        "\nTo publish:\n  gh release create {0} --title \"Pico drivers {1}\" ./{2}/*",
         bundle_id,
+        bundle_id.strip_prefix("drivers-").unwrap_or(bundle_id),
         release_dir.display()
     );
 }

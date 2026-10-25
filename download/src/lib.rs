@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 
-//! Downloads Pico Technology oscilloscope drivers.
+//! Downloads Pico Technology oscilloscope and data logger drivers.
 //!
 //! This is a sub crate that you probably don't want to use directly. Try the top level
 //! [`pico-sdk`](https://crates.io/crates/pico-sdk) crate which exposes everything from here.
 //!
 //! This helper crate allows the distribution of software that can communicate with every Pico
-//! oscilloscope without the need to ship every driver binary.
+//! instrument without the need to ship every driver binary. It covers every driver this SDK
+//! wraps: the scopes and the data loggers (usbtc08, pl1000, picohrdl, usbpt104, usbdrdaq,
+//! plcm3), plus `picoipp`, which ps4000 and ps6000 load at runtime.
 //!
 //! Supported platforms:
 //!  - Windows (x86, x86_64 or aarch64)
@@ -263,4 +265,132 @@ fn sha256_hex_for_file<P: AsRef<Path>>(path: P) -> Result<String, DriverDownload
     }
 
     Ok(hex)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use enum_iterator::all;
+
+    /// Every target, and the drivers Pico do not build for it. Everything else in
+    /// `Driver` must be in the manifest.
+    const TARGETS: &[(&str, &str, &[Driver])] = &[
+        ("windows", "x86_64", &[]),
+        ("windows", "x86", &[Driver::PSOSPA]),
+        (
+            "windows",
+            "aarch64",
+            &[
+                Driver::PS4000,
+                Driver::PS6000,
+                Driver::DrDAQ,
+                Driver::PicoIPP,
+            ],
+        ),
+        ("macos", "x86_64", &[]),
+        (
+            "macos",
+            "aarch64",
+            &[
+                Driver::PS4000,
+                Driver::PS6000,
+                Driver::DrDAQ,
+                Driver::PicoIPP,
+            ],
+        ),
+        ("linux", "x86_64", &[]),
+        (
+            "linux",
+            "aarch64",
+            &[
+                Driver::PS4000,
+                Driver::PS6000,
+                Driver::DrDAQ,
+                Driver::PicoIPP,
+            ],
+        ),
+        (
+            "linux",
+            "arm",
+            &[
+                Driver::PS2000A,
+                Driver::PS3000A,
+                Driver::PS4000A,
+                Driver::PS5000A,
+                Driver::PS6000A,
+                Driver::PSOSPA,
+                Driver::PicoIPP,
+            ],
+        ),
+    ];
+
+    #[test]
+    fn every_driver_is_published_for_every_target() {
+        for &(os, arch, absent) in TARGETS {
+            for driver in all::<Driver>() {
+                let published = driver_binary(driver, os, arch).is_some();
+                let expected = !absent.contains(&driver);
+                assert_eq!(
+                    published, expected,
+                    "{driver} on {os}-{arch}: published {published}, expected {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn loggers_are_available_on_this_platform() {
+        let this = (std::env::consts::OS, std::env::consts::ARCH);
+        let Some(&(_, _, absent)) = TARGETS.iter().find(|&&(os, arch, _)| (os, arch) == this)
+        else {
+            return;
+        };
+        let available = available_drivers();
+        for driver in [
+            Driver::TC08,
+            Driver::PL1000,
+            Driver::PicoHRDL,
+            Driver::PT104,
+            Driver::DrDAQ,
+            Driver::PLCM3,
+        ] {
+            if absent.contains(&driver) {
+                assert!(binary_for_this_platform(driver).is_err(), "{driver}");
+                continue;
+            }
+            assert!(available.contains(&driver), "{driver} not available");
+            let binary = binary_for_this_platform(driver).unwrap();
+            assert_eq!(binary.file_name, driver.get_binary_name());
+        }
+    }
+
+    #[test]
+    fn file_names_match_the_driver() {
+        for binary in BINARIES {
+            let base = binary.driver.to_string();
+            let expected = match binary.os {
+                "windows" => format!("{base}.dll"),
+                "macos" => format!("lib{base}.dylib"),
+                _ => format!("lib{base}.so"),
+            };
+            assert_eq!(binary.file_name, expected, "{}", binary.asset_name);
+            assert_eq!(
+                binary.asset_name,
+                format!("{}-{}-{}", binary.os, binary.arch, binary.file_name)
+            );
+            assert_eq!(binary.sha256.len(), 64, "{}", binary.asset_name);
+        }
+    }
+
+    #[test]
+    fn one_binary_per_driver_and_target() {
+        let mut seen = std::collections::BTreeSet::new();
+        for binary in BINARIES {
+            assert!(
+                seen.insert((binary.driver, binary.os, binary.arch)),
+                "{} listed twice",
+                binary.asset_name
+            );
+        }
+    }
 }
