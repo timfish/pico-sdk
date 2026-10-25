@@ -1,0 +1,105 @@
+# Publishes a driver bundle: extracts every driver from Pico's public installers with the
+# `generate-manifest` example, publishes the binaries as the release `<tag>`, and commits the
+# regenerated manifest to the branch the workflow ran on.
+#
+#   gh workflow run drivers.yml --ref <branch> -f tag=drivers-2026.10.25
+#
+# The extraction is pure Rust, so a Linux runner handles the Windows and macOS installers too.
+name: drivers
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Bundle tag, the release the binaries are published under (drivers-YYYY.MM.DD)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the tag
+        run: |
+          case "$TAG" in
+            drivers-[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]) ;;
+            *) echo "::error::tag must look like drivers-2026.10.25, got '$TAG'"; exit 1 ;;
+          esac
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $TAG already exists; pick a new dated tag"
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::tag $TAG already exists; pick a new dated tag"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y liblzma-dev
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Generate the manifest and release assets
+        run: cargo run --example generate-manifest -p pico-download -- "$TAG" | tee generate.log
+
+      - name: Check every manifest hash against its release file
+        run: |
+          grep -o 'asset_name: "[^"]*"\|sha256: "[^"]*"' download/src/manifest.rs \
+            | paste - - \
+            | sed -E 's/asset_name: "([^"]*)"\tsha256: "([^"]*)"/\2  \1/' \
+            | sort > manifest-hashes.txt
+          (cd release && sha256sum -- * | sort) > release-hashes.txt
+          if ! diff manifest-hashes.txt release-hashes.txt; then
+            echo "::error::manifest hashes do not match the files in release/"
+            exit 1
+          fi
+          echo "$(wc -l < release-hashes.txt) files match"
+
+      - name: Test the manifest
+        run: cargo test -p pico-download -p pico-common
+
+      - name: Create the release
+        run: |
+          title="Pico drivers ${TAG#drivers-}"
+          gh release create "$TAG" ./release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$title" \
+            --notes "Pico driver binaries extracted from Pico's public installers by the \`generate-manifest\` example. Referenced by \`pico-download\` as bundle \`$TAG\`."
+
+      - name: Commit the manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add download/src/manifest.rs
+          if git diff --cached --quiet; then
+            echo "manifest unchanged"
+          else
+            git commit -m "Driver bundle $TAG"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "## Driver bundle \`$TAG\`"
+            echo
+            echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
+            echo
+            echo '```'
+            sed -n '/^Per target:/,/^$/p' generate.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
