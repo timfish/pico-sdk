@@ -11,7 +11,7 @@ use pico_common::Driver;
 pub const BUNDLE: &str = "drivers-2026.10.25";
 
 /// Where the binaries for `BUNDLE` are published.
-pub const BASE_URL: &str = "https://github.com/meatysolutions/pico-sdk/releases/download";
+pub const BASE_URL: &str = "https://github.com/timfish/pico-sdk/releases/download";
 
 /// A driver binary published for one target.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

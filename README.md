@@ -28,7 +28,7 @@ numerous Pico drivers.
 
 ## Prerequisites
 On linux `pico-enumeration` [requires
-`libudev-dev`](https://github.com/meatysolutions/pico-sdk/blob/700ab24efe81063316baffff638988cf626c6ffe/.github/workflows/build-and-publish.yml#L32)
+`libudev-dev`](https://github.com/timfish/pico-sdk/blob/700ab24efe81063316baffff638988cf626c6ffe/.github/workflows/build-and-publish.yml#L32)
 to be installed.
 
 ## Tests

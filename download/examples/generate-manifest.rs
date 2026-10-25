@@ -90,7 +90,7 @@ struct Target {
 
 /// Where the binaries get published. Combined with `BUNDLE` and the asset name at runtime to
 /// form each download URL. Must match `BASE_URL` in the generated manifest.
-const BASE_URL: &str = "https://github.com/meatysolutions/pico-sdk/releases/download";
+const BASE_URL: &str = "https://github.com/timfish/pico-sdk/releases/download";
 
 /// One extracted driver binary, already written to the `drivers/` tree and hashed.
 struct Binary {

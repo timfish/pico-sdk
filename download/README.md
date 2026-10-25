@@ -28,7 +28,7 @@ Those hashes are compiled into the crate, so a download that has been tampered w
 
 The bundle identifier is also part of the cache path, which means downloaded drivers are immutable: two applications built against different versions of this crate get their own cache directory rather than overwriting each other's drivers.
 
-Binaries are published as [GitHub release assets](https://github.com/meatysolutions/pico-sdk/releases), one release per bundle, under a dated tag of its own so that many library releases can reference the same driver set.
+Binaries are published as [GitHub release assets](https://github.com/timfish/pico-sdk/releases), one release per bundle, under a dated tag of its own so that many library releases can reference the same driver set.
 Set `PICO_DRIVERS_BASE_URL` to fetch them from a mirror instead; the compiled-in hashes still gate what is accepted.
 
 ## Updating the drivers
