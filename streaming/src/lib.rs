@@ -77,14 +77,14 @@ pub use cm3::PLCM3StreamingEvent;
 pub use drdaq::{DrDAQStreamState, DrDAQStreamingEvent};
 pub use hrdl::{HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent};
 pub use oscilloscope::{
-    unit_lost, OscilloscopeStreamEvent, RawChannelDataBlock, Samples, ScopeRunner,
-    ScopeStreamState, StreamCounts,
+    OscilloscopeStreamEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
+    StreamCounts,
 };
 pub use pl1000::PL1000StreamingEvent;
 pub use poll::LoggerPollState;
 pub use pt104::PT104StreamingEvent;
 pub use state::{
-    AfterPowerChange, Current, DeviceNotice, EventEmitter, EventHandler, IntoStreamingDevice,
-    Notices, StepsHeld, StreamDevice, StreamingRunner, Target,
+    unit_lost, AfterPowerChange, Current, DeviceNotice, EventEmitter, EventHandler,
+    IntoStreamingDevice, Notices, StepsHeld, StreamDevice, StreamingRunner, Target,
 };
 pub use tc08::{TC08StreamState, TC08StreamingEvent};

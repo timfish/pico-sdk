@@ -21,8 +21,14 @@ A buffered logger's step polls until a poll does not fill its poll buffer, so th
 
 ## A unit opened again
 
-A scope stream start that fails with a status `unit_lost` names (`NOT_RESPONDING`, `INVALID_HANDLE`, `NOT_FOUND`, `TIMEOUT`) closes the unit, and the next steps open it and start again.
-`StreamingRunner::reopen` does the same at once for a caller, also while it holds the steps, as a block capture's set-up does after `BlockRunner::new` fails so.
+A stream start that fails with a status `unit_lost` names (`NOT_RESPONDING`, `INVALID_HANDLE`, `NOT_FOUND`, `TIMEOUT`, `DEVICE_NOT_FUNCTIONING`) closes the unit, and the next steps open it by its serial and start it again with the same config.
+The rule is the runner's, so it holds for every family: a scope, and a logger whose stream has no lost-unit path of its own.
+`DEVICE_NOT_FUNCTIONING` is the TC-08 driver's communication error: a TC-08 unplugged and plugged in again answers it to every call on its old handle, while the unit info still reads, so a ping does not see the loss and only the start does.
+The runner sends `DeviceNotice::UnitLost` with the status to its `notices` listeners each time.
+`StreamingRunner::start` opens the unit again once within the call; a second lost start returns the error.
+The background thread waits 1 s after a step that failed or found the unit lost, twice as long after each one that follows, up to 10 s, and waits no more once the device is where its target asks; so a unit that stays absent costs one open a few seconds, not a loop.
+A logger stream step that fails closes the unit as before, so the same opens follow.
+`StreamingRunner::reopen` closes and opens the unit at once for a caller, also while it holds the steps, as a block capture's set-up does after `BlockRunner::new` fails so.
 A 5464E timed out a change to 16 bits with nothing on, after a stream of ports alone; a second try with the channels on then worked, but every channel read over range until the unit opened again (2026-10-22).
 So a failed resolution change is not tried again: the unit opens again.
 
