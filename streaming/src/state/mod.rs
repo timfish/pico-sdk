@@ -3,7 +3,7 @@ mod events;
 use crossbeam::channel::{bounded, select, Receiver, Sender};
 pub use events::{EventEmitter, EventHandler};
 use parking_lot::{Mutex, MutexGuard, RwLock};
-use pico_common::{PicoChannel, PicoResult, PicoStatus, PowerSource};
+use pico_common::{PicoChannel, PicoError, PicoResult, PicoStatus, PowerSource};
 use std::{
     any::Any,
     fmt,
@@ -28,6 +28,65 @@ const PING_INTERVAL: Duration = Duration::from_millis(200);
 /// How long the background thread waits between steps of a closed
 /// device that should stay closed.
 const CLOSED_INTERVAL: Duration = Duration::from_millis(10);
+
+/// How long the background thread waits after the first step that
+/// failed or found the unit lost, and the longest it waits after the
+/// ones that follow, each twice the last.
+const RETRY_MIN: Duration = Duration::from_secs(1);
+const RETRY_MAX: Duration = Duration::from_secs(10);
+
+/// How long a step waits after it closed a lost unit, before the open
+/// that follows.
+const LOST_SETTLE: Duration = Duration::from_millis(200);
+
+/// A status that says the driver lost the unit, or left it in a state
+/// no call clears, so only a close and an open again can make it work
+/// (see [`StreamingRunner::reopen`]). `TIMEOUT` is one: a 5464E that
+/// timed out a resolution change read every channel over range until
+/// it opened again. `DEVICE_NOT_FUNCTIONING` is the TC-08 driver's
+/// communication error, which a unit plugged in again answers to every
+/// call on its old handle.
+pub fn unit_lost(status: PicoStatus) -> bool {
+    matches!(
+        status,
+        PicoStatus::NOT_RESPONDING
+            | PicoStatus::INVALID_HANDLE
+            | PicoStatus::NOT_FOUND
+            | PicoStatus::TIMEOUT
+            | PicoStatus::DEVICE_NOT_FUNCTIONING
+    )
+}
+
+/// The wait before the next step after one that failed or found the
+/// unit lost: [`RETRY_MIN`], twice that each time after, up to
+/// [`RETRY_MAX`]; none once the device is where its target asks.
+#[derive(Default)]
+struct Retry {
+    wait: Option<Duration>,
+}
+
+impl Retry {
+    fn failed(&mut self) -> Duration {
+        let wait = match self.wait {
+            None => RETRY_MIN,
+            Some(wait) => (wait * 2).min(RETRY_MAX),
+        };
+        self.wait = Some(wait);
+        wait
+    }
+
+    fn reached(&mut self) {
+        self.wait = None;
+    }
+}
+
+/// What a step did besides move the state.
+enum Stepped {
+    Moved,
+    /// `start` found the unit lost ([`unit_lost`]); the step closed it,
+    /// and the next step opens it again.
+    UnitLost(PicoError),
+}
 
 pub fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -134,6 +193,10 @@ pub enum DeviceNotice {
         available: Vec<PicoChannel>,
         stream: AfterPowerChange,
     },
+    /// A stream start found the unit lost ([`unit_lost`]). The runner
+    /// closed it, and opens it again while its target asks for a
+    /// stream, waiting longer after each try that fails.
+    UnitLost { status: PicoStatus },
 }
 
 pub type Notices = EventEmitter<DeviceNotice>;
@@ -268,7 +331,7 @@ where
 
     /// One step from the current state towards the target, by the
     /// holder of `_steps`.
-    fn step(&self, _steps: &MutexGuard<'_, ()>) -> PicoResult<()> {
+    fn step(&self, _steps: &MutexGuard<'_, ()>) -> PicoResult<Stepped> {
         let (current, target) = {
             let state = self.state.read();
             (state.current.clone(), state.target.clone())
@@ -283,7 +346,28 @@ where
                 return Err(error);
             }
         }
-        let next = next_state(&self.device, &self.events, &self.notices, &current, &target)?;
+        let mut stepped = Stepped::Moved;
+        let next = match next_state(&self.device, &self.events, &self.notices, &current, &target) {
+            Ok(next) => next,
+            Err(error)
+                if matches!(current, Current::Open(_))
+                    && matches!(target, Target::Streaming(_))
+                    && unit_lost(error.status) =>
+            {
+                warn!(%error, "stream start found the unit lost; it will open again");
+                if let Some(info) = current.get_info() {
+                    self.device.stop(&info);
+                    self.device.close(&info);
+                }
+                self.notices.new_data(DeviceNotice::UnitLost {
+                    status: error.status,
+                });
+                thread::sleep(LOST_SETTLE);
+                stepped = Stepped::UnitLost(error);
+                Current::Closed
+            }
+            Err(error) => return Err(error),
+        };
         if current != next {
             info!(
                 from = current.name(),
@@ -293,7 +377,7 @@ where
             self.device.log_state(&next);
         }
         self.state.write().current = next;
-        Ok(())
+        Ok(stepped)
     }
 
     pub fn start(&self, config: Config) -> PicoResult<()> {
@@ -327,10 +411,17 @@ where
         self.state.write().target = Target::Streaming(config);
         self.wake();
 
-        // Drive the state until we're streaming or we get an error we can return
+        // Drive the state until we're streaming or we get an error we can return.
+        // A unit found lost opens again once; a second lost start is the error.
         let mut count = 0;
+        let mut lost = false;
         loop {
-            self.step(&steps)?;
+            if let Stepped::UnitLost(error) = self.step(&steps)? {
+                if lost {
+                    return Err(error);
+                }
+                lost = true;
+            }
 
             if let Current::Streaming(_, _) = self.state.read().current {
                 return Ok(());
@@ -461,6 +552,17 @@ where
         }
     }
 
+    /// Whether the device is where its target asks.
+    fn at_target(&self) -> bool {
+        let state = self.state.read();
+        matches!(
+            (&state.current, &state.target),
+            (Current::Open(_), Target::Open)
+                | (Current::Closed, Target::Closed)
+                | (Current::Streaming(..), Target::Streaming(_))
+        )
+    }
+
     /// How long the background thread waits before its next step, when
     /// the device is where its target asks.
     fn step_wait(&self) -> Option<Duration> {
@@ -495,6 +597,7 @@ where
         rx_terminate: Receiver<()>,
     ) {
         let mut wait_for_closed = false;
+        let mut retry = Retry::default();
 
         loop {
             if this.holds.load(Ordering::SeqCst) > 0 && !wait_for_closed {
@@ -506,21 +609,35 @@ where
                 continue;
             }
             let steps = this.steps.lock();
+            // A wake from before this step is stale: the step reads
+            // the target it set. Left, it would end the next wait.
+            let _ = this.wake.1.try_recv();
             let failed = match catch_unwind(AssertUnwindSafe(|| this.step(&steps))) {
-                Ok(result) => result.is_err(),
+                Ok(Ok(Stepped::Moved)) => false,
+                Ok(Ok(Stepped::UnitLost(_))) | Ok(Err(_)) => true,
                 Err(panic) => {
                     this.after_panic(panic.as_ref());
                     true
                 }
             };
             drop(steps);
-            if failed {
-                sleep_ms(500);
-            }
 
             // No wait when a step asks for none: Windows rounds even
             // 1 ms up to about 15 ms, which would slow a backlog drain.
-            let terminate = match this.step_wait() {
+            let wait = if failed {
+                let wait = retry.failed();
+                debug!(
+                    wait_ms = wait.as_secs_f64() * 1e3,
+                    "waiting to try the step again"
+                );
+                Some(wait)
+            } else {
+                if this.at_target() {
+                    retry.reached();
+                }
+                this.step_wait()
+            };
+            let terminate = match wait {
                 Some(wait) if !wait_for_closed => {
                     trace!(
                         wait_ms = wait.as_secs_f64() * 1e3,
@@ -535,7 +652,12 @@ where
                         default(wait) => false,
                     }
                 }
-                _ => rx_terminate.try_recv().is_ok(),
+                _ => {
+                    if failed {
+                        sleep_ms(500);
+                    }
+                    rx_terminate.try_recv().is_ok()
+                }
             };
             if !wait_for_closed && terminate {
                 this.state.write().target = Target::Closed;

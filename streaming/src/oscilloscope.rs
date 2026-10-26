@@ -3,8 +3,8 @@ use super::digital::{
 };
 use super::over_range::RangeLog;
 use super::state::{
-    sleep_ms, AfterPowerChange, Current, DeviceNotice, EventEmitter, IntoStreamingDevice, Notices,
-    StreamDevice, StreamingRunner,
+    sleep_ms, unit_lost, AfterPowerChange, Current, DeviceNotice, EventEmitter,
+    IntoStreamingDevice, Notices, StreamDevice, StreamingRunner,
 };
 use pico_common::{
     AuxIoMode, DigitalPort, Downsample, DownsampleKind, LedColour, LedState,
@@ -704,21 +704,6 @@ fn start_stream(
     Ok(Current::Streaming(info.clone(), state))
 }
 
-/// A status that says the driver lost the unit, or left it in a state
-/// no call clears, so only a close and an open again can make it work
-/// (see [`StreamingRunner::reopen`](crate::StreamingRunner::reopen)).
-/// `TIMEOUT` is one: a 5464E that timed out a resolution change read
-/// every channel over range until it opened again.
-pub fn unit_lost(status: PicoStatus) -> bool {
-    matches!(
-        status,
-        PicoStatus::NOT_RESPONDING
-            | PicoStatus::INVALID_HANDLE
-            | PicoStatus::NOT_FOUND
-            | PicoStatus::TIMEOUT
-    )
-}
-
 /// Gives the driver the stream's buffers again, as it asks once it
 /// has filled them.
 fn give_buffers(
@@ -929,15 +914,9 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                     notify_power(notices, info, &changed, to, after);
                     Ok(Current::Open(changed))
                 }
-                None if unit_lost(error.status) => {
-                    // A 5464E gave NOT_RESPONDING to every start after
-                    // one, until it was closed and opened again.
-                    warn!(%error, "stream start failed; the device will open again");
-                    let _ = self.driver.stop(*info.handle);
-                    let _ = self.driver.close(*info.handle);
-                    sleep_ms(200);
-                    Ok(Current::Closed)
-                }
+                // A lost unit (`unit_lost`), as a 5464E that gave
+                // NOT_RESPONDING to every start after one, is the
+                // runner's to close and open again.
                 None => Err(error),
             },
             started => started,
