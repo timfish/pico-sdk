@@ -86,5 +86,6 @@ pub use pt104::PT104StreamingEvent;
 pub use state::{
     unit_lost, AfterPowerChange, Current, DeviceNotice, EventEmitter, EventHandler,
     IntoStreamingDevice, Notices, StepsHeld, StreamDevice, StreamingRunner, Target,
+    LOST_AFTER_STARTS,
 };
 pub use tc08::{TC08StreamState, TC08StreamingEvent};

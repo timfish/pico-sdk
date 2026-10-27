@@ -1,11 +1,13 @@
 //! A logger whose unit is lost: a fake unit shaped like a TC-08, whose
 //! `start` answers the driver's communication error
 //! (`DEVICE_NOT_FUNCTIONING`) on a handle a unit plugged in again no
-//! longer answers.
+//! longer answers, or a status that does not say the unit is lost
+//! (`BUSY`) on a handle no retry clears.
 
 use pico_common::{PicoError, PicoResult, PicoStatus};
 use pico_streaming::{
     Current, DeviceNotice, EventEmitter, EventHandler, StreamDevice, StreamingRunner,
+    LOST_AFTER_STARTS,
 };
 use std::{
     sync::{
@@ -26,12 +28,24 @@ struct Unit {
     closes: Arc<AtomicUsize>,
     /// How many starts still answer the communication error
     lost_starts: Arc<AtomicUsize>,
+    /// The handle whose starts answer `BUSY`, as a unit whose driver
+    /// left it in a state only a new open clears
+    stuck: Arc<Mutex<Option<Handle>>>,
+    /// The handle of each start, in order
+    starts: Arc<Mutex<Vec<Handle>>>,
 }
 
 impl Unit {
     fn lost_for(starts: usize) -> Self {
         Unit {
             lost_starts: Arc::new(AtomicUsize::new(starts)),
+            ..Default::default()
+        }
+    }
+
+    fn stuck_on(handle: Handle) -> Self {
+        Unit {
+            stuck: Arc::new(Mutex::new(Some(handle))),
             ..Default::default()
         }
     }
@@ -63,6 +77,10 @@ impl StreamDevice<(), Handle, (), ()> for Unit {
         _config: &(),
         _notices: &EventEmitter<DeviceNotice>,
     ) -> PicoResult<Current<Handle, ()>> {
+        self.starts.lock().unwrap().push(*info);
+        if *self.stuck.lock().unwrap() == Some(*info) {
+            return Err(PicoError::from_status(PicoStatus::BUSY, "run_streaming"));
+        }
         let lost = self
             .lost_starts
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
@@ -199,4 +217,48 @@ fn a_unit_that_stays_lost_is_tried_again_with_longer_waits() {
         runner.get_info().is_none()
     });
     assert!(closed.elapsed() < Duration::from_millis(500));
+}
+
+/// A start that keeps failing with a status that does not say the unit
+/// is lost counts the unit as lost after 3 tries on its handle: the
+/// runner closes it, tells why, opens it again and streams on the new
+/// handle. With no such rule it tries the same handle for ever.
+#[test]
+fn starts_that_keep_failing_count_the_unit_as_lost() {
+    let unit = Unit::stuck_on(1);
+    let (runner, seen) = runner_of(&unit);
+    // The open in `new` gives no handle here: the first open is 1.
+    runner.close();
+    wait_until("closed", Duration::from_secs(1), || {
+        runner.get_info().is_none()
+    });
+
+    let error = runner.start(()).unwrap_err();
+    assert_eq!(error.status, PicoStatus::BUSY);
+
+    wait_until("events on a new handle", Duration::from_secs(10), || {
+        seen.events.load(Ordering::SeqCst) >= 1
+    });
+    let starts = unit.starts.lock().unwrap().clone();
+    assert_eq!(
+        starts,
+        vec![1; LOST_AFTER_STARTS]
+            .into_iter()
+            .chain([2])
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        unit.closes.load(Ordering::SeqCst),
+        2,
+        "the close above, then the lost unit's"
+    );
+    assert_eq!(runner.get_info(), Some(2));
+    let notices = seen.notices.lock().unwrap().clone();
+    assert_eq!(notices.len(), 1, "{notices:?}");
+    let DeviceNotice::StartsFailed { error, starts } = &notices[0] else {
+        panic!("{notices:?}");
+    };
+    assert_eq!(error.status, PicoStatus::BUSY);
+    assert_eq!(*starts, LOST_AFTER_STARTS);
+    runner.close();
 }

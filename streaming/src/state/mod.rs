@@ -39,6 +39,12 @@ const RETRY_MAX: Duration = Duration::from_secs(10);
 /// that follows.
 const LOST_SETTLE: Duration = Duration::from_millis(200);
 
+/// Starts in a row that fail with a status [`unit_lost`] does not name,
+/// after which the unit counts as lost: a retry on the same handle
+/// gave the same answer, so only a close and an open again can change
+/// it.
+pub const LOST_AFTER_STARTS: usize = 3;
+
 /// A status that says the driver lost the unit, or left it in a state
 /// no call clears, so only a close and an open again can make it work
 /// (see [`StreamingRunner::reopen`]). `TIMEOUT` is one: a 5464E that
@@ -197,6 +203,12 @@ pub enum DeviceNotice {
     /// closed it, and opens it again while its target asks for a
     /// stream, waiting longer after each try that fails.
     UnitLost { status: PicoStatus },
+    /// [`LOST_AFTER_STARTS`] starts in a row failed with a status that
+    /// does not say the unit is lost, the last with `error`. The
+    /// runner counts the unit as lost: it closed it, and opens it
+    /// again as for [`DeviceNotice::UnitLost`]. A caller that streams
+    /// shows the error, as the stream does not run.
+    StartsFailed { error: PicoError, starts: usize },
 }
 
 pub type Notices = EventEmitter<DeviceNotice>;
@@ -285,6 +297,8 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     state: Arc<RwLock<StreamingState<Config, Info, Stream>>>,
     /// Held across each step's driver calls, so steps run one at a time.
     steps: Arc<Mutex<()>>,
+    /// Starts in a row that failed with a status not counted as lost.
+    failed_starts: Arc<AtomicUsize>,
     /// While above 0, the background thread takes no step: a caller
     /// drives the device through [`StreamingRunner::with_open`].
     holds: Arc<AtomicUsize>,
@@ -317,6 +331,7 @@ where
             device,
             state,
             steps: Arc::new(Mutex::new(())),
+            failed_starts: Arc::new(AtomicUsize::new(0)),
             holds: Arc::new(AtomicUsize::new(0)),
             wake: bounded(1),
             events: EventEmitter::new(),
@@ -362,12 +377,39 @@ where
                 self.notices.new_data(DeviceNotice::UnitLost {
                     status: error.status,
                 });
+                self.failed_starts.store(0, Ordering::SeqCst);
+                thread::sleep(LOST_SETTLE);
+                stepped = Stepped::UnitLost(error);
+                Current::Closed
+            }
+            Err(error)
+                if matches!(current, Current::Open(_))
+                    && matches!(target, Target::Streaming(_)) =>
+            {
+                let starts = self.failed_starts.fetch_add(1, Ordering::SeqCst) + 1;
+                if starts < LOST_AFTER_STARTS {
+                    warn!(%error, starts, "stream start failed");
+                    return Err(error);
+                }
+                warn!(%error, starts, "stream starts keep failing; the unit counts as lost and opens again");
+                if let Some(info) = current.get_info() {
+                    self.device.stop(&info);
+                    self.device.close(&info);
+                }
+                self.failed_starts.store(0, Ordering::SeqCst);
+                self.notices.new_data(DeviceNotice::StartsFailed {
+                    error: error.clone(),
+                    starts,
+                });
                 thread::sleep(LOST_SETTLE);
                 stepped = Stepped::UnitLost(error);
                 Current::Closed
             }
             Err(error) => return Err(error),
         };
+        if matches!(next, Current::Streaming(..)) && !matches!(current, Current::Streaming(..)) {
+            self.failed_starts.store(0, Ordering::SeqCst);
+        }
         if current != next {
             info!(
                 from = current.name(),
