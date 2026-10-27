@@ -28,6 +28,9 @@ The runner sends `DeviceNotice::UnitLost` with the status to its `notices` liste
 `StreamingRunner::start` opens the unit again once within the call; a second lost start returns the error.
 The background thread waits 1 s after a step that failed or found the unit lost, twice as long after each one that follows, up to 10 s, and waits no more once the device is where its target asks; so a unit that stays absent costs one open a few seconds, not a loop.
 A logger stream step that fails closes the unit as before, so the same opens follow.
+A start that fails 3 times in a row (`LOST_AFTER_STARTS`) with a status `unit_lost` does not name, such as `BUSY`, counts the unit as lost too: a retry on the same handle gave the same answer, so the runner closes the unit, sends `DeviceNotice::StartsFailed` with the last error, and opens it again by its serial.
+A caller that streams shows that error, as the stream does not run while the starts fail.
+A start that streams, or a unit counted as lost, sets the count back to 0.
 `StreamingRunner::reopen` closes and opens the unit at once for a caller, also while it holds the steps, as a block capture's set-up does after `BlockRunner::new` fails so.
 A 5464E timed out a change to 16 bits with nothing on, after a stream of ports alone; a second try with the channels on then worked, but every channel read over range until the unit opened again (2026-10-22).
 So a failed resolution change is not tried again: the unit opens again.
