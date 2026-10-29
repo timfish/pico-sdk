@@ -39,9 +39,12 @@ impl ScopeCapabilities {
         let lower = self.bandwidth_cases.iter().filter_map(|case| {
             let applies = match case.when {
                 BandwidthCondition::Resolution(r) => resolution == Some(r),
-                BandwidthCondition::RangeUpTo(most) => {
-                    range.to_nano_volts() <= most.to_nano_volts()
-                }
+                // A probe's range says nothing of the input's own
+                // range, so no case of it applies.
+                BandwidthCondition::RangeUpTo(most) => range
+                    .nano_volts()
+                    .zip(most.nano_volts())
+                    .is_some_and(|(r, m)| r <= m),
                 BandwidthCondition::HighImpedance => !fifty_ohm,
             };
             applies.then_some(case.hz)
@@ -169,6 +172,11 @@ mod tests {
         assert_eq!(at(DR_8BIT, PicoRange::X1_PROBE_1V), Some(200_000_000));
         assert_eq!(at(DR_8BIT, PicoRange::X1_PROBE_20MV), Some(100_000_000));
         assert_eq!(at(DR_16BIT, PicoRange::X1_PROBE_20MV), Some(60_000_000));
+        assert_eq!(
+            at(DR_8BIT, PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_5V),
+            Some(200_000_000),
+            "a probe's range takes no range case"
+        );
         assert_eq!(
             ScopeCapabilities::default().bandwidth_for(None, PicoRange::X1_PROBE_1V, false),
             None

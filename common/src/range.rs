@@ -275,6 +275,23 @@ impl PicoRange {
         }
     }
 
+    /// The span of an x1 or x10 range in nanovolts, or `None` for a
+    /// range of another probe. Never panics, unlike `to_nano_volts`.
+    pub fn nano_volts(self) -> Option<i64> {
+        use PicoRange::*;
+        match self {
+            X1_PROBE_5MV | X1_PROBE_10MV | X1_PROBE_20MV | X1_PROBE_50MV | X1_PROBE_100MV
+            | X1_PROBE_200MV | X1_PROBE_500MV | X1_PROBE_1V | X1_PROBE_2V | X1_PROBE_5V
+            | X1_PROBE_10V | X1_PROBE_20V | X1_PROBE_50V | X1_PROBE_100V | X1_PROBE_200V
+            | X10_PROBE_50MV | X10_PROBE_100MV | X10_PROBE_200MV | X10_PROBE_500MV
+            | X10_PROBE_1V | X10_PROBE_2V | X10_PROBE_5V | X10_PROBE_10V | X10_PROBE_20V
+            | X10_PROBE_50V | X10_PROBE_100V | X10_PROBE_200V | X10_PROBE_500V => {
+                Some(self.to_nano_volts())
+            }
+            _ => None,
+        }
+    }
+
     pub fn to_nano_volts(&self) -> i64 {
         match self {
             PicoRange::X1_PROBE_5MV => 5_000_000,
@@ -727,6 +744,8 @@ mod range_tests {
         assert_eq!(PicoRange::from_code(10750), None);
         assert_eq!(PicoRange::CURRENT_CLAMP_60A_20A.full_scale(), Some(20.0));
         assert_eq!(PicoRange::TEMPERATURE_NEG50_TO_150DEGC.full_scale(), None);
+        assert_eq!(PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_5V.nano_volts(), None);
+        assert_eq!(PicoRange::X1_PROBE_1V.nano_volts(), Some(1_000_000_000));
     }
 
     #[test]
