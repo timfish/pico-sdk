@@ -106,6 +106,7 @@ pub enum PicoRange {
     HT_NEG5_TO_100KV_INVERTED = 8959,
 
     TEMPERATURE_NEG50_TO_150DEGC = 9000,
+    TEMPERATURE_NEG4_TO_125DEGC = 9001,
 
     PRESSURE_SENSOR_NEG100000_TO_150000_PASCALS = 9100,
     PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS = 9101,
@@ -138,6 +139,23 @@ pub enum PicoRange {
     CURRENT_CLAMP_60A_V2_20A = 10605,
     CURRENT_CLAMP_60A_V2_50A = 10606,
     CURRENT_CLAMP_60A_V2_60A = 10607,
+
+    HIGH_VOLTAGE_DIFFERENTIAL_5V = 10650,
+    HIGH_VOLTAGE_DIFFERENTIAL_10V = 10651,
+    HIGH_VOLTAGE_DIFFERENTIAL_20V = 10652,
+    HIGH_VOLTAGE_DIFFERENTIAL_50V = 10653,
+    HIGH_VOLTAGE_DIFFERENTIAL_100V = 10654,
+    HIGH_VOLTAGE_DIFFERENTIAL_200V = 10655,
+    HIGH_VOLTAGE_DIFFERENTIAL_500V = 10656,
+    HIGH_VOLTAGE_DIFFERENTIAL_1000V = 10657,
+    HIGH_VOLTAGE_DIFFERENTIAL_1400V = 10658,
+
+    X10_ACTIVE_PROBE_100MV = 10700,
+    X10_ACTIVE_PROBE_200MV = 10701,
+    X10_ACTIVE_PROBE_500MV = 10702,
+    X10_ACTIVE_PROBE_1V = 10703,
+    X10_ACTIVE_PROBE_2V = 10704,
+    X10_ACTIVE_PROBE_5V = 10705,
 }
 
 /// Strips whitespace and '±' so that ranges can be compared to user input
@@ -154,6 +172,55 @@ fn strip_probe_suffix(input: &str) -> &str {
 }
 
 impl PicoRange {
+    /// The range of a driver's range value, or `None` for a value this
+    /// crate does not name. Never panics, unlike `From<i32>`.
+    pub fn from_code(code: i32) -> Option<Self> {
+        num_traits::FromPrimitive::from_i32(code)
+    }
+
+    /// The full scale of a range read as `±full_scale` in its unit
+    /// ([`PicoRange::get_units`]): the ADC's maximum code reads
+    /// `+full_scale`. `None` for a range with no such scale known here,
+    /// such as an offset or one-sided range (temperature, pressure,
+    /// resistance, ignition pickups), or one this crate cannot scale.
+    pub fn full_scale(self) -> Option<f64> {
+        use PicoRange::*;
+        match self {
+            PS4000A_RESISTANCE_315K
+            | PS4000A_RESISTANCE_1100K
+            | PS4000A_RESISTANCE_10M
+            | PS4000A_RESISTANCE_ADCV_FLAG
+            | CONNECT_PROBE_OFF
+            | RESISTANCE_LEAD_NEG5_TO_20OHM
+            | RESISTANCE_LEAD_NEG50_TO_200OHM
+            | RESISTANCE_LEAD_NEG500_TO_2KOHM
+            | RESISTANCE_LEAD_NEG5K_TO_20KOHM
+            | RESISTANCE_LEAD_NEG50K_TO_LEAD_200KOHM
+            | RESISTANCE_LEAD_NEG500K_TO_LEAD_2MOHM
+            | RESISTANCE_LEAD_DIODE_TEST
+            | HT_NEG3_TO_5KV
+            | HT_NEG3_TO_10KV
+            | HT_NEG5_TO_20KV
+            | HT_NEG5_TO_50KV
+            | HT_NEG5_TO_100KV
+            | HT_NEG3_TO_5KV_INVERTED
+            | HT_NEG3_TO_10KV_INVERTED
+            | HT_NEG5_TO_20KV_INVERTED
+            | HT_NEG5_TO_50KV_INVERTED
+            | HT_NEG5_TO_100KV_INVERTED
+            | TEMPERATURE_NEG50_TO_150DEGC
+            | TEMPERATURE_NEG4_TO_125DEGC
+            | PRESSURE_SENSOR_NEG100000_TO_150000_PASCALS
+            | PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS
+            | PRESSURE_SENSOR_NEG200000_TO_800000_PASCALS
+            | PRESSURE_SENSOR_NEG400000_TO_1600000_PASCALS
+            | PRESSURE_SENSOR_NEG400000_TO_3400000_PASCALS
+            | PRESSURE_SENSOR_NEG150000_TO_1350000_PASCALS
+            | OPTICAL_SENSOR_10V => None,
+            range => Some(range.get_max_scaled_value()),
+        }
+    }
+
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
         let input = normalize(input);
         let all_ranges = enum_iterator::all::<PicoRange>().collect::<Vec<Self>>();
@@ -353,6 +420,35 @@ impl fmt::Display for PicoRange {
             PicoRange::CURRENT_CLAMP_60A_20A => write!(f, "±20 A"),
             PicoRange::CURRENT_CLAMP_60A_50A => write!(f, "±50 A"),
             PicoRange::CURRENT_CLAMP_60A_60A => write!(f, "±60 A"),
+            PicoRange::CURRENT_CLAMP_100A_2_5A => write!(f, "±2.5 A"),
+            PicoRange::CURRENT_CLAMP_100A_5A => write!(f, "±5 A"),
+            PicoRange::CURRENT_CLAMP_100A_10A => write!(f, "±10 A"),
+            PicoRange::CURRENT_CLAMP_100A_25A => write!(f, "±25 A"),
+            PicoRange::CURRENT_CLAMP_100A_50A => write!(f, "±50 A"),
+            PicoRange::CURRENT_CLAMP_100A_100A => write!(f, "±100 A"),
+            PicoRange::CURRENT_CLAMP_60A_V2_0_5A => write!(f, "±500 mA"),
+            PicoRange::CURRENT_CLAMP_60A_V2_1A => write!(f, "±1 A"),
+            PicoRange::CURRENT_CLAMP_60A_V2_2A => write!(f, "±2 A"),
+            PicoRange::CURRENT_CLAMP_60A_V2_5A => write!(f, "±5 A"),
+            PicoRange::CURRENT_CLAMP_60A_V2_10A => write!(f, "±10 A"),
+            PicoRange::CURRENT_CLAMP_60A_V2_20A => write!(f, "±20 A"),
+            PicoRange::CURRENT_CLAMP_60A_V2_50A => write!(f, "±50 A"),
+            PicoRange::CURRENT_CLAMP_60A_V2_60A => write!(f, "±60 A"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_5V => write!(f, "±5 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_10V => write!(f, "±10 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_20V => write!(f, "±20 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_50V => write!(f, "±50 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_100V => write!(f, "±100 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_200V => write!(f, "±200 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_500V => write!(f, "±500 V"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1000V => write!(f, "±1 kV"),
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1400V => write!(f, "±1.4 kV"),
+            PicoRange::X10_ACTIVE_PROBE_100MV => write!(f, "±100 mV (x10)"),
+            PicoRange::X10_ACTIVE_PROBE_200MV => write!(f, "±200 mV (x10)"),
+            PicoRange::X10_ACTIVE_PROBE_500MV => write!(f, "±500 mV (x10)"),
+            PicoRange::X10_ACTIVE_PROBE_1V => write!(f, "±1 V (x10)"),
+            PicoRange::X10_ACTIVE_PROBE_2V => write!(f, "±2 V (x10)"),
+            PicoRange::X10_ACTIVE_PROBE_5V => write!(f, "±5 V (x10)"),
             rest => write!(f, "{:?}", rest),
         }
     }
@@ -458,8 +554,18 @@ impl PicoRange {
             | PicoRange::CURRENT_CLAMP_60A_10A
             | PicoRange::CURRENT_CLAMP_60A_20A
             | PicoRange::CURRENT_CLAMP_60A_50A
-            | PicoRange::CURRENT_CLAMP_60A_60A => UnitStrings::new("Amps", "A"),
-            PicoRange::TEMPERATURE_NEG50_TO_150DEGC => UnitStrings::new("Degrees Celsius", "°C"),
+            | PicoRange::CURRENT_CLAMP_60A_60A
+            | PicoRange::CURRENT_CLAMP_60A_V2_0_5A
+            | PicoRange::CURRENT_CLAMP_60A_V2_1A
+            | PicoRange::CURRENT_CLAMP_60A_V2_2A
+            | PicoRange::CURRENT_CLAMP_60A_V2_5A
+            | PicoRange::CURRENT_CLAMP_60A_V2_10A
+            | PicoRange::CURRENT_CLAMP_60A_V2_20A
+            | PicoRange::CURRENT_CLAMP_60A_V2_50A
+            | PicoRange::CURRENT_CLAMP_60A_V2_60A => UnitStrings::new("Amps", "A"),
+            PicoRange::TEMPERATURE_NEG50_TO_150DEGC | PicoRange::TEMPERATURE_NEG4_TO_125DEGC => {
+                UnitStrings::new("Degrees Celsius", "°C")
+            }
             PicoRange::PRESSURE_SENSOR_NEG100000_TO_150000_PASCALS
             | PicoRange::PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS
             | PicoRange::PRESSURE_SENSOR_NEG200000_TO_800000_PASCALS
@@ -580,6 +686,29 @@ impl PicoRange {
             PicoRange::CURRENT_CLAMP_60A_20A => 20.0,
             PicoRange::CURRENT_CLAMP_60A_50A => 50.0,
             PicoRange::CURRENT_CLAMP_60A_60A => 60.0,
+            PicoRange::CURRENT_CLAMP_60A_V2_0_5A => 0.5,
+            PicoRange::CURRENT_CLAMP_60A_V2_1A => 1.0,
+            PicoRange::CURRENT_CLAMP_60A_V2_2A => 2.0,
+            PicoRange::CURRENT_CLAMP_60A_V2_5A => 5.0,
+            PicoRange::CURRENT_CLAMP_60A_V2_10A => 10.0,
+            PicoRange::CURRENT_CLAMP_60A_V2_20A => 20.0,
+            PicoRange::CURRENT_CLAMP_60A_V2_50A => 50.0,
+            PicoRange::CURRENT_CLAMP_60A_V2_60A => 60.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_5V => 5.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_10V => 10.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_20V => 20.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_50V => 50.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_100V => 100.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_200V => 200.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_500V => 500.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1000V => 1_000.0,
+            PicoRange::HIGH_VOLTAGE_DIFFERENTIAL_1400V => 1_400.0,
+            PicoRange::X10_ACTIVE_PROBE_100MV => 0.1,
+            PicoRange::X10_ACTIVE_PROBE_200MV => 0.2,
+            PicoRange::X10_ACTIVE_PROBE_500MV => 0.5,
+            PicoRange::X10_ACTIVE_PROBE_1V => 1.0,
+            PicoRange::X10_ACTIVE_PROBE_2V => 2.0,
+            PicoRange::X10_ACTIVE_PROBE_5V => 5.0,
             oops => panic!("Scaling for range '{:?}' not defined", oops),
         }
     }
@@ -588,6 +717,17 @@ impl PicoRange {
 #[cfg(test)]
 mod range_tests {
     use super::*;
+
+    #[test]
+    fn full_scale_never_panics_and_matches_codes() {
+        for range in enum_iterator::all::<PicoRange>() {
+            let _ = range.full_scale();
+            assert_eq!(PicoRange::from_code(i32::from(range)), Some(range));
+        }
+        assert_eq!(PicoRange::from_code(10750), None);
+        assert_eq!(PicoRange::CURRENT_CLAMP_60A_20A.full_scale(), Some(20.0));
+        assert_eq!(PicoRange::TEMPERATURE_NEG50_TO_150DEGC.full_scale(), None);
+    }
 
     #[test]
     fn probes_give_their_units() {

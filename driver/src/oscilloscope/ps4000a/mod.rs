@@ -5,6 +5,7 @@ mod digital;
 mod ets;
 mod extras;
 mod led;
+mod probes;
 mod rapid_block;
 mod siggen;
 mod streaming;
@@ -17,13 +18,11 @@ use super::{
     trampoline::split_closure,
     EnumerationResult, OscilloscopeDriverInternal, PowerStates, SampleBuffer,
 };
-use c_vec::CVec;
-use lazy_static::lazy_static;
-use parking_lot::Mutex;
 use pico_common::BandwidthLimit;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
-    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, PowerSource, ToPicoStr,
+    PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, PowerSource, ProbeState,
+    ToPicoStr,
 };
 use pico_sys_dynamic::ps4000a::{
     enPS4000ABandwidthLimiter_PS4000A_BW_100KHZ, enPS4000ABandwidthLimiter_PS4000A_BW_1MHZ,
@@ -31,52 +30,13 @@ use pico_sys_dynamic::ps4000a::{
 };
 use pico_sys_dynamic::ps4000a::{
     enPS4000ARatioMode_PS4000A_RATIO_MODE_AVERAGE, enPS4000ARatioMode_PS4000A_RATIO_MODE_NONE,
-    PS4000ALoader, PS4000A_USER_PROBE_INTERACTIONS,
+    PS4000ALoader,
 };
-use std::{collections::HashMap, matches};
+use std::matches;
 
-type ChannelRangesMap = HashMap<PicoChannel, Vec<PicoRange>>;
-
-lazy_static! {
-    /// Because the probe callback does not support passing context, we have to
-    /// store the returned probes globally
-    static ref PROBES_4000A: Mutex<HashMap<i16, ChannelRangesMap>> = Default::default();
-}
-
-#[tracing::instrument(level = "debug")]
-extern "C" fn probes_callback_4000a(
-    handle: i16,
-    _status: u32,
-    probes_ptr: *mut PS4000A_USER_PROBE_INTERACTIONS,
-    probes_num: u32,
-) {
-    let probes = unsafe { CVec::new(probes_ptr, probes_num as usize) };
-    let mut probes_4000a = PROBES_4000A.lock();
-
-    let mut device_probes = probes_4000a.get(&handle).unwrap_or(&HashMap::new()).clone();
-
-    for each in probes.iter() {
-        let ch: PicoChannel = each.channel.into();
-        if each.connected == 1 {
-            if each.rangeFirst_ != each.rangeLast_ {
-                let ranges: Vec<PicoRange> = (each.rangeFirst_..each.rangeLast_)
-                    .map(PicoRange::from)
-                    .collect();
-                device_probes.insert(ch, ranges);
-            }
-        } else {
-            device_probes.remove(&ch);
-        }
-    }
-
-    tracing::trace!(
-        "probes_callback_4000a() {{ handle: {}, probes:{:?} }}",
-        handle,
-        device_probes
-    );
-
-    probes_4000a.insert(handle, device_probes);
-}
+/// How long an open waits for the driver's first probe reports. The
+/// guide gives no count of reports to wait for.
+const PROBE_WAIT: std::time::Duration = std::time::Duration::from_millis(800);
 
 pub struct PS4000ADriver {
     _dependencies: LoadedDependencies,
@@ -109,7 +69,7 @@ impl PS4000ADriver {
 
 impl OscilloscopeDriverInternal for PS4000ADriver {
     fn get_driver(&self) -> Driver {
-        Driver::PS3000A
+        Driver::PS4000A
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -185,13 +145,21 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
 
         match status {
             PicoStatus::OK => {
-                unsafe {
+                // Before any SetChannel (ps4000a API help, "Handling
+                // PicoConnect probe interactions").
+                let status = PicoStatus::from(unsafe {
                     self.bindings
-                        .ps4000aSetProbeInteractionCallback(handle, Some(probes_callback_4000a));
+                        .ps4000aSetProbeInteractionCallback(handle, Some(probes::callback))
+                });
+                if status != PicoStatus::OK {
+                    tracing::warn!(?status, "probe callback not set; probes are not seen");
                 }
-
-                // There is no way to know how many probes we need to wait for
-                std::thread::sleep(std::time::Duration::from_millis(800));
+                std::thread::sleep(PROBE_WAIT);
+                tracing::debug!(
+                    handle,
+                    probes = probes::states(handle).len(),
+                    "probes read at open"
+                );
 
                 Ok(handle)
             }
@@ -216,8 +184,7 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
     #[tracing::instrument(level = "trace", skip(self))]
     fn close(&self, handle: i16) -> PicoResult<()> {
         self.power.closed(handle);
-        // Remove probes for 4000a devices when they are closed
-        PROBES_4000A.lock().remove(&handle);
+        probes::forget(handle);
 
         PicoStatus::from(unsafe { self.bindings.ps4000aCloseUnit(handle) })
             .to_result((), "close_unit")
@@ -246,11 +213,9 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>> {
-        // Check if we've had probes returned for this device
-        if let Some(probes) = PROBES_4000A.lock().get(&handle) {
-            if let Some(ranges) = probes.get(&channel.clone()) {
-                return Ok(ranges.clone());
-            };
+        // A channel with a probe takes the probe's ranges only.
+        if let Some(probe) = probes::connected(handle, channel) {
+            return Ok(probe.ranges);
         }
 
         let mut ranges = vec![0i32; 30];
@@ -350,11 +315,25 @@ impl OscilloscopeDriverInternal for PS4000ADriver {
 
     #[tracing::instrument(level = "trace", skip(self))]
     fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()> {
+        // A channel with a probe is turned off at the probe's off range,
+        // else the driver answers PROBE_CHANNEL_OUT_OF_SYNC.
+        let range = match probes::connected(handle, channel) {
+            Some(_) => PicoRange::CONNECT_PROBE_OFF.into(),
+            None => 0,
+        };
         PicoStatus::from(unsafe {
             self.bindings
-                .ps4000aSetChannel(handle, channel.into(), 0, 0, 0, 0.0)
+                .ps4000aSetChannel(handle, channel.into(), 0, 0, range, 0.0)
         })
         .to_result((), "set_channel")
+    }
+
+    fn probes(&self, handle: i16) -> Vec<ProbeState> {
+        probes::states(handle)
+    }
+
+    fn take_probe_changes(&self, handle: i16) -> Vec<ProbeState> {
+        probes::take_changes(handle)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

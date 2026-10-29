@@ -2,7 +2,7 @@ use crate::DeviceOpen;
 use pico_common::{
     DigitalPort, DigitalPortConfig, Downsample, OscilloscopeChannelConfig, PicoChannel,
     PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
-    PowerSource, RateLimit, ScopeCapabilities, TriggerConfig,
+    PowerSource, ProbeState, RateLimit, ScopeCapabilities, TriggerConfig,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -128,9 +128,45 @@ pub struct OscilloscopeInfo {
     pub supply_channels: Vec<PicoChannel>,
     /// What the unit can do beyond streaming
     pub capabilities: ScopeCapabilities,
+    /// The last probe state of each channel the unit reported one for,
+    /// by channel, on a unit that detects probes. A channel with a
+    /// connected probe has the probe's ranges in `valid_channel_ranges`.
+    pub probes: Vec<ProbeState>,
 }
 
 impl OscilloscopeInfo {
+    /// The connected probe on `channel`, if any.
+    pub fn probe(&self, channel: PicoChannel) -> Option<&ProbeState> {
+        self.probes
+            .iter()
+            .find(|p| p.channel == channel && p.connected)
+    }
+
+    /// Takes probe states the unit reported: each replaces its
+    /// channel's state, and the channel's ranges are read again from
+    /// `driver`. A channel whose ranges cannot be read keeps its old.
+    pub fn apply_probe_changes(&mut self, driver: &OscilloscopeDriver, changes: &[ProbeState]) {
+        for change in changes {
+            match self.probes.iter_mut().find(|p| p.channel == change.channel) {
+                Some(state) => *state = change.clone(),
+                None => self.probes.push(change.clone()),
+            }
+            if self.valid_channel_ranges.contains_key(&change.channel) {
+                match driver.get_channel_ranges(*self.handle, change.channel) {
+                    Ok(ranges) => {
+                        self.valid_channel_ranges.insert(change.channel, ranges);
+                    }
+                    Err(error) => tracing::warn!(
+                        channel = %change.channel,
+                        %error,
+                        "channel ranges not read after a probe change"
+                    ),
+                }
+            }
+        }
+        self.probes.sort_by_key(|p| p.channel);
+    }
+
     pub fn get_channels(&self) -> Vec<PicoChannel> {
         self.valid_channel_ranges.keys().copied().collect()
     }
@@ -378,6 +414,9 @@ impl OscilloscopeDevice {
             "unit info read"
         );
         let capabilities = driver.capabilities(handle)?;
+        // The states read now hold every report so far.
+        let _ = driver.take_probe_changes(handle);
+        let probes = driver.probes(handle);
 
         Ok(OscilloscopeInfo {
             handle: Arc::new(handle),
@@ -391,6 +430,7 @@ impl OscilloscopeDevice {
             power,
             supply_channels,
             capabilities,
+            probes,
         })
     }
 }
@@ -454,6 +494,7 @@ mod resolution_tests {
             power: Some(PowerSource::External),
             supply_channels: vec![PicoChannel::C, PicoChannel::D],
             capabilities: ScopeCapabilities::default(),
+            probes: Vec::new(),
         }
     }
 
@@ -612,6 +653,7 @@ mod power_tests {
             power,
             supply_channels: vec![C, D],
             capabilities: ScopeCapabilities::default(),
+            probes: Vec::new(),
         }
     }
 
