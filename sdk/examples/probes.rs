@@ -5,9 +5,10 @@
 //! mean, and prints each probe change while it watches, so plugging a
 //! probe in, out or swapping it shows.
 //!
-//! `cargo run --example probes -- [driver] [serial] [seconds]`
+//! `cargo run --example probes -- [driver] [serial] [seconds] [channels]`
 //!
-//! The driver defaults to `4000a`, the seconds to 20. Drivers come
+//! The driver defaults to `4000a`, the seconds to 20, the channels to
+//! every channel (`AB` streams A and B and turns the others off). Drivers come
 //! from the download cache, fetched first when missing.
 
 use pico_sdk::prelude::*;
@@ -121,6 +122,7 @@ fn main() {
         .expect("a driver type such as 4000a");
     let serial = args.next().filter(|s| !s.is_empty() && s != "-");
     let seconds: u64 = args.next().map_or(20, |s| s.parse().expect("seconds"));
+    let only: Option<String> = args.next().map(|s| s.to_uppercase());
 
     let resolution = cache_resolution();
     let driver = match driver_type.load(&resolution) {
@@ -155,6 +157,12 @@ fn main() {
     let mut config = OscilloscopeConfig::default();
     config.set_sample_rate(1_000);
     for channel in &channels {
+        if only
+            .as_ref()
+            .is_some_and(|o| !o.contains(&channel.to_string()))
+        {
+            continue;
+        }
         if info.probe(*channel).is_some_and(|p| p.problem().is_some()) {
             continue;
         }
