@@ -2,7 +2,8 @@
 ///
 /// These loggers convert their channels in turn, about 720 ms each, and a read returns the
 /// newest conversion. A read between two conversions of a channel gives the same value again,
-/// which the driver flags with `PICO_WARNING_REPEAT_VALUE`.
+/// which the driver flags with `PICO_WARNING_REPEAT_VALUE` (seen on a USB PT-104). A PT-104
+/// channel set to PT100 or PT1000 with no sensor attached never converts, and reads `NotReady`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoggerReading {
     /// A conversion since the last read
