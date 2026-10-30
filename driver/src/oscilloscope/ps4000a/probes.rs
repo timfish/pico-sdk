@@ -5,9 +5,13 @@
 //!
 //! Sources: ps4000a API help, "ps4000aProbeInteractions" and
 //! "PS4000A_USER_PROBE_INTERACTIONS"; Pico forum topic p=152524 (the
-//! callback works on the 4x25A; each call holds only the channels whose
-//! probe changed; a range outside first..=last is refused; a channel
-//! with a probe is turned off with `PICO_CONNECT_PROBE_OFF`).
+//! callback works on the 4x25A; a range outside first..=last is
+//! refused; a channel with a probe is turned off with
+//! `PICO_CONNECT_PROBE_OFF`).
+//!
+//! On a 4425A each call also held channels whose probe had not
+//! changed, and an unplugged probe kept its name, so a state counts as
+//! a change only when [`ProbeState::same_probe`] says it differs.
 
 use c_vec::CVec;
 use lazy_static::lazy_static;
@@ -29,7 +33,8 @@ lazy_static! {
 }
 
 /// The state of one element of the driver's array. `None` for a
-/// channel this crate does not name.
+/// channel this crate does not name. A probe that is not connected is
+/// [`PicoProbe::None`] with no ranges.
 pub(crate) fn state_of(p: &PS4000A_USER_PROBE_INTERACTIONS) -> Option<ProbeState> {
     // Copies, as the struct is packed.
     let channel = p.channel;
@@ -44,10 +49,16 @@ pub(crate) fn state_of(p: &PS4000A_USER_PROBE_INTERACTIONS) -> Option<ProbeState
     };
     let status = p.status_;
     let probe = p.probeName;
+    let connected = p.connected != 0;
+    let (probe, ranges, unknown_ranges) = if connected {
+        (PicoProbe::from_code(probe), ranges, unknown_ranges)
+    } else {
+        (PicoProbe::None, Vec::new(), Vec::new())
+    };
     Some(ProbeState {
         channel,
-        probe: PicoProbe::from_code(probe),
-        connected: p.connected != 0,
+        probe,
+        connected,
         enabled: p.enabled != 0,
         requires_power: p.requiresPower_ != 0,
         powered: p.isPowered_ != 0,
@@ -73,13 +84,23 @@ fn coupling(value: u32) -> Option<PicoCoupling> {
 }
 
 impl UnitProbes {
-    /// Takes one call's states: each replaces its channel's state and
-    /// is kept as a change.
-    pub fn update(&mut self, states: Vec<ProbeState>) {
+    /// Takes one call's states: each replaces its channel's state, and
+    /// is kept as a change when its probe differs from the one before.
+    /// Gives the number of changes.
+    pub fn update(&mut self, states: Vec<ProbeState>) -> usize {
+        let mut changed = 0;
         for state in states {
+            let same = self
+                .states
+                .get(&state.channel)
+                .is_some_and(|before| before.same_probe(&state));
             self.states.insert(state.channel, state.clone());
-            self.changes.push(state);
+            if !same {
+                self.changes.push(state);
+                changed += 1;
+            }
         }
+        changed
     }
 
     /// The connected probe on `channel`, if any.
@@ -104,12 +125,13 @@ pub(crate) extern "C" fn callback(
         let raw = unsafe { CVec::new(probes, count as usize) };
         let states: Vec<ProbeState> = raw.iter().filter_map(state_of).collect();
         for s in &states {
-            tracing::info!(
+            tracing::debug!(
                 handle,
                 channel = %s.channel,
                 probe = %s.probe,
                 code = s.probe.code(),
                 connected = s.connected,
+                enabled = s.enabled,
                 powered = s.powered,
                 requires_power = s.requires_power,
                 status = ?s.status,
@@ -119,7 +141,13 @@ pub(crate) extern "C" fn callback(
                 "probe reported"
             );
         }
-        PROBES.lock().entry(handle).or_default().update(states);
+        let reported = states.len();
+        let changed = PROBES.lock().entry(handle).or_default().update(states);
+        if changed > 0 {
+            tracing::info!(handle, reported, changed, "probe states changed");
+        } else {
+            tracing::debug!(handle, reported, "probe states reported with no change");
+        }
     });
     if result.is_err() {
         tracing::error!(handle, "probe callback panicked; its states are lost");
@@ -229,6 +257,45 @@ mod tests {
         assert!(unit.connected(PicoChannel::B).is_none());
         assert_eq!(unit.states.len(), 2);
         assert_eq!(unit.changes.len(), 3);
+    }
+
+    /// As a 4425A did: one call for a probe pulled from A also held B
+    /// and C, whose leads had not moved, and A's probe kept its name.
+    #[test]
+    fn only_real_changes_are_kept() {
+        let mut unit = UnitProbes::default();
+        let open = vec![
+            state_of(&raw(0, 5013, true)).unwrap(),
+            state_of(&raw(1, 4404, true)).unwrap(),
+            state_of(&raw(2, 4407, true)).unwrap(),
+        ];
+        assert_eq!(unit.update(open), 3);
+        unit.changes.clear();
+        let mut lead_b = raw(1, 4404, true);
+        // The application set B's range and turned C off meanwhile.
+        lead_b.rangeCurrent_ = 10501;
+        let mut lead_c = raw(2, 4407, true);
+        lead_c.enabled = 0;
+        let pulled = vec![
+            state_of(&lead_b).unwrap(),
+            state_of(&lead_c).unwrap(),
+            state_of(&raw(0, 5013, false)).unwrap(),
+        ];
+        assert_eq!(unit.update(pulled), 1);
+        assert_eq!(unit.changes.len(), 1);
+        let a = &unit.changes[0];
+        assert_eq!(a.channel, PicoChannel::A);
+        assert_eq!(a.probe, PicoProbe::None);
+        assert!(a.ranges.is_empty());
+        assert_eq!(a.probe.to_string(), "No probe");
+        // The states hold what was reported last.
+        assert_eq!(
+            unit.states[&PicoChannel::B].range,
+            Some(PicoRange::CURRENT_CLAMP_60A_5A)
+        );
+        // Plugged in again, the probe is a change once.
+        assert_eq!(unit.update(vec![state_of(&raw(0, 5013, true)).unwrap()]), 1);
+        assert_eq!(unit.update(vec![state_of(&raw(0, 5013, true)).unwrap()]), 0);
     }
 
     #[test]

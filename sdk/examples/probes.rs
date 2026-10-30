@@ -1,6 +1,7 @@
 //! Opens a scope that detects probes and prints what its driver
-//! reports: each channel's probe, its ranges with their units, and the
-//! range and coupling the probe is set to. Then streams every channel
+//! reports: each channel's probe, its ranges with their units and DC
+//! offset limits, and the range and coupling the probe is set to. Then
+//! streams every channel
 //! that has a range at 1 kS/s and prints each channel's unit, scale and
 //! mean, and prints each probe change while it watches, so plugging a
 //! probe in, out or swapping it shows.
@@ -85,9 +86,17 @@ fn print_ranges(info: &OscilloscopeInfo, channel: PicoChannel) {
         .unwrap_or_default();
     let shown: Vec<String> = ranges
         .iter()
-        .map(|r| match r.full_scale() {
-            Some(_) => format!("{r} [{}]", r.get_units().short),
-            None => format!("{r:?} [{}, no scale]", r.get_units().short),
+        .map(|r| {
+            let unit = r.get_units().short;
+            let offset = info
+                .offset_limits(*r, PicoCoupling::DC)
+                .map_or(String::new(), |(lo, hi)| {
+                    format!(", offset {lo} to {hi} {unit}")
+                });
+            match r.full_scale() {
+                Some(_) => format!("{r} [{unit}{offset}]"),
+                None => format!("{r:?} [{unit}, no scale{offset}]"),
+            }
         })
         .collect();
     println!("  {channel} ranges: {}", shown.join(", "));
@@ -180,6 +189,7 @@ fn main() {
 
     let mut on: Vec<_> = config.channels.iter().map(|(c, v)| (*c, v.range)).collect();
     on.sort();
+    let ranges: HashMap<PicoChannel, PicoRange> = on.iter().copied().collect();
     println!("streaming at 1 kS/s: {on:?}");
     if let Err(e) = streaming.start(config) {
         println!("stream start failed: {e}");
@@ -196,14 +206,10 @@ fn main() {
         sums.clear();
         drop(sums);
         for (channel, mean, n, multiplier) in line {
-            let unit = streaming
-                .get_info()
-                .and_then(|i| i.probe(channel).and_then(|p| p.range))
-                .map(|r| r.get_units().short)
-                .unwrap_or_else(|| "?".into());
-            println!(
-                "  {channel}: mean {mean:.6} over {n} samples, scale {multiplier:e} (probe unit {unit})"
-            );
+            // The stream runs at the ranges it started with.
+            let range = ranges[&channel];
+            let unit = range.get_units().short;
+            println!("  {channel}: mean {mean:.6} {unit} over {n} samples at {range}, scale {multiplier:e}");
         }
     }
     streaming.stop();
