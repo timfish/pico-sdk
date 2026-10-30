@@ -30,6 +30,8 @@ The background thread waits 1 s after a step that failed or found the unit lost,
 A logger stream step that fails closes the unit as before, so the same opens follow.
 A start that fails 3 times in a row (`LOST_AFTER_STARTS`) with a status `unit_lost` does not name, such as `BUSY`, counts the unit as lost too: a retry on the same handle gave the same answer, so the runner closes the unit, sends `DeviceNotice::StartsFailed` with the last error, and opens it again by its serial.
 A caller that streams shows that error, as the stream does not run while the starts fail.
+A start the driver refuses for its settings (`settings_refused`: a status of Pico's published `PicoStatus.h` that names a refused value, such as `INVALID_BANDWIDTH` or `INVALID_VOLTAGE_RANGE`) does not count: the unit works, and a close and an open again give the same answer.
+The runner sets the target to `Open`, as for a config that `StreamDevice::check` refuses, and sends `DeviceNotice::StartRefused` with the error, so a caller that streams shows it and decides when to start again; `StreamingRunner::start` returns it too.
 A start that streams, or a unit counted as lost, sets the count back to 0.
 `StreamingRunner::reopen` closes and opens the unit at once for a caller, also while it holds the steps, as a block capture's set-up does after `BlockRunner::new` fails so.
 A 5464E timed out a change to 16 bits with nothing on, after a stream of ports alone; a second try with the channels on then worked, but every channel read over range until the unit opened again (2026-10-22).

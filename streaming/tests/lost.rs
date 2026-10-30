@@ -1,8 +1,9 @@
 //! A logger whose unit is lost: a fake unit shaped like a TC-08, whose
 //! `start` answers the driver's communication error
 //! (`DEVICE_NOT_FUNCTIONING`) on a handle a unit plugged in again no
-//! longer answers, or a status that does not say the unit is lost
-//! (`BUSY`) on a handle no retry clears.
+//! longer answers, a status that does not say the unit is lost
+//! (`BUSY`) on a handle no retry clears, or a refused setting
+//! (`INVALID_BANDWIDTH`) on every handle.
 
 use pico_common::{PicoError, PicoResult, PicoStatus};
 use pico_streaming::{
@@ -11,7 +12,7 @@ use pico_streaming::{
 };
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     thread,
@@ -31,6 +32,9 @@ struct Unit {
     /// The handle whose starts answer `BUSY`, as a unit whose driver
     /// left it in a state only a new open clears
     stuck: Arc<Mutex<Option<Handle>>>,
+    /// Every start answers `INVALID_BANDWIDTH` while set, as a scope
+    /// whose driver refuses a bandwidth limit at its resolution
+    refuses: Arc<AtomicBool>,
     /// The handle of each start, in order
     starts: Arc<Mutex<Vec<Handle>>>,
 }
@@ -46,6 +50,13 @@ impl Unit {
     fn stuck_on(handle: Handle) -> Self {
         Unit {
             stuck: Arc::new(Mutex::new(Some(handle))),
+            ..Default::default()
+        }
+    }
+
+    fn refusing() -> Self {
+        Unit {
+            refuses: Arc::new(AtomicBool::new(true)),
             ..Default::default()
         }
     }
@@ -78,6 +89,12 @@ impl StreamDevice<(), Handle, (), ()> for Unit {
         _notices: &EventEmitter<DeviceNotice>,
     ) -> PicoResult<Current<Handle, ()>> {
         self.starts.lock().unwrap().push(*info);
+        if self.refuses.load(Ordering::SeqCst) {
+            return Err(PicoError::from_status(
+                PicoStatus::INVALID_BANDWIDTH,
+                "set_channel_on",
+            ));
+        }
         if *self.stuck.lock().unwrap() == Some(*info) {
             return Err(PicoError::from_status(PicoStatus::BUSY, "run_streaming"));
         }
@@ -260,5 +277,49 @@ fn starts_that_keep_failing_count_the_unit_as_lost() {
     };
     assert_eq!(error.status, PicoStatus::BUSY);
     assert_eq!(*starts, LOST_AFTER_STARTS);
+    runner.close();
+}
+
+/// A start the driver refuses for its settings does not count the
+/// unit as lost, however often a caller asks: the runner keeps the
+/// handle, stops trying on its own, and tells why each time. A start
+/// after the settings changed streams on the same handle.
+#[test]
+fn a_start_refused_for_its_settings_does_not_count_the_unit_as_lost() {
+    let unit = Unit::refusing();
+    let (runner, seen) = runner_of(&unit);
+    runner.close();
+    wait_until("closed", Duration::from_secs(1), || {
+        runner.get_info().is_none()
+    });
+
+    for _ in 0..LOST_AFTER_STARTS + 1 {
+        let error = runner.start(()).unwrap_err();
+        assert_eq!(error.status, PicoStatus::INVALID_BANDWIDTH);
+        assert_eq!(runner.get_config(), None, "the target is Open");
+    }
+    assert_eq!(unit.opens().len(), 1);
+    assert_eq!(unit.closes.load(Ordering::SeqCst), 1, "the close above");
+    assert_eq!(
+        unit.starts.lock().unwrap().len(),
+        LOST_AFTER_STARTS + 1,
+        "no start but the caller's"
+    );
+    let notices = seen.notices.lock().unwrap().clone();
+    assert_eq!(notices.len(), LOST_AFTER_STARTS + 1, "{notices:?}");
+    assert!(
+        notices.iter().all(|n| matches!(
+            n,
+            DeviceNotice::StartRefused { error } if error.status == PicoStatus::INVALID_BANDWIDTH
+        )),
+        "{notices:?}"
+    );
+
+    unit.refuses.store(false, Ordering::SeqCst);
+    runner.start(()).unwrap();
+    assert_eq!(runner.get_info(), Some(1));
+    wait_until("events", Duration::from_secs(5), || {
+        seen.events.load(Ordering::SeqCst) >= 1
+    });
     runner.close();
 }
