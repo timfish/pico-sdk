@@ -57,7 +57,7 @@ fn variant_resolutions(variant: &str) -> &'static [PicoResolution] {
 
 pub struct PS6000ADriver {
     _dependencies: LoadedDependencies,
-    bindings: PS6000ALoader,
+    bindings: crate::Kept<PS6000ALoader>,
     /// The ratio mode and data type of each handle's buffers.
     streams: RwLock<HashMap<i16, PicoStreamMode>>,
     /// The digital ports with a stream buffer on each handle.
@@ -76,7 +76,7 @@ impl PS6000ADriver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS6000A, path.as_ref());
-        let bindings = unsafe { PS6000ALoader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS6000ALoader::new(path)? });
         Ok(PS6000ADriver {
             bindings,
             _dependencies: dependencies,

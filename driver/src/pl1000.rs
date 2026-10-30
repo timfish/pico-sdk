@@ -29,7 +29,7 @@ use pico_sys_dynamic::pl1000::{
 use std::{iter, ops::Deref, path::Path, sync::Arc};
 
 pub struct PL1000DriverInternal {
-    bindings: PL1000Loader,
+    bindings: crate::Kept<PL1000Loader>,
 }
 
 impl PL1000DriverInternal {
@@ -284,7 +284,7 @@ pub struct PL1000Driver(Arc<PL1000DriverInternal>);
 impl PL1000Driver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(PL1000Driver(Arc::new(PL1000DriverInternal {
-            bindings: unsafe { PL1000Loader::new(path.as_ref())? },
+            bindings: crate::Kept::new(unsafe { PL1000Loader::new(path.as_ref())? }),
         })))
     }
 

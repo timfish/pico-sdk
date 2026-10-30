@@ -28,7 +28,7 @@ use pico_sys_dynamic::ps4000::{
 
 pub struct PS4000Driver {
     _dependencies: LoadedDependencies,
-    bindings: PS4000Loader,
+    bindings: crate::Kept<PS4000Loader>,
 }
 
 impl std::fmt::Debug for PS4000Driver {
@@ -43,7 +43,7 @@ impl PS4000Driver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS4000, path.as_ref());
-        let bindings = unsafe { PS4000Loader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS4000Loader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps4000ApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS4000Driver {

@@ -1,4 +1,4 @@
-use std::{ffi::CString, str};
+use std::ffi::CString;
 
 /// Pico drivers require strings as *mut i8. This converts from Rust
 /// to Pico string format
@@ -21,22 +21,25 @@ impl ToPicoStr for &str {
 /// Pico drivers return strings as *i8. This converts from Pico to Rust string
 /// formats
 pub trait FromPicoStr {
-    /// Converts from Pico null terminated Vec<i8> string format to Rust Strings
+    /// Reads a C string from the first `buf_len` bytes of the buffer.
+    ///
+    /// The string ends at the first NUL, or at `buf_len` or the end of the
+    /// buffer when there is none, so a length that counts the NUL, misses it
+    /// or runs past the buffer gives the same string. Bytes that are not
+    /// UTF-8 become U+FFFD.
     #[allow(clippy::wrong_self_convention)]
     fn from_pico_i8_string(self, buf_len: usize) -> String;
 }
 
 impl FromPicoStr for &[i8] {
     fn from_pico_i8_string(self, buf_len: usize) -> String {
-        let serial_vec: Vec<u8> = self[..(buf_len - 1)].iter().map(|&x| x as u8).collect();
+        let bytes: Vec<u8> = self[..buf_len.min(self.len())]
+            .iter()
+            .take_while(|&&b| b != 0)
+            .map(|&b| b as u8)
+            .collect();
 
-        str::from_utf8(&serial_vec)
-            .expect("invalid utf8 string")
-            // This should not be required but older versions of the 5000a
-            // driver return the wrong buf_len for the driver version string.
-            // This trims the extra nulls that we get in the buffer
-            .trim_matches(char::from(0))
-            .to_string()
+        String::from_utf8_lossy(&bytes).into_owned()
     }
 }
 
@@ -65,5 +68,40 @@ mod tests {
         let ps = [s1.into_pico_i8_string(), vec![0; 200]].concat();
         let s2 = ps.from_pico_i8_string(ps.len());
         assert_eq!(s1, s2)
+    }
+
+    fn pico(bytes: &[u8]) -> Vec<i8> {
+        bytes.iter().map(|&b| b as i8).collect()
+    }
+
+    #[test]
+    fn ends_at_first_nul_within_length() {
+        let buf = pico(b"ES283/108\0");
+        assert_eq!(buf.from_pico_i8_string(buf.len()), "ES283/108");
+        assert_eq!(buf.from_pico_i8_string(10), "ES283/108");
+    }
+
+    #[test]
+    fn no_nul_takes_the_length() {
+        let buf = pico(b"AB123/0045");
+        assert_eq!(buf.from_pico_i8_string(buf.len()), "AB123/0045");
+        assert_eq!(buf.from_pico_i8_string(4), "AB12");
+    }
+
+    #[test]
+    fn length_zero_is_empty() {
+        assert_eq!(pico(b"abc\0").from_pico_i8_string(0), "");
+        assert_eq!(Vec::<i8>::new().from_pico_i8_string(0), "");
+    }
+
+    #[test]
+    fn length_past_buffer_stops_at_buffer() {
+        assert_eq!(pico(b"abc").from_pico_i8_string(300), "abc");
+        assert_eq!(pico(b"abc\0junk").from_pico_i8_string(300), "abc");
+    }
+
+    #[test]
+    fn invalid_utf8_is_replaced() {
+        assert_eq!(pico(b"a\xffb\0").from_pico_i8_string(4), "a\u{fffd}b");
     }
 }

@@ -155,7 +155,7 @@ fn listed_resolutions(details: &JsonValue) -> Vec<enPicoDeviceResolution> {
 
 pub struct PSOSPADriver {
     _dependencies: LoadedDependencies,
-    bindings: PSOSPALoader,
+    bindings: crate::Kept<PSOSPALoader>,
     /// The resolution each open handle was opened at. One driver serves
     /// every unit of the family, and units differ in what they support.
     resolutions: RwLock<HashMap<i16, enPicoDeviceResolution>>,
@@ -181,7 +181,7 @@ impl PSOSPADriver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PSOSPA, path.as_ref());
-        let bindings = unsafe { PSOSPALoader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PSOSPALoader::new(path)? });
         Ok(PSOSPADriver {
             bindings,
             _dependencies: dependencies,

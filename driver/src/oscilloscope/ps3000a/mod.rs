@@ -32,7 +32,7 @@ use pico_sys_dynamic::ps3000a::{
 
 pub struct PS3000ADriver {
     _dependencies: LoadedDependencies,
-    bindings: PS3000ALoader,
+    bindings: crate::Kept<PS3000ALoader>,
     power: PowerStates,
 }
 
@@ -48,7 +48,7 @@ impl PS3000ADriver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS3000A, path.as_ref());
-        let bindings = unsafe { PS3000ALoader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS3000ALoader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps3000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS3000ADriver {

@@ -20,8 +20,8 @@ pub use outputs::outputs;
 use crate::LibraryResolution;
 use parking_lot::Mutex;
 use pico_common::{
-    Driver, HRDLChannel, HRDLConversionTime, HRDLError, HRDLInfo, HRDLRange, MainsRejectionFreq,
-    PicoError, PicoInfo, PicoResult, PicoStatus,
+    Driver, FromPicoStr, HRDLChannel, HRDLConversionTime, HRDLError, HRDLInfo, HRDLRange,
+    MainsRejectionFreq, PicoError, PicoInfo, PicoResult, PicoStatus,
 };
 use pico_sys_dynamic::picohrdl::{
     enBlockMethod_HRDL_BM_BLOCK, enBlockMethod_HRDL_BM_STREAM, enHRDLInfo_HRDL_ERROR,
@@ -30,7 +30,7 @@ use pico_sys_dynamic::picohrdl::{
 use std::{cmp::Ordering, collections::HashMap, fmt, ops::Deref, path::Path, sync::Arc};
 
 pub struct HRDLDriverInternal {
-    bindings: HRDLLoader,
+    bindings: crate::Kept<HRDLLoader>,
     /// The digital I/O pins of each open unit, as last set.
     digital_io: Mutex<HashMap<i16, outputs::DigitalIo>>,
 }
@@ -56,12 +56,7 @@ impl HRDLDriverInternal {
             return None;
         }
 
-        let bytes: Vec<u8> = buffer[..len as usize].iter().map(|&b| b as u8).collect();
-        Some(
-            String::from_utf8_lossy(&bytes)
-                .trim_matches(char::from(0))
-                .to_string(),
-        )
+        Some(buffer.from_pico_i8_string(len as usize))
     }
 
     /// Reads the last configuration error reported for the unit
@@ -385,7 +380,7 @@ pub struct HRDLDriver(Arc<HRDLDriverInternal>);
 impl HRDLDriver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(HRDLDriver(Arc::new(HRDLDriverInternal {
-            bindings: unsafe { HRDLLoader::new(path.as_ref())? },
+            bindings: crate::Kept::new(unsafe { HRDLLoader::new(path.as_ref())? }),
             digital_io: Mutex::new(HashMap::new()),
         })))
     }

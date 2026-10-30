@@ -40,7 +40,7 @@ const PROBE_WAIT: std::time::Duration = std::time::Duration::from_millis(800);
 
 pub struct PS4000ADriver {
     _dependencies: LoadedDependencies,
-    bindings: PS4000ALoader,
+    bindings: crate::Kept<PS4000ALoader>,
     power: PowerStates,
 }
 
@@ -56,7 +56,7 @@ impl PS4000ADriver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS4000A, path.as_ref());
-        let bindings = unsafe { PS4000ALoader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS4000ALoader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps4000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS4000ADriver {
