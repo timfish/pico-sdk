@@ -191,12 +191,13 @@ impl fmt::Display for PicoProbe {
     }
 }
 
-/// What a scope reports of the probe on one channel. The driver sends
-/// a change of a channel's probe as a new state of that channel only.
+/// What a scope reports of the probe on one channel.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProbeState {
     pub channel: PicoChannel,
+    /// [`PicoProbe::None`] while no probe is connected, as the driver
+    /// goes on naming the last probe after it is unplugged.
     pub probe: PicoProbe,
     /// False once the probe is unplugged. The driver keeps its settings
     /// and sets them again when it comes back.
@@ -208,7 +209,8 @@ pub struct ProbeState {
     /// crate does not name.
     pub status: Option<PicoStatus>,
     /// The ranges the probe offers, in the driver's order, each with
-    /// the unit it reads in ([`PicoRange::get_units`]).
+    /// the unit it reads in ([`PicoRange::get_units`]). Empty while no
+    /// probe is connected.
     pub ranges: Vec<PicoRange>,
     /// Range values the probe offers that this crate does not name.
     pub unknown_ranges: Vec<i32>,
@@ -219,6 +221,22 @@ pub struct ProbeState {
 }
 
 impl ProbeState {
+    /// Whether `other` reports the same probe in the same state: the
+    /// probe, connected, power, status, ranges and couplings. The range
+    /// and coupling set, and whether the channel is on, are left out:
+    /// they follow the application's own channel calls.
+    pub fn same_probe(&self, other: &ProbeState) -> bool {
+        self.channel == other.channel
+            && self.probe == other.probe
+            && self.connected == other.connected
+            && self.requires_power == other.requires_power
+            && self.powered == other.powered
+            && self.status == other.status
+            && self.ranges == other.ranges
+            && self.unknown_ranges == other.unknown_ranges
+            && self.couplings == other.couplings
+    }
+
     /// The ranges of `first..=last` this crate names, and the values of
     /// those it does not.
     pub fn split_ranges(first: i32, last: i32) -> (Vec<PicoRange>, Vec<i32>) {
@@ -332,6 +350,31 @@ mod tests {
             couplings: vec![PicoCoupling::DC],
             coupling: Some(PicoCoupling::DC),
         }
+    }
+
+    #[test]
+    fn the_same_probe_leaves_out_what_the_application_sets() {
+        let a = clamp(true);
+        let mut set = a.clone();
+        set.enabled = false;
+        set.range = Some(PicoRange::CURRENT_CLAMP_60A_2A);
+        set.coupling = None;
+        assert!(a.same_probe(&set));
+        let mut removed = a.clone();
+        removed.connected = false;
+        assert!(!a.same_probe(&removed));
+        let mut unpowered = a.clone();
+        unpowered.powered = true;
+        assert!(!a.same_probe(&unpowered));
+        let mut other = a.clone();
+        other.probe = PicoProbe::CurrentClamp60AV2;
+        assert!(!a.same_probe(&other));
+        let mut fewer = a.clone();
+        fewer.ranges.pop();
+        assert!(!a.same_probe(&fewer));
+        let mut faulted = a.clone();
+        faulted.status = None;
+        assert!(!a.same_probe(&faulted));
     }
 
     #[test]

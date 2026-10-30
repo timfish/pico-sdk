@@ -132,9 +132,75 @@ pub struct OscilloscopeInfo {
     /// by channel, on a unit that detects probes. A channel with a
     /// connected probe has the probe's ranges in `valid_channel_ranges`.
     pub probes: Vec<ProbeState>,
+    /// The analogue offset each range of `valid_channel_ranges` takes,
+    /// per coupling, as the driver gives it. Empty for a family whose
+    /// driver gives none.
+    pub offset_limits: Vec<OffsetLimits>,
+}
+
+/// The analogue offset a channel takes at one range and coupling, in
+/// the range's unit, as the driver's offset call gives it.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OffsetLimits {
+    pub range: PicoRange,
+    pub coupling: PicoCoupling,
+    pub min: f64,
+    pub max: f64,
+}
+
+/// The offset limits of each of `ranges` not in `have`, at AC and DC.
+/// Stops at the first call the driver does not support.
+fn read_offset_limits(
+    driver: &OscilloscopeDriver,
+    handle: i16,
+    ranges: impl IntoIterator<Item = PicoRange>,
+    have: &[OffsetLimits],
+) -> Vec<OffsetLimits> {
+    let started = std::time::Instant::now();
+    let mut read = Vec::new();
+    let mut failed = 0;
+    let mut wanted: Vec<PicoRange> = ranges
+        .into_iter()
+        .filter(|r| !have.iter().any(|l| l.range == *r))
+        .collect();
+    wanted.sort();
+    wanted.dedup();
+    'ranges: for range in wanted {
+        for coupling in [PicoCoupling::DC, PicoCoupling::AC] {
+            match driver.offset_limits(handle, range, coupling) {
+                Ok((min, max)) => read.push(OffsetLimits {
+                    range,
+                    coupling,
+                    min,
+                    max,
+                }),
+                Err(error) if error.is_not_supported() => {
+                    break 'ranges;
+                }
+                Err(_) => failed += 1,
+            }
+        }
+    }
+    tracing::debug!(
+        read = read.len(),
+        failed,
+        elapsed_ms = started.elapsed().as_secs_f64() * 1e3,
+        "offset limits read"
+    );
+    read
 }
 
 impl OscilloscopeInfo {
+    /// The lowest and highest analogue offset at `range` and
+    /// `coupling`, in the range's unit, where the driver gave them.
+    pub fn offset_limits(&self, range: PicoRange, coupling: PicoCoupling) -> Option<(f64, f64)> {
+        self.offset_limits
+            .iter()
+            .find(|l| l.range == range && l.coupling == coupling)
+            .map(|l| (l.min, l.max))
+    }
+
     /// The connected probe on `channel`, if any.
     pub fn probe(&self, channel: PicoChannel) -> Option<&ProbeState> {
         self.probes
@@ -143,8 +209,9 @@ impl OscilloscopeInfo {
     }
 
     /// Takes probe states the unit reported: each replaces its
-    /// channel's state, and the channel's ranges are read again from
-    /// `driver`. A channel whose ranges cannot be read keeps its old.
+    /// channel's state, and the channel's ranges, with the offset
+    /// limits of ranges new to the unit, are read again from `driver`.
+    /// A channel whose ranges cannot be read keeps its old.
     pub fn apply_probe_changes(&mut self, driver: &OscilloscopeDriver, changes: &[ProbeState]) {
         for change in changes {
             match self.probes.iter_mut().find(|p| p.channel == change.channel) {
@@ -154,6 +221,13 @@ impl OscilloscopeInfo {
             if self.valid_channel_ranges.contains_key(&change.channel) {
                 match driver.get_channel_ranges(*self.handle, change.channel) {
                     Ok(ranges) => {
+                        let new = read_offset_limits(
+                            driver,
+                            *self.handle,
+                            ranges.iter().copied(),
+                            &self.offset_limits,
+                        );
+                        self.offset_limits.extend(new);
                         self.valid_channel_ranges.insert(change.channel, ranges);
                     }
                     Err(error) => tracing::warn!(
@@ -386,7 +460,7 @@ impl OscilloscopeDevice {
             .parse::<i32>()
             .expect("Could not parse device variant for number of channels");
 
-        let valid_channel_ranges = (0..ch_count)
+        let valid_channel_ranges: HashMap<PicoChannel, Vec<PicoRange>> = (0..ch_count)
             .flat_map(|ch| -> PicoResult<(PicoChannel, Vec<_>)> {
                 let ch: PicoChannel = ch.into();
                 Ok((ch, driver.get_channel_ranges(handle, ch)?))
@@ -417,6 +491,12 @@ impl OscilloscopeDevice {
         // The states read now hold every report so far.
         let _ = driver.take_probe_changes(handle);
         let probes = driver.probes(handle);
+        let offset_limits = read_offset_limits(
+            driver,
+            handle,
+            valid_channel_ranges.values().flatten().copied(),
+            &[],
+        );
 
         Ok(OscilloscopeInfo {
             handle: Arc::new(handle),
@@ -431,6 +511,7 @@ impl OscilloscopeDevice {
             supply_channels,
             capabilities,
             probes,
+            offset_limits,
         })
     }
 }
@@ -495,6 +576,7 @@ mod resolution_tests {
             supply_channels: vec![PicoChannel::C, PicoChannel::D],
             capabilities: ScopeCapabilities::default(),
             probes: Vec::new(),
+            offset_limits: Vec::new(),
         }
     }
 
@@ -654,6 +736,7 @@ mod power_tests {
             supply_channels: vec![C, D],
             capabilities: ScopeCapabilities::default(),
             probes: Vec::new(),
+            offset_limits: Vec::new(),
         }
     }
 

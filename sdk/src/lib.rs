@@ -175,7 +175,7 @@ pub mod prelude {
         cm3::{PLCM3Config, PLCM3Device},
         drdaq::{DrDAQConfig, DrDAQDevice},
         hrdl::{HRDLConfig, HRDLDevice},
-        oscilloscope::{OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
+        oscilloscope::{OffsetLimits, OscilloscopeConfig, OscilloscopeDevice, OscilloscopeInfo},
         pl1000::{PL1000Config, PL1000Device},
         pt104::{PT104Config, PT104Device},
         tc08::{TC08Config, TC08Device},
