@@ -13,14 +13,14 @@
 
 use crate::LibraryResolution;
 use pico_common::{
-    Driver, LoggerReading, MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info, PT104Wires,
-    PicoError, PicoInfo, PicoResult, PicoStatus,
+    Driver, FromPicoStr, LoggerReading, MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info,
+    PT104Wires, PicoError, PicoInfo, PicoResult, PicoStatus,
 };
 use pico_sys_dynamic::pt104::PT104Loader;
 use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
 
 pub struct PT104DriverInternal {
-    bindings: PT104Loader,
+    bindings: crate::Kept<PT104Loader>,
 }
 
 impl PT104DriverInternal {
@@ -51,14 +51,7 @@ impl PT104DriverInternal {
             ));
         }
 
-        // Truncate to the actual length (C string may be shorter than buffer)
-        let len = required_size.clamp(0, BUFFER_SIZE - 1) as usize;
-        buffer.truncate(len);
-
-        Ok(
-            String::from_utf8_lossy(&buffer.iter().map(|&b| b as u8).collect::<Vec<_>>())
-                .to_string(),
-        )
+        Ok(buffer.from_pico_i8_string(required_size.max(0) as usize))
     }
 
     /// Opens the next unit that is not already open
@@ -245,7 +238,7 @@ pub struct PT104Driver(Arc<PT104DriverInternal>);
 impl PT104Driver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(PT104Driver(Arc::new(PT104DriverInternal {
-            bindings: unsafe { PT104Loader::new(path.as_ref())? },
+            bindings: crate::Kept::new(unsafe { PT104Loader::new(path.as_ref())? }),
         })))
     }
 

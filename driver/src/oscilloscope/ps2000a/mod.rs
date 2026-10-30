@@ -28,7 +28,7 @@ use pico_sys_dynamic::ps2000a::{
 
 pub struct PS2000ADriver {
     _dependencies: LoadedDependencies,
-    bindings: PS2000ALoader,
+    bindings: crate::Kept<PS2000ALoader>,
 }
 
 impl std::fmt::Debug for PS2000ADriver {
@@ -43,7 +43,7 @@ impl PS2000ADriver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS2000A, path.as_ref());
-        let bindings = unsafe { PS2000ALoader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS2000ALoader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps2000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS2000ADriver {

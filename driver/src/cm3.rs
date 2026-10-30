@@ -25,7 +25,7 @@ use pico_sys_dynamic::plcm3::{enPLCM3CommunicationType_PLCM3_CT_USB, PLCM3Loader
 use std::{fmt, ops::Deref, path::Path, sync::Arc};
 
 pub struct PLCM3DriverInternal {
-    bindings: PLCM3Loader,
+    bindings: crate::Kept<PLCM3Loader>,
 }
 
 impl PLCM3DriverInternal {
@@ -206,7 +206,7 @@ pub struct PLCM3Driver(Arc<PLCM3DriverInternal>);
 impl PLCM3Driver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(PLCM3Driver(Arc::new(PLCM3DriverInternal {
-            bindings: unsafe { PLCM3Loader::new(path.as_ref())? },
+            bindings: crate::Kept::new(unsafe { PLCM3Loader::new(path.as_ref())? }),
         })))
     }
 

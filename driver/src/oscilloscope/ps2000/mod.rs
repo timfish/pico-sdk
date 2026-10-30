@@ -155,7 +155,7 @@ fn refuse_downsample(downsample: Option<Downsample>) -> PicoResult<()> {
 
 pub struct PS2000Driver {
     _dependencies: LoadedDependencies,
-    bindings: PS2000Loader,
+    bindings: crate::Kept<PS2000Loader>,
 }
 
 impl std::fmt::Debug for PS2000Driver {
@@ -170,7 +170,7 @@ impl PS2000Driver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS2000, path.as_ref());
-        let bindings = unsafe { PS2000Loader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS2000Loader::new(path)? });
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {
             bindings,

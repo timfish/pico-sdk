@@ -28,7 +28,7 @@ use pico_sys_dynamic::drdaq::{
 use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
 
 pub struct DrDAQDriverInternal {
-    bindings: DrDAQLoader,
+    bindings: crate::Kept<DrDAQLoader>,
 }
 
 impl DrDAQDriverInternal {
@@ -305,7 +305,7 @@ pub struct DrDAQDriver(Arc<DrDAQDriverInternal>);
 impl DrDAQDriver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(DrDAQDriver(Arc::new(DrDAQDriverInternal {
-            bindings: unsafe { DrDAQLoader::new(path.as_ref())? },
+            bindings: crate::Kept::new(unsafe { DrDAQLoader::new(path.as_ref())? }),
         })))
     }
 

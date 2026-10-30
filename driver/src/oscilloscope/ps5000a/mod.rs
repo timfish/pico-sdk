@@ -57,7 +57,7 @@ fn supply_channels(channels: Option<u8>) -> Vec<PicoChannel> {
 
 pub struct PS5000ADriver {
     _dependencies: LoadedDependencies,
-    bindings: PS5000ALoader,
+    bindings: crate::Kept<PS5000ALoader>,
     power: PowerStates,
 }
 
@@ -73,7 +73,7 @@ impl PS5000ADriver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS5000A, path.as_ref());
-        let bindings = unsafe { PS5000ALoader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS5000ALoader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps5000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS5000ADriver {

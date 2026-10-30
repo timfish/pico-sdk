@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use libloading::{Error, Library};
 use parking_lot::Mutex;
 use pico_common::Driver;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -14,9 +14,9 @@ type LoadedDependency = (LoadedFn, Library);
 pub type LoadedDependencies = Vec<Arc<LoadedDependency>>;
 
 lazy_static! {
-    // We only hold a weak reference so that they're dropped when there are no
-    // more drivers loaded.
-    static ref DEPENDENCY_CACHE: Mutex<HashMap<PathBuf, Weak<LoadedDependency>>> =
+    // Holds every dependency for the life of the process, for the reason
+    // on `crate::Kept`.
+    static ref DEPENDENCY_CACHE: Mutex<HashMap<PathBuf, Arc<LoadedDependency>>> =
         Default::default();
 }
 
@@ -47,33 +47,19 @@ pub fn load_dependencies<P: AsRef<Path>>(driver: Driver, path: P) -> LoadedDepen
 fn load_dependency(path: &Path, dependency: Driver) -> Option<Arc<LoadedDependency>> {
     let mut cache = DEPENDENCY_CACHE.lock();
 
-    let load = || {
+    if let Some(loaded) = cache.get(path) {
+        return Some(loaded.clone());
+    }
+
+    let loaded = Arc::new(
         match dependency {
             Driver::PicoIPP => load_ipp(path),
             _ => panic!("This method should only be used to load dependencies"),
         }
-        .ok()
-        .map(|dep| {
-            let strong = Arc::new(dep);
-            #[allow(clippy::redundant_clone)]
-            let weak = Arc::downgrade(&strong.clone());
-            (strong, weak)
-        })
-    };
-
-    match cache.get(path) {
-        Some(weak) => match weak.upgrade() {
-            Some(strong) => Some(strong),
-            None => load().map(|(strong, weak)| {
-                cache.insert(path.to_path_buf(), weak);
-                strong
-            }),
-        },
-        None => load().map(|(strong, weak)| {
-            cache.insert(path.to_path_buf(), weak);
-            strong
-        }),
-    }
+        .ok()?,
+    );
+    cache.insert(path.to_path_buf(), loaded.clone());
+    Some(loaded)
 }
 
 fn load_ipp<P: AsRef<Path>>(path: P) -> Result<(LoadedFn, Library), Error> {

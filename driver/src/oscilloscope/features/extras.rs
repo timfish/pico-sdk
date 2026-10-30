@@ -53,19 +53,14 @@ pub(crate) fn accessory_string(
     context: &str,
     mut call: impl FnMut(*mut i8, i16, *mut i16) -> u32,
 ) -> PicoResult<String> {
-    use pico_common::PicoStatus;
+    use pico_common::{FromPicoStr, PicoStatus};
     let mut len = 64i16;
     loop {
         let mut buffer = vec![0i8; len as usize];
         let mut required = 0i16;
         PicoStatus::from(call(buffer.as_mut_ptr(), len, &mut required)).to_result((), context)?;
         if required <= len || len == i16::MAX {
-            let bytes: Vec<u8> = buffer
-                .iter()
-                .take_while(|&&b| b != 0)
-                .map(|&b| b as u8)
-                .collect();
-            return Ok(String::from_utf8_lossy(&bytes).into_owned());
+            return Ok(buffer.from_pico_i8_string(buffer.len()));
         }
         len = required;
     }

@@ -58,8 +58,15 @@ pub mod tc08;
 pub use resolution::{DriverLoad, LibraryResolution};
 
 use pico_common::PicoError;
-use std::fmt;
+use std::{fmt, mem::ManuallyDrop};
 use thiserror::Error;
+
+/// Holds a driver library's bindings and never unloads the library.
+///
+/// Drivers start threads of their own that can still run after the last
+/// handle closes, as when a stream does not stop. Unloading the library
+/// under such a thread crashes the process.
+pub(crate) type Kept<T> = ManuallyDrop<T>;
 
 /// Covers the various errors encountered when attempting to load drivers
 #[derive(Error, Debug)]

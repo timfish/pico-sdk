@@ -98,6 +98,12 @@ pub fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
 }
 
+/// `thread::Builder::name` panics on a NUL, and a serial comes from the
+/// driver.
+fn thread_name(serial: &str) -> String {
+    format!("Streaming background thread - {}", serial.replace('\0', ""))
+}
+
 pub struct BackgroundThreadHandle {
     tx_terminate: Sender<()>,
     handle: Option<JoinHandle<()>>,
@@ -633,9 +639,8 @@ where
     fn start_background_thread(&mut self) {
         let (tx_terminate, rx_terminate) = bounded::<()>(0);
 
-        let thread_name = format!("Streaming background thread - {}", self.device.serial());
         let handle = thread::Builder::new()
-            .name(thread_name)
+            .name(thread_name(self.device.serial()))
             .spawn({
                 let this = self.clone();
                 move || StreamingRunner::background_thread(this, rx_terminate)
@@ -746,4 +751,22 @@ where
     Stream: Clone + fmt::Debug + Send + Sync + 'static,
 {
     fn into_streaming_device(self) -> StreamingRunner<Device, Config, Info, Stream, Event>;
+}
+
+#[cfg(test)]
+mod thread_name_tests {
+    use super::thread_name;
+    use std::thread;
+
+    #[test]
+    fn serial_with_nul_starts_a_thread() {
+        let name = thread_name("ES283/108\0");
+        assert_eq!(name, "Streaming background thread - ES283/108");
+        thread::Builder::new()
+            .name(name)
+            .spawn(|| {})
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 }

@@ -40,7 +40,7 @@ fn to_tc08_info(handle: i16, value: USBTC08_INFO) -> TC08Info {
 }
 
 pub struct TC08DriverInternal {
-    bindings: TC08Loader,
+    bindings: crate::Kept<TC08Loader>,
 }
 
 impl TC08DriverInternal {
@@ -248,7 +248,7 @@ pub struct TC08Driver(Arc<TC08DriverInternal>);
 impl TC08Driver {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(TC08Driver(Arc::new(TC08DriverInternal {
-            bindings: unsafe { TC08Loader::new(path.as_ref())? },
+            bindings: crate::Kept::new(unsafe { TC08Loader::new(path.as_ref())? }),
         })))
     }
 

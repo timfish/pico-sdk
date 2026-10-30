@@ -33,7 +33,7 @@ use pico_sys_dynamic::ps6000::{
 
 pub struct PS6000Driver {
     _dependencies: LoadedDependencies,
-    bindings: PS6000Loader,
+    bindings: crate::Kept<PS6000Loader>,
 }
 
 impl std::fmt::Debug for PS6000Driver {
@@ -48,7 +48,7 @@ impl PS6000Driver {
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Driver::PS6000, path.as_ref());
-        let bindings = unsafe { PS6000Loader::new(path)? };
+        let bindings = crate::Kept::new(unsafe { PS6000Loader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps6000ApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS6000Driver {
