@@ -82,7 +82,7 @@ pub use oscilloscope::{
 };
 pub use pl1000::PL1000StreamingEvent;
 pub use poll::LoggerPollState;
-pub use pt104::PT104StreamingEvent;
+pub use pt104::{PT104StreamingEvent, PT104_STALE_CONVERSIONS};
 pub use state::{
     unit_lost, AfterPowerChange, Current, DeviceNotice, EventEmitter, EventHandler,
     IntoStreamingDevice, Notices, StepsHeld, StreamDevice, StreamingRunner, Target,

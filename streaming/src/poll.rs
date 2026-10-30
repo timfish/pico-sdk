@@ -1,6 +1,8 @@
 //! Pacing for the logger streams.
 
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
+use tracing::debug;
 
 /// The stream state of a poll-only logger
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -9,6 +11,8 @@ pub struct LoggerPollState {
     /// that are on, so each read finds a new conversion of each channel
     pub poll_interval_ms: u32,
     next_poll: Instant,
+    /// New conversions still to drop, by channel number
+    stale: BTreeMap<u32, u32>,
 }
 
 impl LoggerPollState {
@@ -17,6 +21,30 @@ impl LoggerPollState {
         Self {
             poll_interval_ms,
             next_poll: Instant::now() + Duration::from_millis(poll_interval_ms as u64),
+            stale: BTreeMap::new(),
+        }
+    }
+
+    /// The state that drops the first `count` new conversions of each of `channels`
+    pub(crate) fn dropping_first(
+        mut self,
+        channels: impl IntoIterator<Item = u32>,
+        count: u32,
+    ) -> Self {
+        self.stale = channels.into_iter().map(|c| (c, count)).collect();
+        self
+    }
+
+    /// The new conversion of `channel` to report: `None` for a stale one, which it drops
+    pub(crate) fn fresh(&mut self, channel: u32, value: Option<i32>) -> Option<i32> {
+        let value = value?;
+        match self.stale.get_mut(&channel) {
+            Some(left) if *left > 0 => {
+                *left -= 1;
+                debug!(channel, value, left = *left, "stale conversion dropped");
+                None
+            }
+            _ => Some(value),
         }
     }
 
@@ -40,8 +68,8 @@ impl LoggerPollState {
             next_poll = now + interval;
         }
         Self {
-            poll_interval_ms: self.poll_interval_ms,
             next_poll,
+            ..self.clone()
         }
     }
 }
@@ -71,8 +99,8 @@ mod tests {
         let state = LoggerPollState::new(10_000);
         assert!(!state.due());
         let past = LoggerPollState {
-            poll_interval_ms: 1_000,
             next_poll: Instant::now() - Duration::from_secs(5),
+            ..LoggerPollState::new(1_000)
         };
         assert!(past.due());
         // After a stall the next poll is an interval away, not at once.
@@ -93,8 +121,8 @@ mod tests {
         let state = LoggerPollState::new(10_000);
         assert!(state.wait() > Duration::from_secs(9));
         let past = LoggerPollState {
-            poll_interval_ms: 1_000,
             next_poll: Instant::now() - Duration::from_secs(5),
+            ..LoggerPollState::new(1_000)
         };
         assert_eq!(past.wait(), Duration::ZERO);
     }
@@ -103,9 +131,29 @@ mod tests {
     fn polls_keep_to_the_grid() {
         let start = Instant::now() + Duration::from_secs(60);
         let state = LoggerPollState {
-            poll_interval_ms: 720,
             next_poll: start,
+            ..LoggerPollState::new(720)
         };
         assert_eq!(state.polled().next_poll, start + Duration::from_millis(720));
+    }
+
+    #[test]
+    fn the_first_new_conversions_of_each_channel_are_dropped() {
+        let mut state = LoggerPollState::new(720).dropping_first([1, 2], 2);
+        // A read with no new conversion does not count.
+        assert_eq!(state.fresh(1, None), None);
+        assert_eq!(state.fresh(1, Some(29_340)), None);
+        assert_eq!(state.fresh(2, Some(7)), None);
+        assert_eq!(state.fresh(1, Some(29_125)), None);
+        assert_eq!(state.fresh(1, Some(593_555)), Some(593_555));
+        assert_eq!(state.fresh(2, Some(8)), None);
+        assert_eq!(state.fresh(2, Some(9)), Some(9));
+        // A channel not named is never dropped, and a poll keeps the count.
+        assert_eq!(state.fresh(3, Some(1)), Some(1));
+        let mut polled = LoggerPollState::new(720).dropping_first([1], 2).polled();
+        assert_eq!(polled.fresh(1, Some(1)), None);
+        let mut polled = polled.polled();
+        assert_eq!(polled.fresh(1, Some(2)), None);
+        assert_eq!(polled.polled().fresh(1, Some(3)), Some(3));
     }
 }

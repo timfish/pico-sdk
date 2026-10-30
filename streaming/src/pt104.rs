@@ -3,6 +3,11 @@
 //! The PT-104 is a poll-only device: there is no native streaming buffer or event interface.
 //! The unit converts the channels that are on in turn, about 720 ms each, so the stream polls
 //! `get_value()` once per round of conversions and reports only new conversions.
+//!
+//! After `UsbPt104SetChannel`, the first conversions of a channel still hold the reading of
+//! its type before, so the stream drops the first [`PT104_STALE_CONVERSIONS`] new conversions
+//! of each channel after every start. Measured on a USB PT-104 with nothing attached: at
+//! 115 mV after 2500 mV, 29340 and 29125, then 593555 and on.
 
 use super::poll::LoggerPollState;
 use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
@@ -10,6 +15,9 @@ use pico_common::{PT104Channel, PT104DataType, PT104Info, PicoError, PicoResult}
 use pico_device::pt104::{PT104Config, PT104Device};
 use std::{collections::BTreeMap, time::Duration};
 use tracing::{debug, warn};
+
+/// How many new conversions of each channel a stream drops after it sets the channels
+pub const PT104_STALE_CONVERSIONS: u32 = 2;
 
 /// A block of temperature readings, one entry per enabled channel
 #[derive(Clone, Debug)]
@@ -29,6 +37,14 @@ impl IntoStreamingDevice<PT104Device, PT104Config, PT104Info, LoggerPollState, P
     ) -> StreamingRunner<Self, PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> {
         StreamingRunner::new(self)
     }
+}
+
+/// The channels a stream reads: each one set and not off
+fn polled_channels(config: &PT104Config) -> impl Iterator<Item = PT104Channel> + '_ {
+    config
+        .enabled_channels()
+        .filter(|(_, data_type, _)| *data_type != PT104DataType::Off)
+        .map(|(channel, _, _)| channel)
 }
 
 impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> for PT104Device {
@@ -78,9 +94,13 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
 
         // The PT-104 has no start call: it converts the channels that are on in turn, so poll
         // once a round of conversions.
-        let state = LoggerPollState::new(config.poll_interval_ms());
+        let state = LoggerPollState::new(config.poll_interval_ms()).dropping_first(
+            polled_channels(config).map(u32::from),
+            PT104_STALE_CONVERSIONS,
+        );
         debug!(
             poll_interval_ms = state.poll_interval_ms,
+            stale_conversions = PT104_STALE_CONVERSIONS,
             "PT-104 polls started"
         );
 
@@ -105,19 +125,18 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
             channels: BTreeMap::new(),
         };
 
-        let result = config
-            .enabled_channels()
-            .filter(|(_, data_type, _)| *data_type != PT104DataType::Off)
-            .try_for_each(|(channel, _, _)| {
-                let reading = self.driver.get_value(*info.handle, channel, true)?;
-                event.channels.insert(channel, reading.new_value());
-                Ok::<(), PicoError>(())
-            });
+        let mut state = state.polled();
+        let result = polled_channels(config).try_for_each(|channel| {
+            let reading = self.driver.get_value(*info.handle, channel, true)?;
+            let value = state.fresh(u32::from(channel), reading.new_value());
+            event.channels.insert(channel, value);
+            Ok::<(), PicoError>(())
+        });
 
         match result {
             Ok(()) => {
                 events.new_data(event);
-                Current::Streaming(info.clone(), state.polled())
+                Current::Streaming(info.clone(), state)
             }
             Err(e) => {
                 warn!("Streaming stopped: '{:?}'", e);
