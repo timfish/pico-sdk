@@ -3,7 +3,7 @@ mod events;
 use crossbeam::channel::{bounded, select, Receiver, Sender};
 pub use events::{EventEmitter, EventHandler};
 use parking_lot::{Mutex, MutexGuard, RwLock};
-use pico_common::{PicoChannel, PicoError, PicoResult, PicoStatus, PowerSource};
+use pico_common::{PicoChannel, PicoError, PicoResult, PicoStatus, PowerSource, ProbeState};
 use std::{
     any::Any,
     fmt,
@@ -209,6 +209,17 @@ pub enum DeviceNotice {
     /// again as for [`DeviceNotice::UnitLost`]. A caller that streams
     /// shows the error, as the stream does not run.
     StartsFailed { error: PicoError, starts: usize },
+    /// The unit reported new probe states, one per channel whose probe
+    /// was plugged in, taken out or changed. The device's info has them
+    /// (`OscilloscopeInfo::probes`) with each channel's new ranges. A
+    /// running stream goes on with the settings it started with, so a
+    /// caller that streams a changed channel starts it again with a
+    /// range of the new probe.
+    ProbeChanged {
+        probes: Vec<ProbeState>,
+        /// A stream was running.
+        streaming: bool,
+    },
 }
 
 pub type Notices = EventEmitter<DeviceNotice>;

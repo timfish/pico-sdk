@@ -815,6 +815,14 @@ impl From<PicoStatus> for u32 {
     }
 }
 
+impl PicoStatus {
+    /// The status of a driver's value, or `None` for one this crate
+    /// does not name. Never panics, unlike `From<u32>`.
+    pub fn from_code(code: u32) -> Option<Self> {
+        num_traits::FromPrimitive::from_u32(code)
+    }
+}
+
 impl From<u32> for PicoStatus {
     fn from(value: u32) -> Self {
         num_traits::FromPrimitive::from_u32(value)

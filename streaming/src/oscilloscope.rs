@@ -553,6 +553,39 @@ fn notify_power(
     });
 }
 
+/// The info with the probe changes the driver reported since the last
+/// call, each sent to `notices` as [`DeviceNotice::ProbeChanged`], or
+/// `None` when there are none. A stream goes on with its settings: its
+/// caller decides what a change does to it.
+fn probes_changed(
+    device: &OscilloscopeDevice,
+    info: &OscilloscopeInfo,
+    notices: &Notices,
+    streaming: bool,
+) -> Option<OscilloscopeInfo> {
+    let changes = device.driver.take_probe_changes(*info.handle);
+    if changes.is_empty() {
+        return None;
+    }
+    let mut changed = info.clone();
+    changed.apply_probe_changes(&device.driver, &changes);
+    for probe in &changes {
+        info!(
+            channel = %probe.channel,
+            probe = %probe.probe,
+            connected = probe.connected,
+            ranges = ?changed.valid_channel_ranges.get(&probe.channel),
+            streaming,
+            "probe changed"
+        );
+    }
+    notices.new_data(DeviceNotice::ProbeChanged {
+        probes: changes,
+        streaming,
+    });
+    Some(changed)
+}
+
 fn start_stream(
     device: &OscilloscopeDevice,
     info: &OscilloscopeInfo,
@@ -879,7 +912,9 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         notices: &Notices,
     ) -> Current<OscilloscopeInfo, ScopeStreamState> {
         match self.driver.ping_unit(*info.handle) {
-            Ok(()) => Current::Open(info.clone()),
+            Ok(()) => Current::Open(
+                probes_changed(self, info, notices, false).unwrap_or_else(|| info.clone()),
+            ),
             Err(error) => {
                 if let Some((changed, to)) = power_changed(self, info, error.status) {
                     notify_power(notices, info, &changed, to, AfterPowerChange::Idle);
@@ -904,6 +939,8 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
         config: &OscilloscopeConfig,
         notices: &Notices,
     ) -> PicoResult<Current<OscilloscopeInfo, ScopeStreamState>> {
+        let probed = probes_changed(self, info, notices, false);
+        let info = probed.as_ref().unwrap_or(info);
         match start_stream(self, info, config) {
             Err(error) => match power_changed(self, info, error.status) {
                 Some((changed, to)) => {
@@ -1057,7 +1094,7 @@ impl StreamDevice<OscilloscopeConfig, OscilloscopeInfo, ScopeStreamState, Oscill
                 POLL
             };
             Current::Streaming(
-                info.clone(),
+                probes_changed(self, info, notices, true).unwrap_or_else(|| info.clone()),
                 ScopeStreamState {
                     wait,
                     ..state.clone()

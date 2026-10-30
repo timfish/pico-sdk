@@ -44,7 +44,7 @@ use parking_lot::RwLock;
 use pico_common::{
     BandwidthLimit, Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
     PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
-    PowerSource, RateLimit, SampleType, ScopeCapabilities,
+    PowerSource, ProbeState, RateLimit, SampleType, ScopeCapabilities,
 };
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
@@ -291,6 +291,18 @@ pub trait OscilloscopeDriverInternal:
     /// default.
     fn capabilities(&self, _handle: i16) -> PicoResult<ScopeCapabilities> {
         Ok(ScopeCapabilities::default())
+    }
+    /// The probe state of each channel the unit reported one for, on a
+    /// unit that detects probes. Empty for others. A channel with a
+    /// connected probe takes the probe's ranges in
+    /// [`get_channel_ranges`](Self::get_channel_ranges).
+    fn probes(&self, _handle: i16) -> Vec<ProbeState> {
+        Vec::new()
+    }
+    /// The probe states the unit reported since the last call, oldest
+    /// first: each is the new state of one channel.
+    fn take_probe_changes(&self, _handle: i16) -> Vec<ProbeState> {
+        Vec::new()
     }
     /// Set up a channel with the supplied config
     fn enable_channel(
