@@ -44,20 +44,12 @@ impl PT104Config {
             .map(|(channel, (data_type, wires))| (*channel, *data_type, *wires))
     }
 
-    /// The channels the unit converts: each channel that is not off, and the sister of each
-    /// single-ended one, which the driver turns on with it
+    /// The channels the unit converts: each one that is not off
     pub fn converted_channels(&self) -> BTreeSet<PT104Channel> {
-        let mut channels = BTreeSet::new();
-        for (channel, data_type, _) in self.enabled_channels() {
-            if data_type == PT104DataType::Off {
-                continue;
-            }
-            channels.insert(channel);
-            if data_type.is_single_ended() {
-                channels.insert(channel.sister());
-            }
-        }
-        channels
+        self.enabled_channels()
+            .filter(|(_, data_type, _)| *data_type != PT104DataType::Off)
+            .map(|(channel, _, _)| channel)
+            .collect()
     }
 
     /// How often each channel gets a new conversion: about 720 ms per converted channel
@@ -115,7 +107,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_single_ended_channel_also_converts_its_sister() {
+    fn a_round_counts_the_channels_on() {
         let mut config = PT104Config::default();
         assert_eq!(config.poll_interval_ms(), 720);
         config.enable_channel(
@@ -129,20 +121,21 @@ mod tests {
             PT104Wires::FourWire,
         );
         assert_eq!(config.poll_interval_ms(), 720);
-        config.enable_channel(
+        for channel in [
+            PT104Channel::CHANNEL_2,
             PT104Channel::CHANNEL_3,
-            PT104DataType::SingleEndedTo115mV,
-            PT104Wires::FourWire,
-        );
-        assert_eq!(
-            config.converted_channels().into_iter().collect::<Vec<_>>(),
-            [
-                PT104Channel::CHANNEL_1,
-                PT104Channel::CHANNEL_3,
-                PT104Channel::CHANNEL_7
-            ]
-        );
-        assert_eq!(config.poll_interval_ms(), 3 * 720);
+            PT104Channel::CHANNEL_4,
+        ] {
+            config.enable_channel(
+                channel,
+                PT104DataType::SingleEndedTo2500mV,
+                PT104Wires::FourWire,
+            );
+        }
+        // A single-ended channel adds one conversion, as any other: four take about 2.9 s
+        // on a USB PT-104.
+        assert_eq!(config.converted_channels().len(), 4);
+        assert_eq!(config.poll_interval_ms(), 4 * 720);
     }
 }
 
