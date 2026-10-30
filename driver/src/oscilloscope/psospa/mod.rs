@@ -18,9 +18,10 @@ use super::{
 };
 use parking_lot::RwLock;
 use pico_common::{
-    Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
-    OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution,
-    PicoResult, PicoStatus, PowerSource, RateLimit, SampleType, ToPicoStr,
+    BandwidthCase, BandwidthCondition, Downsample, DownsampleKind, Driver, FromPicoStr,
+    OscilloscopeChannelConfig, OscilloscopeSampleConfig, PicoChannel, PicoError, PicoInfo,
+    PicoRange, PicoResolution, PicoResult, PicoStatus, PowerSource, RateLimit, SampleType,
+    ToPicoStr,
 };
 use pico_sys_dynamic::psospa::{
     enPicoAction_PICO_ADD, enPicoAction_PICO_CLEAR_ALL, enPicoBandwidthLimiter_PICO_BW_FULL,
@@ -130,6 +131,52 @@ fn json_rate_limits(details: &JsonValue) -> Vec<RateLimit> {
         )
     };
     listed().unwrap_or_default()
+}
+
+/// The lower bandwidths the variant lists, as cases of `full_hz`: each
+/// resolution's highest `HighestBandwidthLimitAvailable` over its ranges,
+/// and each range's highest over the resolutions. The 3000E and 5000E
+/// lists come out exact as the lower of the two, and the driver refuses
+/// a limit past that at a stream start (INVALID_BANDWIDTH).
+fn json_bandwidth_cases(details: &JsonValue, full_hz: u64) -> Option<Vec<BandwidthCase>> {
+    type Object = HashMap<String, JsonValue>;
+    let details: &Object = details.get()?;
+    let listed: &Vec<JsonValue> = details.get("VerticalResolutions")?.get()?;
+    let mut by_resolution: Vec<(PicoResolution, u64)> = Vec::new();
+    let mut by_range: Vec<(PicoRange, u64)> = Vec::new();
+    for r in listed {
+        let r: &Object = r.get()?;
+        let value = *r.get("Resolution")?.get::<f64>()? as u32;
+        let resolution = PicoResolution::from_driver_value(value)?;
+        let ranges: &Vec<JsonValue> = r.get("Ranges")?.get()?;
+        let mut highest = 0;
+        for range in ranges {
+            let range: &Object = range.get()?;
+            let code = *range.get("Range")?.get::<f64>()? as i32;
+            let hz = *range.get("HighestBandwidthLimitAvailable")?.get::<f64>()? as u64;
+            let range = PicoRange::from_code(code)?;
+            highest = highest.max(hz);
+            match by_range.iter_mut().find(|(r, _)| *r == range) {
+                Some((_, most)) => *most = (*most).max(hz),
+                None => by_range.push((range, hz)),
+            }
+        }
+        by_resolution.push((resolution, highest));
+    }
+    let resolutions = by_resolution.into_iter().map(|(r, hz)| BandwidthCase {
+        when: BandwidthCondition::Resolution(r),
+        hz,
+    });
+    let ranges = by_range.into_iter().map(|(r, hz)| BandwidthCase {
+        when: BandwidthCondition::RangeUpTo(r),
+        hz,
+    });
+    Some(
+        resolutions
+            .chain(ranges)
+            .filter(|c| c.hz < full_hz)
+            .collect(),
+    )
 }
 
 /// Every resolution the variant lists, in the listed order.
@@ -472,6 +519,12 @@ impl OscilloscopeDriverInternal for PSOSPADriver {
     fn capabilities(&self, handle: i16) -> PicoResult<pico_common::ScopeCapabilities> {
         let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
         let mut capabilities = capabilities::of(&variant);
+        if let Some(cases) = capabilities.bandwidth_hz.and_then(|full| {
+            let details = self.variant_details(&variant).ok()?;
+            json_bandwidth_cases(&details, full)
+        }) {
+            capabilities.bandwidth_cases = cases;
+        }
         capabilities.channel_leds = led::has_channel_leds(self, handle);
         Ok(capabilities)
     }
@@ -545,6 +598,62 @@ mod tests {
         include_str!("../fixtures/psospa-5464E+MSO.json")
             .parse()
             .unwrap()
+    }
+
+    /// What psospaGetVariantDetails gave for the 3418E, driver cache
+    /// `drivers-2026.10.25`, on 2026-10-30.
+    fn ps3418e() -> JsonValue {
+        include_str!("../fixtures/psospa-3418E.json")
+            .parse()
+            .unwrap()
+    }
+
+    /// The 3418E's bandwidth at each resolution and range is the
+    /// variant's own: 200 MHz at 10 bits, 100 MHz on ±10 mV, and its
+    /// 500 MHz at 8 bits from ±100 mV up. On that unit the driver
+    /// refused 350 MHz at 10 bits with INVALID_BANDWIDTH.
+    #[test]
+    fn the_3418e_bandwidth_follows_resolution_and_range() {
+        let details = ps3418e();
+        let mut caps = capabilities::of("3418E");
+        caps.bandwidth_cases = json_bandwidth_cases(&details, caps.bandwidth_hz.unwrap()).unwrap();
+        let at = |resolution, range| caps.bandwidth_for(Some(resolution), range, false);
+        use PicoResolution::{DR_10BIT, DR_8BIT};
+        assert_eq!(at(DR_10BIT, PicoRange::X1_PROBE_1V), Some(200_000_000));
+        assert_eq!(at(DR_10BIT, PicoRange::X1_PROBE_10MV), Some(100_000_000));
+        assert_eq!(at(DR_8BIT, PicoRange::X1_PROBE_20MV), Some(200_000_000));
+        assert_eq!(at(DR_8BIT, PicoRange::X1_PROBE_50MV), Some(350_000_000));
+        assert_eq!(at(DR_8BIT, PicoRange::X1_PROBE_100MV), Some(500_000_000));
+
+        type Object = HashMap<String, JsonValue>;
+        let details: &Object = details.get().unwrap();
+        let listed: &Vec<JsonValue> = details["VerticalResolutions"].get().unwrap();
+        for r in listed {
+            let r: &Object = r.get().unwrap();
+            let value = *r["Resolution"].get::<f64>().unwrap() as u32;
+            let resolution = PicoResolution::from_driver_value(value).unwrap();
+            let ranges: &Vec<JsonValue> = r["Ranges"].get().unwrap();
+            for range in ranges {
+                let range: &Object = range.get().unwrap();
+                let code = *range["Range"].get::<f64>().unwrap() as i32;
+                let hz = *range["HighestBandwidthLimitAvailable"]
+                    .get::<f64>()
+                    .unwrap() as u64;
+                let range = PicoRange::from_code(code).unwrap();
+                assert_eq!(at(resolution, range), Some(hz), "{resolution:?} {range:?}");
+            }
+        }
+    }
+
+    /// The cases only ever lower the data sheet's bandwidth.
+    #[test]
+    fn json_cases_stay_below_the_full_bandwidth() {
+        let cases = json_bandwidth_cases(&ps5464e_mso(), 200_000_000).unwrap();
+        assert!(cases.iter().all(|c| c.hz < 200_000_000), "{cases:?}");
+        assert!(cases.contains(&BandwidthCase {
+            when: BandwidthCondition::RangeUpTo(PicoRange::X1_PROBE_10MV),
+            hz: 100_000_000,
+        }));
     }
 
     #[test]

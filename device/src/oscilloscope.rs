@@ -1,8 +1,8 @@
 use crate::DeviceOpen;
 use pico_common::{
-    DigitalPort, DigitalPortConfig, Downsample, OscilloscopeChannelConfig, PicoChannel,
-    PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
-    PowerSource, ProbeState, RateLimit, ScopeCapabilities, TriggerConfig,
+    BandwidthLimit, DigitalPort, DigitalPortConfig, Downsample, OscilloscopeChannelConfig,
+    PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult,
+    PicoStatus, PowerSource, ProbeState, RateLimit, ScopeCapabilities, TriggerConfig,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -288,12 +288,49 @@ impl OscilloscopeInfo {
     }
 
     /// Refuses a config the unit cannot run: a channel its power does
-    /// not run, or more channels than its resolution allows
+    /// not run, more channels than its resolution allows, or a
+    /// bandwidth limit the channel cannot take
     pub fn check_config(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         self.check_power(config)?;
         self.check_digital(config)?;
         self.check_resolution(config)?;
+        self.check_bandwidth(config)?;
         self.check_trigger(config)
+    }
+
+    /// Refuses a bandwidth limit the unit does not list, or one above
+    /// the channel's bandwidth at the config's resolution and range,
+    /// which a driver can refuse at the stream start (a 3418E at 10
+    /// bits refuses 350 MHz).
+    pub fn check_bandwidth(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
+        let resolution = self.effective_resolution(config);
+        let mut channels: Vec<_> = config.channels.iter().collect();
+        channels.sort_by_key(|(ch, _)| **ch);
+        for (channel, cfg) in channels {
+            let Some(limit) = cfg.bandwidth else {
+                continue;
+            };
+            if !self.capabilities.bandwidth_limits.contains(&limit) {
+                return Err(PicoError::from_status(
+                    PicoStatus::BANDWIDTH_NOT_SUPPORTED,
+                    &format!("channel {channel}: the unit has no {limit} limit"),
+                ));
+            }
+            let full = self
+                .capabilities
+                .bandwidth_for(resolution, cfg.range, false);
+            if let Some(full) = full.filter(|full| u64::from(limit.hz) > *full) {
+                return Err(PicoError::from_status(
+                    PicoStatus::INVALID_BANDWIDTH,
+                    &format!(
+                        "channel {channel}: a {limit} limit is above its {} bandwidth on {}",
+                        BandwidthLimit::from_hz(full as u32),
+                        cfg.range
+                    ),
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn check_trigger(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
@@ -686,6 +723,48 @@ mod resolution_tests {
             .unwrap_err();
         assert_eq!(err.status, PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT);
         assert!(info.check_resolution(&config(&[A], Some(DR_8BIT))).is_ok());
+    }
+
+    /// A 3418E: a 350 MHz limit runs at 8 bits on ±1 V, but at 10 bits
+    /// the channel's bandwidth is 200 MHz and the driver refuses it.
+    #[test]
+    fn a_limit_above_the_channel_bandwidth_is_refused() {
+        use pico_common::{BandwidthCase, BandwidthCondition};
+        use PicoChannel::*;
+        let info = OscilloscopeInfo {
+            resolution: Some(DR_10BIT),
+            resolutions: vec![(DR_8BIT, 32_512), (DR_10BIT, 32_704)],
+            channel_limits: Vec::new(),
+            capabilities: ScopeCapabilities {
+                bandwidth_hz: Some(500_000_000),
+                bandwidth_cases: vec![BandwidthCase {
+                    when: BandwidthCondition::Resolution(DR_10BIT),
+                    hz: 200_000_000,
+                }],
+                bandwidth_limits: vec![
+                    BandwidthLimit::HZ_20M,
+                    BandwidthLimit::HZ_200M,
+                    BandwidthLimit::HZ_350M,
+                ],
+                ..Default::default()
+            },
+            ..ps5000d()
+        };
+        let limited = |resolution, limit| {
+            let mut config = config(&[A], Some(resolution));
+            config.channels.get_mut(&A).unwrap().bandwidth = Some(limit);
+            info.check_config(&config).map_err(|e| e.status)
+        };
+        assert_eq!(limited(DR_8BIT, BandwidthLimit::HZ_350M), Ok(()));
+        assert_eq!(limited(DR_10BIT, BandwidthLimit::HZ_200M), Ok(()));
+        assert_eq!(
+            limited(DR_10BIT, BandwidthLimit::HZ_350M),
+            Err(PicoStatus::INVALID_BANDWIDTH)
+        );
+        assert_eq!(
+            limited(DR_8BIT, BandwidthLimit::HZ_50M),
+            Err(PicoStatus::BANDWIDTH_NOT_SUPPORTED)
+        );
     }
 
     #[test]

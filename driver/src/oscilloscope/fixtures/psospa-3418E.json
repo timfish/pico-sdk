@@ -1,0 +1,1004 @@
+{
+  "MemoryDepth": 2147483648,
+  "NumberOfDigitalPorts": 0,
+  "Series": "3000E",
+  "VariantName": "3418E",
+  "Defaults": {
+    "BandwidthLimit": 200000000,
+    "CouplingType": 0,
+    "VerticalResolution": 10,
+    "Range": 10
+  },
+  "NumberOfAnalogueChannels": 4,
+  "VerticalResolutions": [
+    {
+      "Resolution": 0,
+      "TriggerResolution": 256,
+      "MaxSampleRateHz": 5000000000,
+      "MaxTimebaseps": 1677312000,
+      "Ranges": [
+        {
+          "HighestBandwidthLimitAvailable": 100000000,
+          "Range": 0
+        },
+        {
+          "Range": 1,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "Range": 2,
+          "HighestBandwidthLimitAvailable": 350000000
+        },
+        {
+          "Range": 3,
+          "HighestBandwidthLimitAvailable": 500000000
+        },
+        {
+          "Range": 4,
+          "HighestBandwidthLimitAvailable": 500000000
+        },
+        {
+          "HighestBandwidthLimitAvailable": 500000000,
+          "Range": 5
+        },
+        {
+          "Range": 6,
+          "HighestBandwidthLimitAvailable": 500000000
+        },
+        {
+          "HighestBandwidthLimitAvailable": 500000000,
+          "Range": 7
+        },
+        {
+          "HighestBandwidthLimitAvailable": 500000000,
+          "Range": 8
+        },
+        {
+          "Range": 9,
+          "HighestBandwidthLimitAvailable": 500000000
+        },
+        {
+          "Range": 10,
+          "HighestBandwidthLimitAvailable": 500000000
+        },
+        {
+          "Range": 11,
+          "HighestBandwidthLimitAvailable": 500000000
+        }
+      ],
+      "ValuesRange": [
+        -32512,
+        32512
+      ]
+    },
+    {
+      "TriggerResolution": 1024,
+      "MaxSampleRateHz": 2500000000,
+      "MaxTimebaseps": 1677312000,
+      "Ranges": [
+        {
+          "HighestBandwidthLimitAvailable": 100000000,
+          "Range": 0
+        },
+        {
+          "Range": 1,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "Range": 2,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "Range": 3,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "Range": 4,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "Range": 5,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "HighestBandwidthLimitAvailable": 200000000,
+          "Range": 6
+        },
+        {
+          "HighestBandwidthLimitAvailable": 200000000,
+          "Range": 7
+        },
+        {
+          "HighestBandwidthLimitAvailable": 200000000,
+          "Range": 8
+        },
+        {
+          "Range": 9,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "Range": 10,
+          "HighestBandwidthLimitAvailable": 200000000
+        },
+        {
+          "HighestBandwidthLimitAvailable": 200000000,
+          "Range": 11
+        }
+      ],
+      "ValuesRange": [
+        -32704,
+        32704
+      ],
+      "Resolution": 10
+    }
+  ],
+  "AuxInputOutput": {
+    "TriggerResolution": -1,
+    "TriggerInput": true,
+    "TriggerRangeuV": [
+      1650000,
+      1650000
+    ],
+    "TriggerStepuV": 0,
+    "EtsSource": false
+  },
+  "ArbitraryWaveformGenerator": {
+    "TimePerCountPs": 5000,
+    "NumValuesRange": [
+      1,
+      32768
+    ],
+    "ValuesRange": [
+      -32767,
+      32767
+    ]
+  },
+  "CouplingTypes": [
+    0,
+    1,
+    50
+  ],
+  "RangeSettings": [
+    {
+      "Range": 0,
+      "ProbeSettings": [
+        {
+          "Max": 5000000,
+          "OffsetLimits": [
+            {
+              "Min": -0.25,
+              "Coupling": 0,
+              "Max": 0.25
+            },
+            {
+              "Coupling": 1,
+              "Min": -0.25,
+              "Max": 0.25
+            },
+            {
+              "Min": -0.25,
+              "Max": 0.25,
+              "Coupling": 50
+            }
+          ],
+          "Min": -5000000,
+          "Type": 0
+        },
+        {
+          "Max": 5000000,
+          "Min": -5000000,
+          "Type": 1,
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Min": -0.25,
+              "Max": 0.25
+            },
+            {
+              "Max": 0.25,
+              "Min": -0.25,
+              "Coupling": 1
+            },
+            {
+              "Max": 0.25,
+              "Coupling": 50,
+              "Min": -0.25
+            }
+          ]
+        },
+        {
+          "Type": 10,
+          "Max": 50000000,
+          "Min": -50000000,
+          "OffsetLimits": [
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 0
+            },
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 1
+            },
+            {
+              "Coupling": 50,
+              "Min": -2.5,
+              "Max": 2.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Range": 1,
+      "ProbeSettings": [
+        {
+          "Min": -10000000,
+          "Max": 10000000,
+          "Type": 0,
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Max": 0.25,
+              "Min": -0.25
+            },
+            {
+              "Min": -0.25,
+              "Coupling": 1,
+              "Max": 0.25
+            },
+            {
+              "Coupling": 50,
+              "Max": 0.25,
+              "Min": -0.25
+            }
+          ]
+        },
+        {
+          "OffsetLimits": [
+            {
+              "Min": -0.25,
+              "Max": 0.25,
+              "Coupling": 0
+            },
+            {
+              "Min": -0.25,
+              "Coupling": 1,
+              "Max": 0.25
+            },
+            {
+              "Max": 0.25,
+              "Min": -0.25,
+              "Coupling": 50
+            }
+          ],
+          "Type": 1,
+          "Max": 10000000,
+          "Min": -10000000
+        },
+        {
+          "Type": 10,
+          "Max": 100000000,
+          "Min": -100000000,
+          "OffsetLimits": [
+            {
+              "Max": 2.5,
+              "Coupling": 0,
+              "Min": -2.5
+            },
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 1
+            },
+            {
+              "Min": -2.5,
+              "Max": 2.5,
+              "Coupling": 50
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Range": 2,
+      "ProbeSettings": [
+        {
+          "OffsetLimits": [
+            {
+              "Max": 0.25,
+              "Coupling": 0,
+              "Min": -0.25
+            },
+            {
+              "Max": 0.25,
+              "Coupling": 1,
+              "Min": -0.25
+            },
+            {
+              "Min": -0.25,
+              "Coupling": 50,
+              "Max": 0.25
+            }
+          ],
+          "Type": 0,
+          "Max": 20000000,
+          "Min": -20000000
+        },
+        {
+          "Max": 20000000,
+          "Min": -20000000,
+          "Type": 1,
+          "OffsetLimits": [
+            {
+              "Max": 0.25,
+              "Min": -0.25,
+              "Coupling": 0
+            },
+            {
+              "Coupling": 1,
+              "Min": -0.25,
+              "Max": 0.25
+            },
+            {
+              "Min": -0.25,
+              "Coupling": 50,
+              "Max": 0.25
+            }
+          ]
+        },
+        {
+          "Min": -200000000,
+          "Type": 10,
+          "OffsetLimits": [
+            {
+              "Min": -2.5,
+              "Max": 2.5,
+              "Coupling": 0
+            },
+            {
+              "Min": -2.5,
+              "Coupling": 1,
+              "Max": 2.5
+            },
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 50
+            }
+          ],
+          "Max": 200000000
+        }
+      ]
+    },
+    {
+      "Range": 3,
+      "ProbeSettings": [
+        {
+          "Max": 50000000,
+          "Type": 0,
+          "Min": -50000000,
+          "OffsetLimits": [
+            {
+              "Max": 0.25,
+              "Coupling": 0,
+              "Min": -0.25
+            },
+            {
+              "Max": 0.25,
+              "Coupling": 1,
+              "Min": -0.25
+            },
+            {
+              "Coupling": 50,
+              "Min": -0.25,
+              "Max": 0.25
+            }
+          ]
+        },
+        {
+          "Type": 1,
+          "Max": 50000000,
+          "OffsetLimits": [
+            {
+              "Min": -0.25,
+              "Coupling": 0,
+              "Max": 0.25
+            },
+            {
+              "Coupling": 1,
+              "Min": -0.25,
+              "Max": 0.25
+            },
+            {
+              "Max": 0.25,
+              "Coupling": 50,
+              "Min": -0.25
+            }
+          ],
+          "Min": -50000000
+        },
+        {
+          "Min": -500000000,
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Max": 2.5,
+              "Min": -2.5
+            },
+            {
+              "Min": -2.5,
+              "Max": 2.5,
+              "Coupling": 1
+            },
+            {
+              "Min": -2.5,
+              "Max": 2.5,
+              "Coupling": 50
+            }
+          ],
+          "Type": 10,
+          "Max": 500000000
+        }
+      ]
+    },
+    {
+      "ProbeSettings": [
+        {
+          "Max": 100000000,
+          "Min": -100000000,
+          "Type": 0,
+          "OffsetLimits": [
+            {
+              "Max": 0.25,
+              "Min": -0.25,
+              "Coupling": 0
+            },
+            {
+              "Min": -0.25,
+              "Coupling": 1,
+              "Max": 0.25
+            },
+            {
+              "Max": 0.25,
+              "Coupling": 50,
+              "Min": -0.25
+            }
+          ]
+        },
+        {
+          "Min": -100000000,
+          "Type": 1,
+          "Max": 100000000,
+          "OffsetLimits": [
+            {
+              "Max": 0.25,
+              "Coupling": 0,
+              "Min": -0.25
+            },
+            {
+              "Max": 0.25,
+              "Coupling": 1,
+              "Min": -0.25
+            },
+            {
+              "Coupling": 50,
+              "Max": 0.25,
+              "Min": -0.25
+            }
+          ]
+        },
+        {
+          "Min": -1000000000,
+          "Type": 10,
+          "OffsetLimits": [
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 0
+            },
+            {
+              "Min": -2.5,
+              "Coupling": 1,
+              "Max": 2.5
+            },
+            {
+              "Max": 2.5,
+              "Coupling": 50,
+              "Min": -2.5
+            }
+          ],
+          "Max": 1000000000
+        }
+      ],
+      "Range": 4
+    },
+    {
+      "Range": 5,
+      "ProbeSettings": [
+        {
+          "Max": 200000000,
+          "Type": 0,
+          "Min": -200000000,
+          "OffsetLimits": [
+            {
+              "Max": 0.25,
+              "Min": -0.25,
+              "Coupling": 0
+            },
+            {
+              "Coupling": 1,
+              "Max": 0.25,
+              "Min": -0.25
+            },
+            {
+              "Coupling": 50,
+              "Max": 0.25,
+              "Min": -0.25
+            }
+          ]
+        },
+        {
+          "Min": -200000000,
+          "OffsetLimits": [
+            {
+              "Min": -0.25,
+              "Max": 0.25,
+              "Coupling": 0
+            },
+            {
+              "Coupling": 1,
+              "Max": 0.25,
+              "Min": -0.25
+            },
+            {
+              "Coupling": 50,
+              "Max": 0.25,
+              "Min": -0.25
+            }
+          ],
+          "Max": 200000000,
+          "Type": 1
+        },
+        {
+          "Max": 2000000000,
+          "Min": -2000000000,
+          "OffsetLimits": [
+            {
+              "Min": -2.5,
+              "Max": 2.5,
+              "Coupling": 0
+            },
+            {
+              "Max": 2.5,
+              "Coupling": 1,
+              "Min": -2.5
+            },
+            {
+              "Coupling": 50,
+              "Min": -2.5,
+              "Max": 2.5
+            }
+          ],
+          "Type": 10
+        }
+      ]
+    },
+    {
+      "ProbeSettings": [
+        {
+          "Min": -500000000,
+          "Type": 0,
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Min": -2.5,
+              "Max": 2.5
+            },
+            {
+              "Max": 2.5,
+              "Coupling": 1,
+              "Min": -2.5
+            },
+            {
+              "Max": 2.5,
+              "Coupling": 50,
+              "Min": -2.5
+            }
+          ],
+          "Max": 500000000
+        },
+        {
+          "OffsetLimits": [
+            {
+              "Min": -2.5,
+              "Coupling": 0,
+              "Max": 2.5
+            },
+            {
+              "Coupling": 1,
+              "Max": 2.5,
+              "Min": -2.5
+            },
+            {
+              "Coupling": 50,
+              "Max": 2.5,
+              "Min": -2.5
+            }
+          ],
+          "Max": 500000000,
+          "Type": 1,
+          "Min": -500000000
+        },
+        {
+          "Type": 10,
+          "OffsetLimits": [
+            {
+              "Min": -25,
+              "Coupling": 0,
+              "Max": 25
+            },
+            {
+              "Min": -25,
+              "Coupling": 1,
+              "Max": 25
+            },
+            {
+              "Coupling": 50,
+              "Min": -25,
+              "Max": 25
+            }
+          ],
+          "Max": 5000000000,
+          "Min": -5000000000
+        }
+      ],
+      "Range": 6
+    },
+    {
+      "Range": 7,
+      "ProbeSettings": [
+        {
+          "Type": 0,
+          "OffsetLimits": [
+            {
+              "Min": -2.5,
+              "Max": 2.5,
+              "Coupling": 0
+            },
+            {
+              "Coupling": 1,
+              "Max": 2.5,
+              "Min": -2.5
+            },
+            {
+              "Coupling": 50,
+              "Max": 2.5,
+              "Min": -2.5
+            }
+          ],
+          "Max": 1000000000,
+          "Min": -1000000000
+        },
+        {
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Max": 2.5,
+              "Min": -2.5
+            },
+            {
+              "Max": 2.5,
+              "Coupling": 1,
+              "Min": -2.5
+            },
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 50
+            }
+          ],
+          "Min": -1000000000,
+          "Max": 1000000000,
+          "Type": 1
+        },
+        {
+          "Type": 10,
+          "OffsetLimits": [
+            {
+              "Max": 25,
+              "Min": -25,
+              "Coupling": 0
+            },
+            {
+              "Coupling": 1,
+              "Min": -25,
+              "Max": 25
+            },
+            {
+              "Min": -25,
+              "Coupling": 50,
+              "Max": 25
+            }
+          ],
+          "Max": 10000000000,
+          "Min": -10000000000
+        }
+      ]
+    },
+    {
+      "ProbeSettings": [
+        {
+          "Type": 0,
+          "Min": -2000000000,
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Max": 2.5,
+              "Min": -2.5
+            },
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 1
+            },
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 50
+            }
+          ],
+          "Max": 2000000000
+        },
+        {
+          "Max": 2000000000,
+          "OffsetLimits": [
+            {
+              "Max": 2.5,
+              "Coupling": 0,
+              "Min": -2.5
+            },
+            {
+              "Max": 2.5,
+              "Min": -2.5,
+              "Coupling": 1
+            },
+            {
+              "Coupling": 50,
+              "Max": 2.5,
+              "Min": -2.5
+            }
+          ],
+          "Min": -2000000000,
+          "Type": 1
+        },
+        {
+          "Type": 10,
+          "OffsetLimits": [
+            {
+              "Max": 25,
+              "Min": -25,
+              "Coupling": 0
+            },
+            {
+              "Max": 25,
+              "Coupling": 1,
+              "Min": -25
+            },
+            {
+              "Coupling": 50,
+              "Max": 25,
+              "Min": -25
+            }
+          ],
+          "Max": 20000000000,
+          "Min": -20000000000
+        }
+      ],
+      "Range": 8
+    },
+    {
+      "Range": 9,
+      "ProbeSettings": [
+        {
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Max": 20,
+              "Min": -20
+            },
+            {
+              "Coupling": 1,
+              "Max": 20,
+              "Min": -20
+            },
+            {
+              "Max": 5,
+              "Min": -5,
+              "Coupling": 50
+            }
+          ],
+          "Max": 5000000000,
+          "Type": 0,
+          "Min": -5000000000
+        },
+        {
+          "Min": -5000000000,
+          "Type": 1,
+          "Max": 5000000000,
+          "OffsetLimits": [
+            {
+              "Max": 20,
+              "Min": -20,
+              "Coupling": 0
+            },
+            {
+              "Max": 20,
+              "Coupling": 1,
+              "Min": -20
+            },
+            {
+              "Max": 5,
+              "Min": -5,
+              "Coupling": 50
+            }
+          ]
+        },
+        {
+          "Min": -50000000000,
+          "Max": 50000000000,
+          "OffsetLimits": [
+            {
+              "Max": 200,
+              "Min": -200,
+              "Coupling": 0
+            },
+            {
+              "Max": 200,
+              "Min": -200,
+              "Coupling": 1
+            },
+            {
+              "Coupling": 50,
+              "Min": -50,
+              "Max": 50
+            }
+          ],
+          "Type": 10
+        }
+      ]
+    },
+    {
+      "ProbeSettings": [
+        {
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Max": 20,
+              "Min": -20
+            },
+            {
+              "Max": 20,
+              "Min": -20,
+              "Coupling": 1
+            }
+          ],
+          "Max": 10000000000,
+          "Min": -10000000000,
+          "Type": 0
+        },
+        {
+          "OffsetLimits": [
+            {
+              "Max": 20,
+              "Coupling": 0,
+              "Min": -20
+            },
+            {
+              "Coupling": 1,
+              "Min": -20,
+              "Max": 20
+            }
+          ],
+          "Max": 10000000000,
+          "Type": 1,
+          "Min": -10000000000
+        },
+        {
+          "Max": 100000000000,
+          "Min": -100000000000,
+          "Type": 10,
+          "OffsetLimits": [
+            {
+              "Coupling": 0,
+              "Max": 200,
+              "Min": -200
+            },
+            {
+              "Coupling": 1,
+              "Min": -200,
+              "Max": 200
+            }
+          ]
+        }
+      ],
+      "Range": 10
+    },
+    {
+      "ProbeSettings": [
+        {
+          "Max": 20000000000,
+          "Min": -20000000000,
+          "OffsetLimits": [
+            {
+              "Max": 20,
+              "Min": -20,
+              "Coupling": 0
+            },
+            {
+              "Min": -20,
+              "Max": 20,
+              "Coupling": 1
+            }
+          ],
+          "Type": 0
+        },
+        {
+          "Min": -20000000000,
+          "OffsetLimits": [
+            {
+              "Min": -20,
+              "Coupling": 0,
+              "Max": 20
+            },
+            {
+              "Max": 20,
+              "Coupling": 1,
+              "Min": -20
+            }
+          ],
+          "Max": 20000000000,
+          "Type": 1
+        },
+        {
+          "Max": 200000000000,
+          "OffsetLimits": [
+            {
+              "Min": -200,
+              "Coupling": 0,
+              "Max": 200
+            },
+            {
+              "Max": 200,
+              "Min": -200,
+              "Coupling": 1
+            }
+          ],
+          "Min": -200000000000,
+          "Type": 10
+        }
+      ],
+      "Range": 11
+    }
+  ],
+  "EquivalentTimeSampling": {
+    "AnalogueSources": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "MaxCycles": 500,
+    "MaxInterleave": 40
+  },
+  "BandwidthLimits": [
+    20000000,
+    50000000,
+    100000000,
+    200000000,
+    350000000,
+    500000000
+  ],
+  "HandleValue": 1
+}

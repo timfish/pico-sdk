@@ -15,6 +15,7 @@ What Pico's published guides and data sheets say about which resolution, channel
 - **D4** PicoScope 5000E Series data sheet: https://www.picotech.com/download/datasheets/picoscope-5000e-series-data-sheet.pdf
 - **F1** Pico forum, 5442D: "Channels C and D will only operate if you have the power supply plugged in." https://www.picotech.com/support/viewtopic.php?p=145468 (and the same for a 5444D MSO, https://www.picotech.com/support/viewtopic.php?p=146881)
 - **H1** `psospaGetVariantDetails` and `psospaGetMinimumTimebaseStateless` on a PicoScope 5464E MSO (serial 13474/0004), driver cache `drivers-2026.07.22`, 2026-10-14.
+- **H2** `psospaGetVariantDetails("3418E")` and `psospaSetChannelOn` with each bandwidth limit on a PicoScope 3418E (serial 10162/0002), driver cache `drivers-2026.10.25`, 2026-10-30.
 
 ## Resolution, channels and rate
 
@@ -43,6 +44,19 @@ The 5464E MSO gave these shortest intervals from `psospaGetMinimumTimebaseStatel
 What the variant JSON holds (H1): per resolution in `VerticalResolutions`, `Resolution` (driver code), `MaxSampleRateHz` (one channel), `MaxTimebaseps` (the slowest interval, 1.677 ms), `ValuesRange` (the ADC limits) and, per range, `HighestBandwidthLimitAvailable`; and `NumberOfAnalogueChannels`, `NumberOfDigitalPorts`, `BandwidthLimits`, `CouplingTypes`, `Defaults`, `MemoryDepth`, `RangeSettings` (ranges per probe with offset limits). It holds no limit on channels per resolution, and no rate for more than one channel. `GetVariantDetails` needs no open unit. The variant names the driver lists (`all-series`) are 3415E to 3418E and their MSOs, and 5462E to 5464E, their MSOs and their `+` models.
 
 Streaming rates from the data sheets, for reference (host dependent): 5000E 16 bit, PicoSDK, USB 5 Gb/s: about 150, 75, 38 and 18 MS/s on 1, 2, 3 or 4 and more than 4 channels; 5000E+ 8 bit twice that (D4). 3000E on USB 2: 8 bit about 30, 15, 8 and 4 MS/s (D3). 5000D on USB 3: 125 MS/s at 8 bit or 62.5 MS/s at 12 to 16 bit, shared between channels; on USB 2 about 30 and 15 MS/s (D2).
+
+## Bandwidth by resolution and range
+
+The variant JSON's `HighestBandwidthLimitAvailable` gives each channel's bandwidth at each resolution and range (H1, H2). For the 3418E it is 500 MHz at 8 bits from ±100 mV up, 350 MHz on ±50 mV, 200 MHz on ±20 mV and 100 MHz on ±10 mV; at 10 bits it is 200 MHz, and 100 MHz on ±10 mV. The 3417E is the same with 350 MHz in place of 500; the 5464E+ is the 3418E's table with 16 bits in place of 10. Each table is the lower of a figure per resolution and a figure per range, so `ScopeCapabilities::bandwidth_cases` holds it exactly, read from the JSON at open (the data sheet table stays where the JSON cannot be read).
+
+The 3418E's `psospaSetChannelOn` refused a limit with `INVALID_BANDWIDTH` as below, and took every other limit and full bandwidth (H2):
+
+| Resolution | ±10 mV | ±20 mV | ±50 mV and up |
+|---|---|---|---|
+| 8 bit | 350, 500 MHz | 500 MHz | none |
+| 10 bit | 350, 500 MHz | 350, 500 MHz | 350, 500 MHz |
+
+The driver takes some limits above a channel's bandwidth (200 MHz on ±10 mV at 8 bits), which narrow nothing. `OscilloscopeInfo::check_config` refuses a limit above the channel's bandwidth at the config's resolution and range before a stream starts, so a stream never starts with one the driver might refuse.
 
 ## Power
 
