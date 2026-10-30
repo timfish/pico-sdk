@@ -5,6 +5,7 @@ use pico_common::{
 };
 use pico_driver::pt104::PT104Driver;
 use std::collections::BTreeSet;
+use std::fmt;
 use std::{collections::BTreeMap, sync::Arc};
 
 /// Configuration for a USB PT-104 device
@@ -44,20 +45,18 @@ impl PT104Config {
             .map(|(channel, (data_type, wires))| (*channel, *data_type, *wires))
     }
 
-    /// The channels the unit converts: each channel that is not off, and the sister of each
-    /// single-ended one, which the driver turns on with it
+    /// The channels the unit converts: each of channels 1 to 4 that is not off
+    ///
+    /// The sister of a single-ended channel (5 to 8) reads with it and adds no conversion:
+    /// on a USB PT-104, four single-ended channels convert in about 2.9 s with their
+    /// sisters on or off.
     pub fn converted_channels(&self) -> BTreeSet<PT104Channel> {
-        let mut channels = BTreeSet::new();
-        for (channel, data_type, _) in self.enabled_channels() {
-            if data_type == PT104DataType::Off {
-                continue;
-            }
-            channels.insert(channel);
-            if data_type.is_single_ended() {
-                channels.insert(channel.sister());
-            }
-        }
-        channels
+        self.enabled_channels()
+            .filter(|(channel, data_type, _)| {
+                *data_type != PT104DataType::Off && !channel.is_sister_only()
+            })
+            .map(|(channel, _, _)| channel)
+            .collect()
     }
 
     /// How often each channel gets a new conversion: about 720 ms per converted channel
@@ -65,7 +64,80 @@ impl PT104Config {
     pub fn poll_interval_ms(&self) -> u32 {
         LOGGER_CONVERSION_MS * self.converted_channels().len().max(1) as u32
     }
+
+    /// Checks the channels the unit cannot read as set
+    ///
+    /// A channel from 5 to 8 that is on reads only as the sister of a single-ended channel
+    /// from 1 to 4 that is on, and in that channel's data type.
+    pub fn check(&self) -> Result<(), PT104ConfigError> {
+        for (channel, data_type, _) in self.enabled_channels() {
+            if data_type == PT104DataType::Off || !channel.is_sister_only() {
+                continue;
+            }
+            let sister = channel.sister();
+            match self.channels.get(&sister) {
+                Some((sister_type, _)) if sister_type.is_single_ended() => {
+                    if *sister_type != data_type {
+                        return Err(PT104ConfigError::NotSisterType {
+                            channel,
+                            sister,
+                            data_type: *sister_type,
+                        });
+                    }
+                }
+                _ => return Err(PT104ConfigError::NoSingleEndedSister { channel, sister }),
+            }
+        }
+        Ok(())
+    }
 }
+
+/// Why a [`PT104Config`] cannot run, from [`PT104Config::check`]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PT104ConfigError {
+    /// `channel` (5 to 8) is on and its sister is not single-ended
+    NoSingleEndedSister {
+        channel: PT104Channel,
+        sister: PT104Channel,
+    },
+    /// `channel` (5 to 8) is on in another data type than its sister's, `data_type`
+    NotSisterType {
+        channel: PT104Channel,
+        sister: PT104Channel,
+        data_type: PT104DataType,
+    },
+}
+
+impl PT104ConfigError {
+    /// The channel the error is about
+    pub fn channel(&self) -> PT104Channel {
+        match self {
+            PT104ConfigError::NoSingleEndedSister { channel, .. }
+            | PT104ConfigError::NotSisterType { channel, .. } => *channel,
+        }
+    }
+}
+
+impl fmt::Display for PT104ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PT104ConfigError::NoSingleEndedSister { channel, sister } => write!(
+                f,
+                "channel {channel} reads only while channel {sister} is single-ended"
+            ),
+            PT104ConfigError::NotSisterType {
+                channel,
+                sister,
+                data_type,
+            } => write!(
+                f,
+                "channel {channel} reads in channel {sister}'s data type, {data_type}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for PT104ConfigError {}
 
 #[derive(Clone, Debug)]
 pub struct PT104Device {
@@ -115,7 +187,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_single_ended_channel_also_converts_its_sister() {
+    fn a_sister_adds_no_conversion() {
         let mut config = PT104Config::default();
         assert_eq!(config.poll_interval_ms(), 720);
         config.enable_channel(
@@ -134,15 +206,62 @@ mod tests {
             PT104DataType::SingleEndedTo115mV,
             PT104Wires::FourWire,
         );
+        config.enable_channel(
+            PT104Channel::CHANNEL_7,
+            PT104DataType::SingleEndedTo115mV,
+            PT104Wires::FourWire,
+        );
         assert_eq!(
             config.converted_channels().into_iter().collect::<Vec<_>>(),
-            [
-                PT104Channel::CHANNEL_1,
-                PT104Channel::CHANNEL_3,
-                PT104Channel::CHANNEL_7
-            ]
+            [PT104Channel::CHANNEL_1, PT104Channel::CHANNEL_3]
         );
-        assert_eq!(config.poll_interval_ms(), 3 * 720);
+        assert_eq!(config.poll_interval_ms(), 2 * 720);
+        assert_eq!(config.check(), Ok(()));
+    }
+
+    #[test]
+    fn channels_5_to_8_read_only_beside_a_single_ended_sister() {
+        let mut config = PT104Config::default();
+        config.enable_channel(
+            PT104Channel::CHANNEL_1,
+            PT104DataType::DifferentialTo2500mV,
+            PT104Wires::FourWire,
+        );
+        config.enable_channel(
+            PT104Channel::CHANNEL_5,
+            PT104DataType::DifferentialTo2500mV,
+            PT104Wires::FourWire,
+        );
+        let error = config.check().unwrap_err();
+        assert_eq!(error.channel(), PT104Channel::CHANNEL_5);
+        assert_eq!(
+            error.to_string(),
+            "channel 5 reads only while channel 1 is single-ended"
+        );
+        config.enable_channel(
+            PT104Channel::CHANNEL_1,
+            PT104DataType::SingleEndedTo115mV,
+            PT104Wires::FourWire,
+        );
+        assert_eq!(
+            config.check().unwrap_err().to_string(),
+            "channel 5 reads in channel 1's data type, Single-ended 0-115mV"
+        );
+        config.enable_channel(
+            PT104Channel::CHANNEL_5,
+            PT104DataType::SingleEndedTo115mV,
+            PT104Wires::FourWire,
+        );
+        assert_eq!(config.check(), Ok(()));
+        // Off is no reading.
+        config.enable_channel(
+            PT104Channel::CHANNEL_6,
+            PT104DataType::Off,
+            PT104Wires::FourWire,
+        );
+        assert_eq!(config.check(), Ok(()));
+        config.disable_channel(PT104Channel::CHANNEL_1);
+        assert!(config.check().is_err());
     }
 }
 

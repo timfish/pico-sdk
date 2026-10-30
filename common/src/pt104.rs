@@ -128,7 +128,7 @@ impl PT104DataType {
     /// Whether the channel reads a single-ended voltage
     ///
     /// The guide says a single-ended channel also enables its 'sister' channel: enabling 3
-    /// also enables 7.
+    /// also enables 7. The sister reads in the same data type.
     pub fn is_single_ended(self) -> bool {
         matches!(
             self,
@@ -138,6 +138,16 @@ impl PT104DataType {
 }
 
 impl PT104Channel {
+    /// Whether the channel reads only as the sister of a single-ended channel
+    ///
+    /// The guide's `UsbPt104SetChannel` takes channels 1 to 4 for single-ended inputs, and
+    /// `UsbPt104GetValue` reads channels 1 to 4 in differential mode or 1 to 8 in single-ended
+    /// mode. On a USB PT-104, a read of channel 5 to 8 returns `PICO_INVALID_CHANNEL` unless
+    /// its sister is single-ended, whatever `UsbPt104SetChannel` set on it.
+    pub fn is_sister_only(self) -> bool {
+        u32::from(self) > 4
+    }
+
     /// The channel a single-ended input on this channel also enables (1 and 5, 2 and 6, ...)
     pub fn sister(self) -> PT104Channel {
         match self {
@@ -294,6 +304,18 @@ mod tests {
             assert_ne!(channel.sister(), channel);
         }
         assert_eq!(PT104Channel::CHANNEL_3.sister(), PT104Channel::CHANNEL_7);
+        let sister_only: Vec<_> = enum_iterator::all::<PT104Channel>()
+            .filter(|c| c.is_sister_only())
+            .collect();
+        assert_eq!(
+            sister_only,
+            [
+                PT104Channel::CHANNEL_5,
+                PT104Channel::CHANNEL_6,
+                PT104Channel::CHANNEL_7,
+                PT104Channel::CHANNEL_8
+            ]
+        );
     }
 
     #[test]
