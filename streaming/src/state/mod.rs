@@ -63,6 +63,70 @@ pub fn unit_lost(status: PicoStatus) -> bool {
     )
 }
 
+/// A status in Pico's published `PicoStatus.h` that says the driver
+/// refused a value the start passed: a range, a rate, a channel set, a
+/// bandwidth limit, a trigger or a generator setting. The unit works;
+/// the same start on any handle gives the same answer until the
+/// settings change. `INVALID_BANDWIDTH` is one: a 3418E at 10 bits
+/// refuses a 350 MHz limit at each `SetChannelOn`.
+pub fn settings_refused(status: PicoStatus) -> bool {
+    use PicoStatus as S;
+    matches!(
+        status,
+        S::INVALID_PARAMETER
+            | S::INVALID_TIMEBASE
+            | S::INVALID_VOLTAGE_RANGE
+            | S::INVALID_CHANNEL
+            | S::INVALID_TRIGGER_CHANNEL
+            | S::INVALID_CONDITION_CHANNEL
+            | S::NO_SIGNAL_GENERATOR
+            | S::BLOCK_MODE_FAILED
+            | S::AUTO_TRIGGER_TIME_TO_SHORT
+            | S::TOO_MANY_SAMPLES
+            | S::TOO_MANY_SEGMENTS
+            | S::SIG_GEN_PARAM
+            | S::INVALID_SAMPLE_INTERVAL
+            | S::TRIGGER_ERROR
+            | S::SIGGEN_PK_TO_PK
+            | S::INVALID_SAMPLERATIO
+            | S::NOT_ENOUGH_SEGMENTS
+            | S::INVALID_COUPLING
+            | S::RATIO_MODE_NOT_SUPPORTED
+            | S::INVALID_TRIGGER_PROPERTY
+            | S::INVALID_ANALOGUE_OFFSET
+            | S::TOO_MANY_TRIGGER_CHANNELS_IN_USE
+            | S::INVALID_TRIGGER_DIRECTION
+            | S::INVALID_TRIGGER_STATES
+            | S::COUPLING_NOT_SUPPORTED
+            | S::BANDWIDTH_NOT_SUPPORTED
+            | S::INVALID_BANDWIDTH
+            | S::AWG_NOT_SUPPORTED
+            | S::SIG_GEN_WHITENOISE_NOT_SUPPORTED
+            | S::SIG_GEN_WAVETYPE_NOT_SUPPORTED
+            | S::INVALID_DIGITAL_PORT
+            | S::INVALID_DIGITAL_CHANNEL
+            | S::INVALID_DIGITAL_TRIGGER_DIRECTION
+            | S::SIG_GEN_PRBS_NOT_SUPPORTED
+            | S::NOT_SUPPORTED_BY_THIS_DEVICE
+            | S::INVALID_DEVICE_RESOLUTION
+            | S::INVALID_NUMBER_CHANNELS_FOR_RESOLUTION
+            | S::CHANNEL_DISABLED_DUE_TO_USB_POWERED
+            | S::TOO_MANY_CHANNELS_IN_USE
+            | S::ARGUMENT_OUT_OF_RANGE
+            | S::SIGGEN_FREQUENCY_OUT_OF_RANGE
+            | S::RESOLUTION_NOT_SUPPORTED_BY_VARIANT
+            | S::THRESHOLD_OUT_OF_RANGE
+            | S::INVALID_SIMPLE_TRIGGER_DIRECTION
+            | S::AUX_NOT_SUPPORTED
+            | S::EXTERNAL_TRIGGER_NOT_SUPPORTED
+            | S::THRESHOLD_MODE_OUT_OF_RANGE
+            | S::PULSE_WIDTH_LOWER_OUT_OF_RANGE
+            | S::PULSE_WIDTH_UPPER_OUT_OF_RANGE
+            | S::DIGITAL_PORT_HYSTERESIS_OUT_OF_RANGE
+            | S::SIGGEN_DUTYCYCLE_OUT_OF_RANGE
+    )
+}
+
 /// The wait before the next step after one that failed or found the
 /// unit lost: [`RETRY_MIN`], twice that each time after, up to
 /// [`RETRY_MAX`]; none once the device is where its target asks.
@@ -209,8 +273,15 @@ pub enum DeviceNotice {
     /// closed it, and opens it again while its target asks for a
     /// stream, waiting longer after each try that fails.
     UnitLost { status: PicoStatus },
+    /// A stream start failed with a status that says the driver
+    /// refused its settings ([`settings_refused`]). The unit is not
+    /// counted as lost and the runner does not try the start again:
+    /// its target is `Open` until a new [`StreamingRunner::start`]. A
+    /// caller of `start` also gets `error` as its result.
+    StartRefused { error: PicoError },
     /// [`LOST_AFTER_STARTS`] starts in a row failed with a status that
-    /// does not say the unit is lost, the last with `error`. The
+    /// does not say the unit is lost or refused its settings, the last
+    /// with `error`. The
     /// runner counts the unit as lost: it closed it, and opens it
     /// again as for [`DeviceNotice::UnitLost`]. A caller that streams
     /// shows the error, as the stream does not run.
@@ -398,6 +469,23 @@ where
                 thread::sleep(LOST_SETTLE);
                 stepped = Stepped::UnitLost(error);
                 Current::Closed
+            }
+            Err(error)
+                if matches!(current, Current::Open(_))
+                    && matches!(target, Target::Streaming(_))
+                    && settings_refused(error.status) =>
+            {
+                {
+                    let mut state = self.state.write();
+                    if matches!(state.target, Target::Streaming(_)) {
+                        state.target = Target::Open;
+                    }
+                }
+                warn!(%error, "stream start refused for its settings; the stream stays stopped");
+                self.notices.new_data(DeviceNotice::StartRefused {
+                    error: error.clone(),
+                });
+                return Err(error);
             }
             Err(error)
                 if matches!(current, Current::Open(_))
