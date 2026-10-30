@@ -6,7 +6,9 @@ use crate::ParseError;
 
 /// USB PT-104 channels
 ///
-/// The device supports 8 temperature measurement channels.
+/// The unit has 4 inputs. The driver also numbers channels 5 to 8, which read only as the
+/// other side of a single-ended input on 1 to 4; on a USB PT-104 a read of 5 to 8 beside a
+/// differential input returns `PICO_INVALID_CHANNEL`, so they are left out.
 ///
 /// `Ord` follows the driver's channel numbering so iterating an ordered
 /// collection keyed by this enum gives channels in numeric order.
@@ -18,10 +20,6 @@ pub enum PT104Channel {
     CHANNEL_2 = 2,
     CHANNEL_3 = 3,
     CHANNEL_4 = 4,
-    CHANNEL_5 = 5,
-    CHANNEL_6 = 6,
-    CHANNEL_7 = 7,
-    CHANNEL_8 = 8,
 }
 
 impl From<PT104Channel> for u32 {
@@ -47,10 +45,6 @@ impl FromStr for PT104Channel {
             "2" => Ok(PT104Channel::CHANNEL_2),
             "3" => Ok(PT104Channel::CHANNEL_3),
             "4" => Ok(PT104Channel::CHANNEL_4),
-            "5" => Ok(PT104Channel::CHANNEL_5),
-            "6" => Ok(PT104Channel::CHANNEL_6),
-            "7" => Ok(PT104Channel::CHANNEL_7),
-            "8" => Ok(PT104Channel::CHANNEL_8),
             _ => Err(ParseError),
         }
     }
@@ -126,30 +120,11 @@ impl PT104DataType {
     }
 
     /// Whether the channel reads a single-ended voltage
-    ///
-    /// The guide says a single-ended channel also enables its 'sister' channel: enabling 3
-    /// also enables 7.
     pub fn is_single_ended(self) -> bool {
         matches!(
             self,
             PT104DataType::SingleEndedTo115mV | PT104DataType::SingleEndedTo2500mV
         )
-    }
-}
-
-impl PT104Channel {
-    /// The channel a single-ended input on this channel also enables (1 and 5, 2 and 6, ...)
-    pub fn sister(self) -> PT104Channel {
-        match self {
-            PT104Channel::CHANNEL_1 => PT104Channel::CHANNEL_5,
-            PT104Channel::CHANNEL_2 => PT104Channel::CHANNEL_6,
-            PT104Channel::CHANNEL_3 => PT104Channel::CHANNEL_7,
-            PT104Channel::CHANNEL_4 => PT104Channel::CHANNEL_8,
-            PT104Channel::CHANNEL_5 => PT104Channel::CHANNEL_1,
-            PT104Channel::CHANNEL_6 => PT104Channel::CHANNEL_2,
-            PT104Channel::CHANNEL_7 => PT104Channel::CHANNEL_3,
-            PT104Channel::CHANNEL_8 => PT104Channel::CHANNEL_4,
-        }
     }
 }
 
@@ -288,12 +263,9 @@ mod tests {
     }
 
     #[test]
-    fn sisters_pair_1_with_5() {
-        for channel in enum_iterator::all::<PT104Channel>() {
-            assert_eq!(channel.sister().sister(), channel);
-            assert_ne!(channel.sister(), channel);
-        }
-        assert_eq!(PT104Channel::CHANNEL_3.sister(), PT104Channel::CHANNEL_7);
+    fn four_channels() {
+        assert_eq!(enum_iterator::all::<PT104Channel>().count(), 4);
+        assert_eq!(PT104Channel::from_str("5"), Err(ParseError));
     }
 
     #[test]

@@ -11,7 +11,7 @@
 
 use super::poll::LoggerPollState;
 use super::state::{Current, EventEmitter, IntoStreamingDevice, StreamDevice, StreamingRunner};
-use pico_common::{PT104Channel, PT104DataType, PT104Info, PicoError, PicoResult};
+use pico_common::{PT104Channel, PT104DataType, PT104Info, PT104Wires, PicoError, PicoResult};
 use pico_device::pt104::{PT104Config, PT104Device};
 use std::{collections::BTreeMap, time::Duration};
 use tracing::{debug, warn};
@@ -86,8 +86,14 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         self.driver
             .set_mains(*info.handle, config.mains_rejection)?;
 
-        // Configure all enabled channels
-        for (channel, data_type, wires) in config.enabled_channels() {
+        // The unit keeps a channel's type until it is set again, so a channel the config
+        // leaves out is set off, else it goes on converting and slows the round.
+        for channel in enum_iterator::all::<PT104Channel>() {
+            let (data_type, wires) = config
+                .channels
+                .get(&channel)
+                .copied()
+                .unwrap_or((PT104DataType::Off, PT104Wires::FourWire));
             self.driver
                 .set_channel(*info.handle, channel, data_type, wires)?;
         }
@@ -100,6 +106,7 @@ impl StreamDevice<PT104Config, PT104Info, LoggerPollState, PT104StreamingEvent> 
         );
         debug!(
             poll_interval_ms = state.poll_interval_ms,
+            channels = polled_channels(config).count(),
             stale_conversions = PT104_STALE_CONVERSIONS,
             "PT-104 polls started"
         );
