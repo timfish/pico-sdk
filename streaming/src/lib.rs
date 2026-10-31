@@ -80,7 +80,7 @@ pub use oscilloscope::{
     OscilloscopeStreamEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
     StreamCounts,
 };
-pub use pl1000::PL1000StreamingEvent;
+pub use pl1000::{PL1000StreamState, PL1000StreamingEvent};
 pub use poll::LoggerPollState;
 pub use pt104::{PT104StreamingEvent, PT104_STALE_CONVERSIONS};
 pub use state::{

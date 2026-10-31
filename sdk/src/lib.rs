@@ -194,9 +194,9 @@ pub mod prelude {
         AfterPowerChange, BlockCapture, BlockChannel, BlockData, BlockPlan, BlockRunner,
         BlockSettings, DeviceNotice, DrDAQStreamState, DrDAQStreamingEvent, EventHandler,
         HRDLChannelScale, HRDLStreamState, HRDLStreamingEvent, IntoStreamingDevice,
-        LoggerPollState, OscilloscopeStreamEvent, PL1000StreamingEvent, PLCM3StreamingEvent,
-        PT104StreamingEvent, RawChannelDataBlock, Samples, ScopeRunner, ScopeStreamState,
-        SegmentInfo, TC08StreamState, TC08StreamingEvent,
+        LoggerPollState, OscilloscopeStreamEvent, PL1000StreamState, PL1000StreamingEvent,
+        PLCM3StreamingEvent, PT104StreamingEvent, RawChannelDataBlock, Samples, ScopeRunner,
+        ScopeStreamState, SegmentInfo, TC08StreamState, TC08StreamingEvent,
     };
 }
 
