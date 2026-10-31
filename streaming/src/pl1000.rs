@@ -101,7 +101,9 @@ impl PL1000StreamState {
         }
         let every = self.every as u64;
         let first = self.taken;
-        let kept = |set: usize| (first + set as u64).is_multiple_of(every);
+        // The last set of each `every`, so a kept set comes at the end
+        // of its interval, as a set the driver times at the interval does.
+        let kept = |set: usize| (first + set as u64 + 1).is_multiple_of(every);
         let sets: Vec<&[u16]> = values.chunks_exact(n).collect();
         self.taken += sets.len() as u64;
 
@@ -412,30 +414,32 @@ mod tests {
         let mut s = state(3);
         assert_eq!(s.interval_us, 30_000);
         let a = s.keep(&[C1], &[10, 11, 12, 13], 0, 4095).unwrap();
-        assert_eq!(a.channels[&C1], [10, 13]);
+        assert_eq!(a.channels[&C1], [12]);
         assert!(s.keep(&[C1], &[14], 0, 4095).is_none());
-        let b = s.keep(&[C1], &[15, 16, 17], 0, 4095).unwrap();
-        assert_eq!(b.channels[&C1], [16]);
+        let b = s.keep(&[C1], &[15, 16, 17, 18], 0, 4095).unwrap();
+        assert_eq!(b.channels[&C1], [15, 18]);
     }
 
     #[test]
     fn a_flag_follows_the_rail_reading_of_a_kept_set() {
         // The rail reading is in a dropped set: no flag.
         let mut s = state(2);
-        let e = s.keep(&[C1, C3], &[5, 6, 0, 6], 0b1, 4095).unwrap();
+        let e = s.keep(&[C1, C3], &[0, 6, 5, 6], 0b1, 4095).unwrap();
         assert!(e.over_range.is_empty());
         // The rail reading is kept: flagged, at either rail.
         let mut s = state(2);
-        let e = s.keep(&[C1, C3], &[0, 6, 5, 4095], 0b101, 4095).unwrap();
+        let e = s.keep(&[C1, C3], &[5, 6, 0, 6], 0b1, 4095).unwrap();
         assert_eq!(e.over_range, [C1]);
-        let e = s.keep(&[C1, C3], &[5, 4095, 5, 6], 0b100, 4095).unwrap();
+        let e = s.keep(&[C1, C3], &[5, 6, 5, 4095], 0b100, 4095).unwrap();
         assert_eq!(e.over_range, [C3]);
     }
 
     #[test]
     fn a_flag_with_no_rail_reading_is_kept_until_a_set_is() {
         let mut s = state(4);
-        assert!(s.keep(&[C1], &[9], 0, 4095).is_some());
+        assert!(s.keep(&[C1], &[9, 9, 9], 0, 4095).is_none());
+        let e = s.keep(&[C1], &[9], 0b1, 4095).unwrap();
+        assert_eq!(e.over_range, [C1]);
         assert!(s.keep(&[C1], &[9, 9], 0b1, 4095).is_none());
         let e = s.keep(&[C1], &[9, 9], 0, 4095).unwrap();
         assert_eq!(e.channels[&C1], [9]);
