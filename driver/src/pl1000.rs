@@ -168,7 +168,8 @@ impl PL1000DriverInternal {
     /// returns the time it will take (pl1000pg-8, section 4.14), so the interval is multiplied up
     /// on the way in and divided down on the way out. `ideal_samples` is used only for that timing
     /// calculation; it does not limit a stream. The guide limits `ideal_samples` times the number
-    /// of channels to 1,000,000.
+    /// of channels to 1,000,000. Fewer samples are asked for where the block time would not fit
+    /// in a `u32`.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_interval(
         &self,
@@ -177,7 +178,7 @@ impl PL1000DriverInternal {
         interval_us: u32,
         ideal_samples: u32,
     ) -> PicoResult<u32> {
-        let ideal_samples = ideal_samples.max(1);
+        let ideal_samples = block_samples(interval_us, ideal_samples);
         let mut us_for_block = interval_us.checked_mul(ideal_samples).ok_or_else(|| {
             PicoError::from_status(PicoStatus::INVALID_SAMPLE_INTERVAL, "set_interval")
         })?;
@@ -271,6 +272,12 @@ impl PL1000DriverInternal {
     }
 }
 
+/// Samples per channel for a block of `interval_us` sets: `ideal_samples`, or fewer where the
+/// block time would not fit in a `u32`
+fn block_samples(interval_us: u32, ideal_samples: u32) -> u32 {
+    ideal_samples.min(u32::MAX / interval_us.max(1)).max(1)
+}
+
 /// The interval between sample sets from the time `pl1000SetInterval` gives for a block,
 /// rounded to the nearest microsecond
 fn interval_from_block(us_for_block: u32, ideal_samples: u32) -> u32 {
@@ -310,6 +317,14 @@ impl Deref for PL1000Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_block_time_fits_in_a_u32() {
+        assert_eq!(block_samples(2_000, 1_000), 1_000);
+        assert_eq!(block_samples(10_000_000, 1_000), 429);
+        assert_eq!(block_samples(u32::MAX, 1_000), 1);
+        assert_eq!(block_samples(0, 1_000), 1_000);
+    }
 
     #[test]
     fn the_block_time_divides_into_the_interval() {
