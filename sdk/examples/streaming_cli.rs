@@ -120,10 +120,10 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<OscilloscopeDevice> {
                 Err(EnumerationError::DriverLoadError { driver, .. }) => {
                     format!("PicoScope {} (Missing Driver)", driver)
                 }
-                Err(EnumerationError::DriverError { driver, error }) => {
+                Err(EnumerationError::DriverError { driver, error, .. }) => {
                     format!("PicoScope {} (Driver Error - {})", driver, error)
                 }
-                Err(EnumerationError::KernelDriverError { driver }) => {
+                Err(EnumerationError::KernelDriverError { driver, .. }) => {
                     format!("PicoScope {} (Kernel Driver Missing)", driver)
                 }
                 Err(EnumerationError::VersionError { driver, .. }) => {
@@ -152,11 +152,7 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<OscilloscopeDevice> {
             }
             Err(error) => match error {
                 EnumerationError::DriverLoadError { driver, .. }
-                | EnumerationError::VersionError {
-                    driver,
-                    found: _,
-                    required: _,
-                } => {
+                | EnumerationError::VersionError { driver, .. } => {
                     println!("Downloading {} driver", driver);
                     let _ = download_drivers_to_cache(&[*driver]);
                     println!("Download complete");

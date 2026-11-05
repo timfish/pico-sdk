@@ -1,6 +1,6 @@
 use crate::DeviceOpen;
 use pico_common::{
-    HRDLChannel, HRDLConversionTime, HRDLInfo, HRDLRange, MainsRejectionFreq, PicoResult,
+    HRDLChannel, HRDLConversionTime, HRDLInfo, HRDLRange, MainsRejectionFreq, PicoResult, UsbLink,
 };
 use pico_driver::hrdl::HRDLDriver;
 use std::{collections::BTreeMap, sync::Arc};
@@ -50,6 +50,8 @@ impl HRDLConfig {
 pub struct HRDLDevice {
     pub driver: HRDLDriver,
     pub serial: String,
+    /// The USB link, when enumeration matched this unit to a USB device
+    pub usb: Option<UsbLink>,
     pub info: Option<HRDLInfo>,
 }
 
@@ -59,6 +61,7 @@ impl HRDLDevice {
             driver: driver.clone(),
             serial,
             info,
+            usb: None,
         }
     }
 }
@@ -85,6 +88,7 @@ impl DeviceOpen<HRDLDevice> for HRDLDriver {
             driver: self.clone(),
             serial: info.serial.clone(),
             info: Some(info),
+            usb: None,
         })
     }
 }

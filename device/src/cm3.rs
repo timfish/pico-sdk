@@ -1,6 +1,7 @@
 use crate::DeviceOpen;
 use pico_common::{
-    MainsRejectionFreq, PLCM3Channel, PLCM3DataType, PLCM3Info, PicoResult, LOGGER_CONVERSION_MS,
+    MainsRejectionFreq, PLCM3Channel, PLCM3DataType, PLCM3Info, PicoResult, UsbLink,
+    LOGGER_CONVERSION_MS,
 };
 use pico_driver::cm3::PLCM3Driver;
 use std::{collections::BTreeMap, sync::Arc};
@@ -48,6 +49,8 @@ impl PLCM3Config {
 pub struct PLCM3Device {
     pub driver: PLCM3Driver,
     pub serial: String,
+    /// The USB link, when enumeration matched this unit to a USB device
+    pub usb: Option<UsbLink>,
     pub info: Option<PLCM3Info>,
 }
 
@@ -57,6 +60,7 @@ impl PLCM3Device {
             driver: driver.clone(),
             serial,
             info,
+            usb: None,
         }
     }
 }
@@ -83,6 +87,7 @@ impl DeviceOpen<PLCM3Device> for PLCM3Driver {
             driver: self.clone(),
             serial: info.serial.clone(),
             info: Some(info),
+            usb: None,
         })
     }
 }

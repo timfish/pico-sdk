@@ -27,6 +27,7 @@ mod samples;
 mod scope;
 mod status;
 mod tc08;
+mod usb;
 mod utils;
 
 pub use cm3::*;
@@ -46,4 +47,5 @@ pub use samples::*;
 pub use scope::*;
 pub use status::*;
 pub use tc08::*;
+pub use usb::*;
 pub use utils::*;

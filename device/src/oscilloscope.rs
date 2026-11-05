@@ -2,7 +2,7 @@ use crate::DeviceOpen;
 use pico_common::{
     BandwidthLimit, DigitalPort, DigitalPortConfig, Downsample, OscilloscopeChannelConfig,
     PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult,
-    PicoStatus, PowerSource, ProbeState, RateLimit, ScopeCapabilities, TriggerConfig,
+    PicoStatus, PowerSource, ProbeState, RateLimit, ScopeCapabilities, TriggerConfig, UsbLink,
 };
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
@@ -461,6 +461,8 @@ impl OscilloscopeInfo {
 pub struct OscilloscopeDevice {
     pub driver: OscilloscopeDriver,
     pub serial: String,
+    /// The USB link, when enumeration matched this unit to a USB device
+    pub usb: Option<UsbLink>,
     pub variant: String,
     pub info: Option<OscilloscopeInfo>,
 }
@@ -476,6 +478,7 @@ impl OscilloscopeDevice {
             serial,
             variant,
             info: None,
+            usb: None,
         }
     }
 
@@ -583,6 +586,7 @@ impl DeviceOpen<OscilloscopeDevice> for OscilloscopeDriver {
             serial,
             variant,
             info: Some(info),
+            usb: None,
         })
     }
 }

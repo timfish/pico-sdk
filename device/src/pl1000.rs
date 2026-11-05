@@ -1,5 +1,5 @@
 use crate::DeviceOpen;
-use pico_common::{PL1000Channel, PL1000Info, PicoResult};
+use pico_common::{PL1000Channel, PL1000Info, PicoResult, UsbLink};
 use pico_driver::pl1000::PL1000Driver;
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -35,6 +35,8 @@ impl PL1000Config {
 pub struct PL1000Device {
     pub driver: PL1000Driver,
     pub serial: String,
+    /// The USB link, when enumeration matched this unit to a USB device
+    pub usb: Option<UsbLink>,
     pub info: Option<PL1000Info>,
 }
 
@@ -44,6 +46,7 @@ impl PL1000Device {
             driver: driver.clone(),
             serial,
             info,
+            usb: None,
         }
     }
 }
@@ -70,6 +73,7 @@ impl DeviceOpen<PL1000Device> for PL1000Driver {
             driver: self.clone(),
             serial: info.serial.clone(),
             info: Some(info),
+            usb: None,
         })
     }
 }
