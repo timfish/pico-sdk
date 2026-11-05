@@ -1,6 +1,6 @@
 use crate::DeviceOpen;
 use pico_common::{
-    MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info, PT104Wires, PicoResult,
+    MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info, PT104Wires, PicoResult, UsbLink,
     LOGGER_CONVERSION_MS,
 };
 use pico_driver::pt104::PT104Driver;
@@ -63,6 +63,8 @@ impl PT104Config {
 pub struct PT104Device {
     pub driver: PT104Driver,
     pub serial: String,
+    /// The USB link, when enumeration matched this unit to a USB device
+    pub usb: Option<UsbLink>,
     pub info: Option<PT104Info>,
 }
 
@@ -72,6 +74,7 @@ impl PT104Device {
             driver: driver.clone(),
             serial,
             info,
+            usb: None,
         }
     }
 }
@@ -98,6 +101,7 @@ impl DeviceOpen<PT104Device> for PT104Driver {
             driver: self.clone(),
             serial: info.serial.clone(),
             info: Some(info),
+            usb: None,
         })
     }
 }

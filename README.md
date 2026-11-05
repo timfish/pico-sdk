@@ -27,9 +27,29 @@ numerous Pico drivers.
     Implements continuous gap-less streaming on top of `PicoDevice`.
 
 ## Prerequisites
-On linux `pico-enumeration` [requires
-`libudev-dev`](https://github.com/timfish/pico-sdk/blob/700ab24efe81063316baffff638988cf626c6ffe/.github/workflows/build-and-publish.yml#L32)
-to be installed.
+None. `pico-enumeration` lists USB devices with [`nusb`](https://crates.io/crates/nusb), which needs no system
+library (on Linux it reads sysfs, so `libudev-dev` is not needed).
+
+## USB link
+Each device that enumeration returns carries its USB link, `PicoDevice::usb()` (or the `usb` field of a family's device):
+the speed the host negotiated (`UsbSpeed`: Low, Full, High, Super, SuperPlus) and the USB version the device declares.
+A USB 3 scope on a USB 2 port shows `usb_version` 3.0 with speed `High`, so an application can show the link and warn about it.
+
+```no_run
+use pico_sdk::prelude::*;
+
+for device in DeviceEnumerator::new().enumerate().into_iter().flatten() {
+    match device.usb() {
+        Some(link) => println!("{}: {}", device.get_serial(), link),
+        None => println!("{}: USB link unknown", device.get_serial()),
+    }
+}
+```
+
+The enumerator matches each unit to a USB device by serial: some models list a USB serial-number string equal to the driver's serial (a PicoScope 5464E lists `13474/0004`), others list none (a PicoScope 2208A).
+A unit with no match takes the link of the driver's USB devices that have no serial string, when all of them share one link; else the link is `None` (two 2000 series scopes at different speeds both get `None`).
+A unit opened by serial without enumeration has `None`; `DeviceEnumerator::usb_link(driver, serial)` looks it up without loading a driver.
+The speed is `None` where the operating system does not report it.
 
 ## Tests
 Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.

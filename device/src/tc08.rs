@@ -1,5 +1,5 @@
 use crate::DeviceOpen;
-use pico_common::{MainsRejectionFreq, PicoResult, TC08Channel, TC08Info, TCType};
+use pico_common::{MainsRejectionFreq, PicoResult, TC08Channel, TC08Info, TCType, UsbLink};
 use pico_driver::tc08::TC08Driver;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -41,6 +41,8 @@ impl TC08Config {
 pub struct TC08Device {
     pub driver: TC08Driver,
     pub serial: String,
+    /// The USB link, when enumeration matched this unit to a USB device
+    pub usb: Option<UsbLink>,
     pub info: Option<TC08Info>,
 }
 
@@ -50,6 +52,7 @@ impl TC08Device {
             driver: driver.clone(),
             serial,
             info,
+            usb: None,
         }
     }
 }
@@ -76,6 +79,7 @@ impl DeviceOpen<TC08Device> for TC08Driver {
             driver: self.clone(),
             serial: info.serial.clone(),
             info: Some(info),
+            usb: None,
         })
     }
 }

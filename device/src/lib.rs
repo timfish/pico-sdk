@@ -32,7 +32,7 @@
 //! # }
 //! ```
 
-use pico_common::PicoResult;
+use pico_common::{PicoResult, UsbLink};
 use pico_driver::PicoDriver;
 
 pub mod cm3;
@@ -69,6 +69,35 @@ impl PicoDevice {
             PicoDevice::PLCM3(device) => &device.serial,
             PicoDevice::PT104(device) => &device.serial,
             PicoDevice::TC08(device) => &device.serial,
+        }
+    }
+
+    /// The USB link the enumerator matched to this unit
+    ///
+    /// `None` for a unit opened by serial without enumeration, or one the
+    /// enumerator could not match to a single USB device.
+    pub fn usb(&self) -> Option<UsbLink> {
+        match self {
+            PicoDevice::DrDAQ(device) => device.usb,
+            PicoDevice::Oscilloscope(device) => device.usb,
+            PicoDevice::PicoHRDL(device) => device.usb,
+            PicoDevice::PL1000(device) => device.usb,
+            PicoDevice::PLCM3(device) => device.usb,
+            PicoDevice::PT104(device) => device.usb,
+            PicoDevice::TC08(device) => device.usb,
+        }
+    }
+
+    /// Sets the USB link, as the enumerator does after it matches the unit
+    pub fn set_usb(&mut self, usb: Option<UsbLink>) {
+        match self {
+            PicoDevice::DrDAQ(device) => device.usb = usb,
+            PicoDevice::Oscilloscope(device) => device.usb = usb,
+            PicoDevice::PicoHRDL(device) => device.usb = usb,
+            PicoDevice::PL1000(device) => device.usb = usb,
+            PicoDevice::PLCM3(device) => device.usb = usb,
+            PicoDevice::PT104(device) => device.usb = usb,
+            PicoDevice::TC08(device) => device.usb = usb,
         }
     }
 

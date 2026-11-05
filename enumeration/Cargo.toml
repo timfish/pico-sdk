@@ -13,6 +13,9 @@ version = "0.4.0"
 crate-type = ["lib"]
 path = "src/lib.rs"
 
+[features]
+serde = ["dep:serde", "pico-common/serde", "pico-device/serde"]
+
 [dependencies]
 parking_lot = "0.12"
 pico-common = {path = "../common", version = "0.4.0"}
@@ -22,7 +25,8 @@ rayon = "1.3"
 serde = {version = "1.0", features = ["derive"], optional = true}
 thiserror = "2"
 tracing = {version = "0.1", features = ["attributes"]}
-usb_enumeration = "0.2"
+nusb = "0.2.9"
 
 [dev-dependencies]
 pico-download = {path = "../download"}
+tracing-subscriber = {version = "0.3", features = ["env-filter"]}

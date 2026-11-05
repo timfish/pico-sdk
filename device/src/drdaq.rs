@@ -1,5 +1,5 @@
 use crate::DeviceOpen;
-use pico_common::{DrDAQChannel, DrDAQInfo, PicoResult};
+use pico_common::{DrDAQChannel, DrDAQInfo, PicoResult, UsbLink};
 use pico_driver::drdaq::DrDAQDriver;
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -35,6 +35,8 @@ impl DrDAQConfig {
 pub struct DrDAQDevice {
     pub driver: DrDAQDriver,
     pub serial: String,
+    /// The USB link, when enumeration matched this unit to a USB device
+    pub usb: Option<UsbLink>,
     pub info: Option<DrDAQInfo>,
 }
 
@@ -44,6 +46,7 @@ impl DrDAQDevice {
             driver: driver.clone(),
             serial,
             info,
+            usb: None,
         }
     }
 }
@@ -70,6 +73,7 @@ impl DeviceOpen<DrDAQDevice> for DrDAQDriver {
             driver: self.clone(),
             serial: info.serial.clone(),
             info: Some(info),
+            usb: None,
         })
     }
 }
