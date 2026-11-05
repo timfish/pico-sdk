@@ -49,6 +49,9 @@ fn driver_plan(channels: usize, interval_us: u32) -> (u32, u32) {
 }
 
 /// The state of a PicoLog 1000 stream
+///
+/// - A stream whose interval is longer than 3 ms for each channel samples at a shorter interval, and keeps one set of every few.
+///   On a PicoLog 1216 the driver rounds, caps or refuses such intervals.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PL1000StreamState {
     /// The interval between the sample sets the stream gives, in microseconds
@@ -64,8 +67,10 @@ pub struct PL1000StreamState {
 }
 
 impl PL1000StreamState {
-    /// The state of a stream that keeps one of every `every` sets the driver takes at
-    /// `driver_interval_us`
+    /// The state of a stream that keeps one of every `every` sets that the driver takes at `driver_interval_us`
+    ///
+    /// - An `every` of 0 counts as 1.
+    /// - Returns Err with `INVALID_SAMPLE_INTERVAL` when the interval of the stream does not fit in a `u32`.
     pub fn new(driver_interval_us: u32, every: u32) -> PicoResult<Self> {
         let every = every.max(1);
         let interval_us = driver_interval_us
@@ -186,16 +191,16 @@ fn wait_after(config: &PL1000Config, driver_interval_us: u32) -> Duration {
     drain_wait(driver_interval_us as u64, POLL_BUFFER_SAMPLES as u64)
 }
 
-/// A block of samples read back from the device's streaming buffer
+/// One block of samples from the streaming buffer of a PicoLog 1000 series unit
 #[derive(Clone, Debug)]
 pub struct PL1000StreamingEvent {
     /// The interval between the sets of the stream, in microseconds
     pub interval_us: u32,
-    /// Full-scale ADC reading for the connected unit, for scaling raw counts to engineering units
+    /// The ADC count at full scale for the unit, to scale the raw counts
     pub max_value: u16,
-    /// Per-channel raw ADC counts, in the order they were read
+    /// The raw ADC counts of each channel, in the order that the unit took them
     pub channels: BTreeMap<PL1000Channel, Vec<u16>>,
-    /// Channels that reported an over-range sample in this block
+    /// The channels that reported an over-range sample in this block
     pub over_range: Vec<PL1000Channel>,
 }
 

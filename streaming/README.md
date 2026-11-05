@@ -1,66 +1,153 @@
 # pico-streaming
 
-Streams gap-less data from Pico Technology oscilloscope drivers.
+<!-- cargo-rdme start -->
 
-This is a sub crate that you probably don't want to use directly. Try the top level
-[`pico-sdk`](https://crates.io/crates/pico-sdk) crate which exposes everything from here.
+Streams samples with no gaps from Pico Technology oscilloscopes and data loggers.
 
-Once streaming is started, a `PicoStreamingDevice` returns `StreamingEvent`s. The possible events
-and `Connected`, `Disconnected` and `Data`. The `Data` event contains raw `Vec<i16>` samples for
-each enabled channel that can easily be scaled to the channel units (ie. Volts, Amps, etc).
+A [`StreamingRunner`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html) drives one device on a background thread.
+It moves the device between closed, open and streaming, towards the target that you set with [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start), [`StreamingRunner::stop`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.stop) and [`StreamingRunner::close`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.close).
+It sends each block of samples to the [`EventHandler`](https://docs.rs/pico-streaming/latest/pico_streaming/state/events/trait.EventHandler.html)s that subscribe to its [`StreamingRunner::events`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#structfield.events).
+When the connection is lost, it opens the unit again and starts the stream again with the same config.
+Each device family plugs in with one [`StreamDevice`](https://docs.rs/pico-streaming/latest/pico_streaming/state/trait.StreamDevice.html) impl, with its own config, info, stream state and event types.
+[`BlockRunner`](https://docs.rs/pico-streaming/latest/pico_streaming/block/struct.BlockRunner.html) takes block and rapid block captures from an oscilloscope on the caller's thread.
 
+## Quick start
 
-## Steps and waits
-
-A `StreamingRunner` drives its device on a background thread, one step at a time, with the steps lock held for each step's driver calls.
-A call through `with_open`, such as an output set, takes the same lock between two steps.
-No step sleeps: the runner waits between steps with the lock free, so such a call runs in the driver's own time.
-An open device waits 200 ms between pings, and a stream waits what its device's `StreamDevice::stream_wait` gives: 50 ms between scope polls (none while the scope is behind), 10 to 200 ms for the buffered loggers (PL1000, HRDL, DrDAQ), 200 ms for a logger with no channels on, the poll interval for the PT-104 and PicoLog CM3, and 1 s for the TC-08.
-`start`, `stop` and `close` end a wait, so a new target runs at once.
-A buffered logger's step polls until a poll does not fill its poll buffer, so the drain keeps up with the device's buffer.
-
-## A unit opened again
-
-A stream start that fails with a status `unit_lost` names (`NOT_RESPONDING`, `INVALID_HANDLE`, `NOT_FOUND`, `TIMEOUT`, `DEVICE_NOT_FUNCTIONING`) closes the unit, and the next steps open it by its serial and start it again with the same config.
-The rule is the runner's, so it holds for every family: a scope, and a logger whose stream has no lost-unit path of its own.
-`DEVICE_NOT_FUNCTIONING` is the TC-08 driver's communication error: a TC-08 unplugged and plugged in again answers it to every call on its old handle, while the unit info still reads, so a ping does not see the loss and only the start does.
-The runner sends `DeviceNotice::UnitLost` with the status to its `notices` listeners each time.
-`StreamingRunner::start` opens the unit again once within the call; a second lost start returns the error.
-The background thread waits 1 s after a step that failed or found the unit lost, twice as long after each one that follows, up to 10 s, and waits no more once the device is where its target asks; so a unit that stays absent costs one open a few seconds, not a loop.
-A logger stream step that fails closes the unit as before, so the same opens follow.
-A start that fails 3 times in a row (`LOST_AFTER_STARTS`) with a status `unit_lost` does not name, such as `BUSY`, counts the unit as lost too: a retry on the same handle gave the same answer, so the runner closes the unit, sends `DeviceNotice::StartsFailed` with the last error, and opens it again by its serial.
-A caller that streams shows that error, as the stream does not run while the starts fail.
-A start the driver refuses for its settings (`settings_refused`: a status of Pico's published `PicoStatus.h` that names a refused value, such as `INVALID_BANDWIDTH` or `INVALID_VOLTAGE_RANGE`) does not count: the unit works, and a close and an open again give the same answer.
-The runner sets the target to `Open`, as for a config that `StreamDevice::check` refuses, and sends `DeviceNotice::StartRefused` with the error, so a caller that streams shows it and decides when to start again; `StreamingRunner::start` returns it too.
-A start that streams, or a unit counted as lost, sets the count back to 0.
-`StreamingRunner::reopen` closes and opens the unit at once for a caller, also while it holds the steps, as a block capture's set-up does after `BlockRunner::new` fails so.
-A 5464E timed out a change to 16 bits with nothing on, after a stream of ports alone; a second try with the channels on then worked, but every channel read over range until the unit opened again (2026-10-22).
-So a failed resolution change is not tried again: the unit opens again.
-
-## Example
 ```rust
-// Get a streaming device from a PicoDevice
-let stream_device = device.into_streaming_device();
+use pico_common::{Driver, PicoChannel, PicoCoupling, PicoRange};
+use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
+use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+use pico_streaming::{EventHandler, IntoStreamingDevice, OscilloscopeStreamEvent};
+use std::{sync::Arc, thread, time::Duration};
 
-// Enable and configure 2 channels
-stream_device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-stream_device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
+struct Printer;
 
-struct StdoutHandler;
-
-impl NewDataHandler for StdoutHandler {
-    fn handle_event(&self, event: &StreamingEvent) {
-        println!("Sample count: {}", event.length);
+impl EventHandler<OscilloscopeStreamEvent> for Printer {
+    fn new_data(&self, event: Arc<OscilloscopeStreamEvent>) {
+        for (channel, block) in &event.channels {
+            let volts = block.scale_samples();
+            println!("{channel}: {} samples, first {:?} V", event.length, volts.first());
+        }
     }
 }
 
-let handler = Arc::new(StdoutHandler);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let PicoDriver::Oscilloscope(driver) = Driver::PS2000A.load(&LibraryResolution::Default)?
+    else {
+        unreachable!("PS2000A is an oscilloscope driver");
+    };
+    let scope = driver.open_device(None)?.into_streaming_device();
 
-// Subscribe to streaming events
-stream_device.new_data.subscribe(handler);
+    // The runner keeps a weak reference, so keep `printer` while you stream.
+    let printer: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = Arc::new(Printer);
+    scope.events.subscribe(&printer);
 
-// Start streaming with a sample rate of 1k
-stream_device.start(1_000)?;
+    let mut config = OscilloscopeConfig::default();
+    config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+    config.samples_per_second = 1_000;
+    scope.start(config)?;
+
+    thread::sleep(Duration::from_secs(5));
+    scope.stop();
+    Ok(())
+}
 ```
+
+## How the parts fit
+
+```text
+ OscilloscopeDevice, TC08Device, …     an open or closed device from pico_device
+        │
+        ▼
+ IntoStreamingDevice                   into_streaming_device()
+        │
+        ▼
+ StreamingRunner                       start(config), stop() and close() set the target:
+        │                              Closed, Open or Streaming
+        ▼
+ background thread                     one step at a time towards the target
+        │                              StreamDevice: open, ping, start, stream, stop, close
+        ├──► events  ──► EventHandler  each block of samples
+        └──► notices ──► EventHandler  DeviceNotice: power, probes, lost unit
+
+ OscilloscopeDevice ──► BlockRunner    arm, wait and read, on the caller's thread
+```
+
+## Threads
+
+- Each runner has one background thread, which takes all the steps.
+- The handlers of [`StreamingRunner::events`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#structfield.events) and [`StreamingRunner::notices`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#structfield.notices) run on that thread, inside a step.
+  A slow handler delays the next poll of the device.
+- A handler must not call [`StreamingRunner::with_open`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.with_open), [`StreamingRunner::reopen`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.reopen), [`StreamingRunner::hold_steps`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.hold_steps) or a [`ScopeRunner`](https://docs.rs/pico-streaming/latest/pico_streaming/oscilloscope/type.ScopeRunner.html) method, as these wait for the step to end.
+  [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start) called from a handler returns `TIMEOUT` after 30 s.
+  A handler must not subscribe to the emitter that calls it.
+- [`StreamingRunner::stop`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.stop), [`StreamingRunner::close`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.close) and the getters do not wait for a step, so a handler can call them.
+- [`StreamingRunner::with_open`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.with_open) runs its closure between two steps, so a call that a stream allows, such as an output set, does not stop the stream.
+- [`StreamingRunner::hold_steps`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.hold_steps) stops the background steps until its guard drops, so the caller can drive the open device for a while.
+- When the last clone of a runner drops, the runner closes the unit and waits for the background thread to end.
+
+## Waits between steps
+
+- The background thread waits between steps with the steps lock free.
+  A normal step does not sleep, so a call through [`StreamingRunner::with_open`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.with_open) runs in the driver's own time.
+- An open device waits 200 ms between pings.
+- A stream waits the time that [`StreamDevice::stream_wait`](https://docs.rs/pico-streaming/latest/pico_streaming/state/trait.StreamDevice.html#tymethod.stream_wait) gives:
+  50 ms between scope polls, and none while the scope is behind;
+  10 to 200 ms for the buffered loggers (PL1000, HRDL, DrDAQ);
+  200 ms for a logger with no channels on;
+  the poll interval for the PT-104 and PicoLog CM3;
+  1 s for the TC-08.
+- A buffered logger's step polls until a poll does not fill its poll buffer, so the drain keeps up with the device's buffer.
+- [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start), [`StreamingRunner::stop`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.stop) and [`StreamingRunner::close`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.close) end a wait, so a new target runs at once.
+
+## A lost unit
+
+- A stream start that fails with a status that [`unit_lost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.unit_lost.html) names closes the unit.
+  The next steps open it by its serial and start it again with the same config.
+  This rule is the same for every family.
+- Each time, the runner sends [`DeviceNotice::UnitLost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.UnitLost) to its notices.
+- [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start) opens the unit again one time within the call.
+  A second lost start returns the error.
+- After a step that fails or finds the unit lost, the background thread waits 1 s.
+  It waits twice as long after each one that follows, up to 10 s.
+  The waits start again from 1 s once the device is where its target asks.
+- A logger stream step that fails closes the unit, and the same opens follow.
+- `LOST_AFTER_STARTS` starts in a row that fail with a status that neither [`unit_lost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.unit_lost.html) nor [`settings_refused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.settings_refused.html) names, such as `BUSY`, also count the unit as lost.
+  The runner closes the unit, sends [`DeviceNotice::StartsFailed`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StartsFailed), and opens the unit again.
+- A start that fails with a status that [`settings_refused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.settings_refused.html) names does not count, as the unit works.
+  The runner sets the target to open, sends [`DeviceNotice::StartRefused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StartRefused), and does not try the start again.
+  A config that [`StreamDevice::check`](https://docs.rs/pico-streaming/latest/pico_streaming/state/trait.StreamDevice.html#tymethod.check) refuses also sets the target to open.
+- A start that streams, or a unit counted as lost, sets the count of failed starts back to 0.
+- A failed change of scope resolution is not tried again.
+  A `TIMEOUT` from it counts as a lost unit, so the unit opens again.
+- [`StreamingRunner::reopen`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.reopen) closes and opens the unit at once, also while the caller holds the steps.
+- A step that panics closes the unit, and the next steps open it again.
+
+## Main types
+
+- [`StreamingRunner`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html): drives one device on a background thread, and sends its events.
+- [`IntoStreamingDevice`](https://docs.rs/pico-streaming/latest/pico_streaming/state/trait.IntoStreamingDevice.html): makes a runner from a device of any family.
+- [`EventHandler`](https://docs.rs/pico-streaming/latest/pico_streaming/state/events/trait.EventHandler.html), [`EventEmitter`](https://docs.rs/pico-streaming/latest/pico_streaming/state/events/struct.EventEmitter.html): receive and send events.
+- [`DeviceNotice`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html), [`Notices`](https://docs.rs/pico-streaming/latest/pico_streaming/state/type.Notices.html): changes in a device that are not samples.
+- [`StreamDevice`](https://docs.rs/pico-streaming/latest/pico_streaming/state/trait.StreamDevice.html): the steps of one device family.
+- [`ScopeRunner`](https://docs.rs/pico-streaming/latest/pico_streaming/oscilloscope/type.ScopeRunner.html), [`OscilloscopeStreamEvent`](https://docs.rs/pico-streaming/latest/pico_streaming/oscilloscope/struct.OscilloscopeStreamEvent.html), [`RawChannelDataBlock`](https://docs.rs/pico-streaming/latest/pico_streaming/oscilloscope/struct.RawChannelDataBlock.html), [`Samples`](https://docs.rs/pico-streaming/latest/pico_streaming/oscilloscope/enum.Samples.html), [`ScopeStreamState`](https://docs.rs/pico-streaming/latest/pico_streaming/oscilloscope/struct.ScopeStreamState.html): an oscilloscope stream.
+- [`TC08StreamingEvent`](https://docs.rs/pico-streaming/latest/pico_streaming/tc08/struct.TC08StreamingEvent.html), [`PT104StreamingEvent`](https://docs.rs/pico-streaming/latest/pico_streaming/pt104/struct.PT104StreamingEvent.html), [`PLCM3StreamingEvent`](https://docs.rs/pico-streaming/latest/pico_streaming/cm3/struct.PLCM3StreamingEvent.html), [`PL1000StreamingEvent`](https://docs.rs/pico-streaming/latest/pico_streaming/pl1000/struct.PL1000StreamingEvent.html), [`HRDLStreamingEvent`](https://docs.rs/pico-streaming/latest/pico_streaming/hrdl/struct.HRDLStreamingEvent.html), [`DrDAQStreamingEvent`](https://docs.rs/pico-streaming/latest/pico_streaming/drdaq/struct.DrDAQStreamingEvent.html): the events of the data loggers.
+- [`BlockRunner`](https://docs.rs/pico-streaming/latest/pico_streaming/block/struct.BlockRunner.html), [`BlockSettings`](https://docs.rs/pico-streaming/latest/pico_streaming/block/struct.BlockSettings.html), [`BlockCapture`](https://docs.rs/pico-streaming/latest/pico_streaming/block/struct.BlockCapture.html), [`BlockData`](https://docs.rs/pico-streaming/latest/pico_streaming/block/struct.BlockData.html): block and rapid block captures.
+- [`digital`](https://docs.rs/pico-streaming/latest/pico_streaming/digital/): the MSO digital ports of a scope.
+
+## Dependencies
+
+- [`pico_common`](https://docs.rs/pico_common/latest/pico_common/) gives [`PicoStatus`](https://docs.rs/pico_common/latest/pico_common/status/enum.PicoStatus.html), [`PicoError`](https://docs.rs/pico_common/latest/pico_common/error/struct.PicoError.html), and the channel, range and trigger types.
+- [`pico_device`](https://docs.rs/pico_device/latest/pico_device/) gives the device and the config of each family, such as [`OscilloscopeDevice`](https://docs.rs/pico_device/latest/pico_device/oscilloscope/struct.OscilloscopeDevice.html) and [`OscilloscopeConfig`](https://docs.rs/pico_device/latest/pico_device/oscilloscope/struct.OscilloscopeConfig.html).
+- [`pico_driver`](https://docs.rs/pico_driver/latest/pico_driver/) gives the driver calls, and the sample buffers that the driver writes.
+
+## Cargo features
+
+- `serde`: adds `Serialize` and `Deserialize` to [`BlockSettings`](https://docs.rs/pico-streaming/latest/pico_streaming/block/struct.BlockSettings.html) and [`AfterPowerChange`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.AfterPowerChange.html).
+
+<!-- cargo-rdme end -->
+
+`cargo run -p pico-streaming --example own_samples` shows two listeners on one event stream, one that reads the samples and one that takes them with no copy.
+It needs no device.
 
 License: MIT

@@ -39,19 +39,19 @@ const RETRY_MAX: Duration = Duration::from_secs(10);
 /// that follows.
 const LOST_SETTLE: Duration = Duration::from_millis(200);
 
-/// Starts in a row that fail with a status [`unit_lost`] does not name,
-/// after which the unit counts as lost: a retry on the same handle
-/// gave the same answer, so only a close and an open again can change
-/// it.
+/// The number of failed starts in a row after which the runner counts the unit as lost
+///
+/// - It counts only starts that fail with a status that neither [`unit_lost`] nor [`settings_refused`] names.
+/// - A retry on the same handle gave the same answer, so only a close and an open again can change it.
 pub const LOST_AFTER_STARTS: usize = 3;
 
-/// A status that says the driver lost the unit, or left it in a state
-/// no call clears, so only a close and an open again can make it work
-/// (see [`StreamingRunner::reopen`]). `TIMEOUT` is one: a 5464E that
-/// timed out a resolution change read every channel over range until
-/// it opened again. `DEVICE_NOT_FUNCTIONING` is the TC-08 driver's
-/// communication error, which a unit plugged in again answers to every
-/// call on its old handle.
+/// Whether `status` says that the driver lost the unit, or left it in a state that no call clears
+///
+/// - Only a close and an open again can make the unit work, as [`StreamingRunner::reopen`] does.
+/// - The statuses are `NOT_RESPONDING`, `INVALID_HANDLE`, `NOT_FOUND`, `TIMEOUT` and `DEVICE_NOT_FUNCTIONING`.
+/// - `TIMEOUT` is one, as a 5464E that timed out a resolution change read every channel over range until it opened again.
+/// - `DEVICE_NOT_FUNCTIONING` is the communication error of the TC-08 driver.
+///   A TC-08 that is unplugged and plugged in again gives it to every call on its old handle, but the unit info still reads, so a ping does not see the loss.
 pub fn unit_lost(status: PicoStatus) -> bool {
     matches!(
         status,
@@ -63,12 +63,12 @@ pub fn unit_lost(status: PicoStatus) -> bool {
     )
 }
 
-/// A status in Pico's published `PicoStatus.h` that says the driver
-/// refused a value the start passed: a range, a rate, a channel set, a
-/// bandwidth limit, a trigger or a generator setting. The unit works;
-/// the same start on any handle gives the same answer until the
-/// settings change. `INVALID_BANDWIDTH` is one: a 3418E at 10 bits
-/// refuses a 350 MHz limit at each `SetChannelOn`.
+/// Whether `status` says that the driver refused a value that the start gave it
+///
+/// - The statuses come from Pico's published `PicoStatus.h`, such as `INVALID_VOLTAGE_RANGE` and `INVALID_BANDWIDTH`.
+/// - The value can be a range, a rate, a set of channels, a bandwidth limit, a trigger or a signal generator setting.
+/// - The unit works, and the same start on any handle gives the same answer until the settings change.
+/// - For example, a 3418E at 10 bits refuses a 350 MHz bandwidth limit at each `SetChannelOn`.
 pub fn settings_refused(status: PicoStatus) -> bool {
     use PicoStatus as S;
     matches!(
@@ -193,22 +193,33 @@ impl Drop for BackgroundThreadHandle {
     }
 }
 
+/// The state that a runner moves its device towards
 #[derive(Debug, Clone)]
 pub enum Target<Config> {
+    /// The unit is closed
     Closed,
+    /// The unit is open, with no stream
     Open,
+    /// The unit streams with this config
     Streaming(Config),
 }
 
+/// The state that a device is in now
+///
+/// - Two values are equal when they are the same variant.
+///   The info and the stream state are not compared.
 #[derive(Debug, Clone, Eq)]
 pub enum Current<Info, Stream> {
+    /// The unit is closed
     Closed,
+    /// The unit is open, with this info
     Open(Info),
+    /// The unit streams, with this info and stream state
     Streaming(Info, Stream),
 }
 
 impl<Info, Stream> Current<Info, Stream> {
-    /// The state's name, for logs.
+    /// The name of the state, for logs
     pub fn name(&self) -> &'static str {
         match self {
             Current::Closed => "closed",
@@ -233,6 +244,7 @@ impl<Info, Stream> Current<Info, Stream>
 where
     Info: Clone,
 {
+    /// A copy of the device info, or `None` while the unit is closed
     pub fn get_info(&self) -> Option<Info> {
         match self {
             Current::Closed => None,
@@ -242,81 +254,123 @@ where
     }
 }
 
-/// What happened to a stream after the unit's power changed
+/// What happened to a stream after the power of the unit changed
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AfterPowerChange {
-    /// No stream was running.
+    /// No stream was running
     Idle,
-    /// The new power runs the stream's channels, so it starts again.
-    /// The samples while it was down are lost.
+    /// The new power runs the channels of the stream, so the stream starts again
+    ///
+    /// - The samples from the time that the stream was down are lost.
     Restarts,
-    /// A channel on needs the power the unit lost, so the stream
-    /// stopped. Start it again with channels the new power runs.
+    /// A channel that is on needs the power that the unit lost, so the stream stopped
+    ///
+    /// - Start the stream again with channels that the new power runs.
     Stopped,
 }
 
-/// A change in a device that is not data, sent to the runner's
-/// [`StreamingRunner::notices`] listeners
+/// A change in a device that is not samples, sent to [`StreamingRunner::notices`]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeviceNotice {
-    /// The external supply was plugged in or out. The driver lost the
-    /// unit's settings, and the device's info now has the new power.
+    /// The external supply was plugged in or out
+    ///
+    /// - The driver lost the settings of the unit.
+    /// - The device info now has the new power.
     PowerChanged {
+        /// The power before the change, when the driver reported it
         from: Option<PowerSource>,
+        /// The power after the change
         to: PowerSource,
-        /// The channels the new power runs
+        /// The channels that the new power runs
         available: Vec<PicoChannel>,
+        /// What happened to the stream
         stream: AfterPowerChange,
     },
-    /// A stream start found the unit lost ([`unit_lost`]). The runner
-    /// closed it, and opens it again while its target asks for a
-    /// stream, waiting longer after each try that fails.
-    UnitLost { status: PicoStatus },
-    /// A stream start failed with a status that says the driver
-    /// refused its settings ([`settings_refused`]). The unit is not
-    /// counted as lost and the runner does not try the start again:
-    /// its target is `Open` until a new [`StreamingRunner::start`]. A
-    /// caller of `start` also gets `error` as its result.
-    StartRefused { error: PicoError },
-    /// [`LOST_AFTER_STARTS`] starts in a row failed with a status that
-    /// does not say the unit is lost or refused its settings, the last
-    /// with `error`. The
-    /// runner counts the unit as lost: it closed it, and opens it
-    /// again as for [`DeviceNotice::UnitLost`]. A caller that streams
-    /// shows the error, as the stream does not run.
-    StartsFailed { error: PicoError, starts: usize },
-    /// The unit reported new probe states, one per channel whose probe
-    /// was plugged in, taken out or changed. The device's info has them
-    /// (`OscilloscopeInfo::probes`) with each channel's new ranges. A
-    /// running stream goes on with the settings it started with, so a
-    /// caller that streams a changed channel starts it again with a
-    /// range of the new probe.
+    /// A stream start found the unit lost, as [`unit_lost`] tells
+    ///
+    /// - The runner closed the unit.
+    /// - While the target is a stream, the runner opens the unit again, and waits longer after each try that fails.
+    UnitLost {
+        /// The status of the failed start
+        status: PicoStatus,
+    },
+    /// A stream start failed because the driver refused its settings, as [`settings_refused`] tells
+    ///
+    /// - The runner does not count the unit as lost, and does not try the start again.
+    /// - The target stays open until the next [`StreamingRunner::start`].
+    /// - A caller of [`StreamingRunner::start`] also gets `error` as its result.
+    StartRefused {
+        /// The error of the failed start
+        error: PicoError,
+    },
+    /// [`LOST_AFTER_STARTS`] starts in a row failed with a status that neither [`unit_lost`] nor [`settings_refused`] names
+    ///
+    /// - The runner counts the unit as lost: it closed the unit, and opens it again as for [`DeviceNotice::UnitLost`].
+    /// - The stream does not run while the starts fail, so show the error to the user.
+    StartsFailed {
+        /// The error of the last failed start
+        error: PicoError,
+        /// The number of failed starts in a row
+        starts: usize,
+    },
+    /// The unit reported new probe states
+    ///
+    /// - There is one state for each channel whose probe was plugged in, taken out or changed.
+    /// - The device info has the new states in `OscilloscopeInfo::probes`, and the new ranges of each channel.
+    /// - A stream that runs goes on with the settings it started with.
+    ///   To use a range of the new probe, start the stream again.
     ProbeChanged {
+        /// The new probe states
         probes: Vec<ProbeState>,
-        /// A stream was running.
+        /// Whether a stream was running
         streaming: bool,
     },
 }
 
+/// The emitter of the notices of a runner
 pub type Notices = EventEmitter<DeviceNotice>;
 
+/// The steps of one device family, which a [`StreamingRunner`] calls on its background thread
+///
+/// - Each step method gives the state that the device is in after the call.
+/// - A step method that fails to talk to the unit closes it and gives [`Current::Closed`], so the next steps open it again.
+/// - Each family in this crate has one impl, for its device type from `pico_device`.
 pub trait StreamDevice<Config, Info, Stream, Event> {
+    /// The serial of the unit, which [`StreamDevice::open`] uses to open it again
     fn serial(&self) -> &str;
+    /// Takes the info of a unit that is open now, or gives `None` for a closed device
+    ///
+    /// - [`StreamingRunner::new`] calls it one time, to know the first state.
     fn info(&mut self) -> Option<Info>;
+    /// Opens the unit with `serial`
+    ///
+    /// - Returns Err when the driver cannot open the unit.
     fn open(&self, serial: &str) -> PicoResult<Current<Info, Stream>>;
+    /// Checks that the open unit still answers
+    ///
+    /// - Gives [`Current::Closed`] after it closes a unit that does not answer.
     fn ping(&self, info: &Info, notices: &Notices) -> Current<Info, Stream>;
-    /// Refuses a config the device cannot run as it is now. A stream
-    /// whose config is refused stops, rather than tries again.
+    /// Refuses a config that the device cannot run as it is now
+    ///
+    /// - A stream whose config is refused stops, and the runner does not try it again.
+    /// - The default accepts every config.
     fn check(&self, _info: &Info, _config: &Config) -> PicoResult<()> {
         Ok(())
     }
+    /// Sets up the open unit for `config` and starts the stream
+    ///
+    /// - Returns Err when the driver refuses a call.
+    ///   The runner reads the status of the error, as [`unit_lost`] and [`settings_refused`] tell.
     fn start(
         &self,
         info: &Info,
         config: &Config,
         notices: &Notices,
     ) -> PicoResult<Current<Info, Stream>>;
+    /// Reads the new samples of the stream and sends them to `events`
+    ///
+    /// - Gives [`Current::Closed`] after it closes a unit that fails.
     fn stream(
         &self,
         info: &Info,
@@ -325,18 +379,23 @@ pub trait StreamDevice<Config, Info, Stream, Event> {
         events: &EventEmitter<Event>,
         notices: &Notices,
     ) -> Current<Info, Stream>;
-    /// How long the background thread waits, with the steps lock
-    /// free, before the stream step after one that left `stream`.
-    /// `start`, `stop` and `close` end the wait. A stream step does
-    /// not sleep, so a call through [`StreamingRunner::with_open`]
-    /// runs in the driver's own time.
+    /// How long the background thread waits before the next stream step, after a step that gave `stream`
+    ///
+    /// - The thread waits with the steps lock free.
+    /// - [`StreamingRunner::start`], [`StreamingRunner::stop`] and [`StreamingRunner::close`] end the wait.
+    /// - A stream step does not sleep, so a call through [`StreamingRunner::with_open`] runs in the driver's own time.
+    /// - The default is no wait.
     fn stream_wait(&self, _config: &Config, _stream: &Stream) -> Duration {
         Duration::ZERO
     }
+    /// Stops the stream, and gives the open state
     fn stop(&self, info: &Info) -> Current<Info, Stream>;
+    /// Closes the unit, and gives [`Current::Closed`]
     fn close(&self, info: &Info) -> Current<Info, Stream>;
-    /// Logs at debug the fields of a state just entered that a log
-    /// reader needs, never the whole info or stream.
+    /// Logs at debug level the fields of a state that the device just entered
+    ///
+    /// - Log only the fields that a log reader needs, never the whole info or stream.
+    /// - The default logs nothing.
     fn log_state(&self, _current: &Current<Info, Stream>) {}
 }
 
@@ -376,6 +435,50 @@ fn next_state<Config, Info, Stream, Event>(
     })
 }
 
+/// Drives one device between closed, open and streaming on a background thread
+///
+/// - Make one with [`IntoStreamingDevice::into_streaming_device`].
+/// - Clones share the device, the state, the thread and the emitters.
+/// - The handlers of [`StreamingRunner::events`] and [`StreamingRunner::notices`] run on the background thread.
+///   The crate docs tell what a handler must not call.
+/// - When the last clone drops, the runner closes the unit and waits for the background thread to end.
+///
+/// ```no_run
+/// use pico_common::{Driver, TC08Channel, TCType};
+/// use pico_device::{tc08::TC08Config, DeviceOpen};
+/// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+/// use pico_streaming::{EventHandler, IntoStreamingDevice, TC08StreamingEvent};
+/// use std::{sync::Arc, thread, time::Duration};
+///
+/// struct Printer;
+///
+/// impl EventHandler<TC08StreamingEvent> for Printer {
+///     fn new_data(&self, event: Arc<TC08StreamingEvent>) {
+///         for (channel, temperatures) in &event.channels {
+///             println!("{channel:?}: {temperatures:?} °C");
+///         }
+///     }
+/// }
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let PicoDriver::TC08(driver) = Driver::TC08.load(&LibraryResolution::Default)? else {
+///         unreachable!("TC08 is the TC-08 driver");
+///     };
+///     let tc08 = driver.open_device(None)?.into_streaming_device();
+///
+///     let printer: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(Printer);
+///     tc08.events.subscribe(&printer);
+///
+///     let mut config = TC08Config::default();
+///     config.enable_channel(TC08Channel::CHANNEL_1, TCType::K);
+///     config.set_interval_ms(1_000);
+///     tc08.start(config)?;
+///
+///     thread::sleep(Duration::from_secs(10));
+///     tc08.close();
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone)]
 pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     device: Device,
@@ -394,8 +497,11 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     /// target changes.
     wake: (Sender<()>, Receiver<()>),
     background_handle: Option<Arc<BackgroundThreadHandle>>,
+    /// The blocks of samples of the stream
+    ///
+    /// - Subscribe an [`EventHandler`] to receive them on the background thread.
     pub events: EventEmitter<Event>,
-    /// Changes in the device that are not data, such as its power
+    /// The changes in the device that are not samples, such as a change of power
     pub notices: Notices,
 }
 
@@ -407,6 +513,11 @@ where
     Stream: Clone + fmt::Debug + Send + Sync + 'static,
     Event: Clone + Send + Sync + 'static,
 {
+    /// Makes a runner for `device`, and starts its background thread
+    ///
+    /// - An open device starts with the target open, and a closed device with the target closed.
+    /// - It takes the info from `device`, with [`StreamDevice::info`].
+    /// - Panics when the operating system cannot start the thread.
     pub fn new(device: Device) -> Self {
         let mut device = device;
 
@@ -527,6 +638,16 @@ where
         Ok(stepped)
     }
 
+    /// Starts a stream with `config`, and returns when the device streams
+    ///
+    /// - It stops a stream that runs, then starts the new one.
+    /// - It opens a closed unit first.
+    /// - A unit found lost opens again one time within the call.
+    /// - Returns Err with `TIMEOUT` when another step holds the device for more than 30 s, or when the device does not stream after 11 steps.
+    /// - Returns Err when [`StreamDevice::check`] refuses the config, or when [`settings_refused`] names the status of the start.
+    ///   The target is then open, and the background thread does not try again.
+    /// - Returns Err when the open or the start fails for another reason, or when the unit is lost a second time.
+    ///   The target stays a stream, so the background thread tries again.
     pub fn start(&self, config: Config) -> PicoResult<()> {
         let waited = Instant::now();
         let Some(steps) = self.steps.try_lock_for(START_WAIT) else {
@@ -582,9 +703,13 @@ where
         }
     }
 
-    /// Closes the device and opens it again, for a unit that a call left
-    /// in a state no other call clears. Runs while the background steps
-    /// are held too, as by a block capture's set-up. The target stays.
+    /// Closes the unit and opens it again at once
+    ///
+    /// - Use it for a unit that a call left in a state that no other call clears, as [`unit_lost`] tells.
+    /// - It also runs while the caller holds the steps with [`StreamingRunner::hold_steps`].
+    /// - The target stays, so a stream starts again on the next steps.
+    ///   With the target closed, the unit stays closed.
+    /// - Returns Err when the open fails.
     pub fn reopen(&self) -> PicoResult<()> {
         let started = Instant::now();
         let steps = self.steps.lock();
@@ -614,11 +739,17 @@ where
         Ok(())
     }
 
+    /// Sets the target to open, so the background thread stops the stream
+    ///
+    /// - It returns at once, and does not wait for the stream to stop.
     pub fn stop(&self) {
         self.state.write().target = Target::Open;
         self.wake();
     }
 
+    /// Sets the target to closed, so the background thread closes the unit
+    ///
+    /// - It returns at once, and does not wait for the unit to close.
     pub fn close(&self) {
         self.state.write().target = Target::Closed;
         self.wake();
@@ -628,6 +759,7 @@ where
         let _ = self.wake.0.try_send(());
     }
 
+    /// The config of the target stream, or `None` while the target is open or closed
     pub fn get_config(&self) -> Option<Config> {
         match &self.state.read().target {
             Target::Closed | Target::Open => None,
@@ -635,12 +767,12 @@ where
         }
     }
 
+    /// The device info, or `None` while the unit is closed
     pub fn get_info(&self) -> Option<Info> {
         self.state.read().current.get_info()
     }
 
-    /// The state of the stream, such as the rate the driver set, while
-    /// the device streams.
+    /// The state of the stream, such as the rate that the driver set, or `None` while the device does not stream
     pub fn get_stream(&self) -> Option<Stream> {
         match &self.state.read().current {
             Current::Streaming(_, stream) => Some(stream.clone()),
@@ -648,9 +780,12 @@ where
         }
     }
 
-    /// Runs `f` on the device and its info between two steps, so a
-    /// driver call that a stream allows runs with no stop. `None` while
-    /// the device is closed.
+    /// Runs `f` on the device and its info between two steps
+    ///
+    /// - A driver call that a stream allows runs, and the stream does not stop.
+    /// - It waits for the step that runs now to end.
+    /// - Returns `None` while the unit is closed.
+    /// - Do not call it from an event handler or from `f`, as the call then never returns.
     pub fn with_open<R>(&self, f: impl FnOnce(&Device, &Info) -> R) -> Option<R> {
         let _steps = self.steps.lock();
         let info = self.state.read().current.get_info()?;
@@ -684,11 +819,11 @@ where
         self.state.write().current = Current::Closed;
     }
 
-    /// Stops the background thread's steps until the guard drops, so
-    /// a caller can drive an open device for a while, such as a block
-    /// capture, with calls through [`with_open`](Self::with_open) and
-    /// no ping between them. Other callers of `with_open`, such as an
-    /// output set, still run between those calls.
+    /// Stops the steps of the background thread until the guard drops
+    ///
+    /// - Use it to drive an open device for a while, such as for a block capture, with calls through [`StreamingRunner::with_open`] and no ping between them.
+    /// - Other callers of [`StreamingRunner::with_open`], such as an output set, still run between those calls.
+    /// - It waits for the step that runs now to end.
     pub fn hold_steps(&self) -> StepsHeld {
         self.holds.fetch_add(1, Ordering::SeqCst);
         // A step that runs now ends before the hold counts.
@@ -817,8 +952,9 @@ where
     }
 }
 
-/// Holds a runner's background steps; see
-/// [`StreamingRunner::hold_steps`].
+/// The guard of [`StreamingRunner::hold_steps`]
+///
+/// - The background steps go on when the last guard drops.
 pub struct StepsHeld {
     holds: Arc<AtomicUsize>,
 }
@@ -830,6 +966,9 @@ impl Drop for StepsHeld {
     }
 }
 
+/// Makes a [`StreamingRunner`] from a device
+///
+/// - Each device type of `pico_device` has an impl.
 pub trait IntoStreamingDevice<Device, Config, Info, Stream, Event>
 where
     Device: Clone + StreamDevice<Config, Info, Stream, Event> + Send + Sync + 'static,
@@ -838,6 +977,9 @@ where
     Info: Clone + fmt::Debug + Send + Sync + 'static,
     Stream: Clone + fmt::Debug + Send + Sync + 'static,
 {
+    /// Makes a runner for this device, and starts its background thread
+    ///
+    /// - It works as [`StreamingRunner::new`] does.
     fn into_streaming_device(self) -> StreamingRunner<Device, Config, Info, Stream, Event>;
 }
 

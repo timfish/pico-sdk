@@ -41,20 +41,20 @@ fn run_buffer_samples(channels: usize) -> u32 {
 /// The state of a DrDAQ stream
 #[derive(Clone, Debug, PartialEq)]
 pub struct DrDAQStreamState {
-    /// The interval between sample sets the driver set, in microseconds
+    /// The interval between the sets of samples that the driver set, in microseconds
     pub interval_us: u32,
-    /// The scaling of each channel that is on, read once at the start of the stream
+    /// The scale of each channel that is on, read one time at the start of the stream
     pub channels: BTreeMap<DrDAQChannel, DrDAQChannelInfo>,
 }
 
-/// A block of samples read back from the driver's streaming buffer
+/// One block of samples from the streaming buffer of the DrDAQ driver
 #[derive(Clone, Debug)]
 pub struct DrDAQStreamingEvent {
-    /// The interval between sample sets the driver set, in microseconds
+    /// The interval between the sets of samples that the driver set, in microseconds
     pub interval_us: u32,
-    /// Per-channel values in the sensor's unit, divided by the channel's divider
+    /// The values of each channel in the unit of the sensor, divided by the divider of the channel
     pub channels: BTreeMap<DrDAQChannel, Vec<f32>>,
-    /// Channels that reported an over-range sample in this block
+    /// The channels that reported an over-range sample in this block
     pub over_range: Vec<DrDAQChannel>,
 }
 
