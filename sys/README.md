@@ -54,7 +54,7 @@ Its field holds the error, and its method panics when you call it.
 - [`ps5000a`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/ps5000a/): PicoScope 5000 Series A, B and D models with flexible resolution.
 - [`ps6000`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/ps6000/): PicoScope 6000 Series, older models such as the 6402 to 6407.
 - [`ps6000a`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/ps6000a/): PicoScope 6000E Series.
-- [`psospa`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/psospa/): PicoScope 3000E Series.
+- [`psospa`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/psospa/): PicoScope 3000E and 5000E Series.
 - [`tc08`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/tc08/): USB TC-08 thermocouple data logger.
 - [`pt104`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/pt104/): PT-104 platinum resistance data logger.
 - [`pl1000`](https://docs.rs/pico-sys-dynamic/latest/pico_sys_dynamic/pl1000/): PicoLog 1000 Series data loggers.

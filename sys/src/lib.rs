@@ -57,7 +57,7 @@
 //! - [`ps5000a`]: PicoScope 5000 Series A, B and D models with flexible resolution.
 //! - [`ps6000`]: PicoScope 6000 Series, older models such as the 6402 to 6407.
 //! - [`ps6000a`]: PicoScope 6000E Series.
-//! - [`psospa`]: PicoScope 3000E Series.
+//! - [`psospa`]: PicoScope 3000E and 5000E Series.
 //! - [`tc08`]: USB TC-08 thermocouple data logger.
 //! - [`pt104`]: PT-104 platinum resistance data logger.
 //! - [`pl1000`]: PicoLog 1000 Series data loggers.
@@ -122,7 +122,7 @@ pub mod ps6000;
 /// PicoScope 6000E Series (`ps6000a` driver).
 #[allow(missing_docs)]
 pub mod ps6000a;
-/// PicoScope 3000E Series (`psospa` driver).
+/// PicoScope 3000E and 5000E Series (`psospa` driver).
 #[allow(missing_docs)]
 pub mod psospa;
 /// PT-104 platinum resistance data logger (`usbpt104` driver).
