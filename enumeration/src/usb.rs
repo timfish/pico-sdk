@@ -4,18 +4,22 @@ use std::fmt;
 
 pub(crate) const PICO_VENDOR_ID: u16 = 0x0CE9;
 
-/// One Pico device as the host's USB stack lists it
+/// One Pico device as the USB stack of the host lists it
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UsbDevice {
+    /// The USB vendor id
     pub vendor_id: u16,
     /// The USB serial-number string, when the device has one
     pub serial: Option<String>,
+    /// The speed, USB version and product id
     pub link: UsbLink,
 }
 
 impl UsbDevice {
-    /// The driver for this device's product id, if it is a Pico device
+    /// The driver for the product id of this device
+    ///
+    /// - Returns `None` when the vendor id is not the Pico vendor id, or the product id is not known.
     pub fn driver(&self) -> Option<Driver> {
         if self.vendor_id == PICO_VENDOR_ID {
             Driver::from_pid(self.link.product_id)
@@ -25,10 +29,18 @@ impl UsbDevice {
     }
 }
 
-/// Lists the Pico devices on the host's USB buses
+/// Lists the Pico devices on the USB buses of the host
 ///
-/// Opens no device and loads no driver. Returns an empty list, with a
-/// warning, when the USB stack cannot be read.
+/// - It opens no device and loads no driver.
+/// - Returns an empty list, and logs a warning, when it cannot read the USB stack.
+///
+/// ```no_run
+/// use pico_enumeration::list_usb_devices;
+///
+/// for device in list_usb_devices() {
+///     println!("{:?}: {}", device.driver(), device.link);
+/// }
+/// ```
 pub fn list_usb_devices() -> Vec<UsbDevice> {
     let devices = match nusb::list_devices().wait() {
         Ok(devices) => devices,
@@ -78,15 +90,14 @@ fn speed(speed: nusb::Speed) -> Option<UsbSpeed> {
     }
 }
 
-/// How [`match_usb_link`] chose a unit's USB device
+/// How [`match_usb_link`] chose the USB device of a unit
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum UsbMatch {
     /// A USB device's serial-number string equals the unit's serial
     Serial,
-    /// No serial matched, and every device of the driver with no serial
-    /// string has the same link
+    /// No serial matched, and all devices of the driver with no serial string have the same link
     NoSerialDevices,
 }
 
@@ -99,27 +110,47 @@ impl fmt::Display for UsbMatch {
     }
 }
 
-/// A unit's USB link and how it was matched
+/// The USB link of a unit, and how [`match_usb_link`] found it
+///
+/// - The struct is `#[non_exhaustive]`, so you cannot make one outside this crate.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct MatchedUsbLink {
+    /// The USB link of the unit
     pub link: UsbLink,
+    /// How the link matched
     pub by: UsbMatch,
 }
 
 /// Finds the USB link of the unit `serial` that `driver` lists
 ///
-/// A USB device whose serial-number string equals `serial` wins
-/// ([`UsbMatch::Serial`]). Some models have a serial string equal to the
-/// driver's serial (a PicoScope 5464E lists `13474/0004`); others have
-/// none (a PicoScope 2208A, a USB TC-08). For a unit with no match, the
-/// candidates are the devices of the driver with no serial string, since
-/// a device with a string belongs to the unit that string names. When
-/// every candidate has the same link, that link is the answer
-/// ([`UsbMatch::NoSerialDevices`]). Otherwise the units cannot be told
-/// apart, and this returns `None`: two 2000 series scopes at different
-/// speeds both get `None`.
+/// - A USB device with a serial-number string equal to `serial` wins, with [`UsbMatch::Serial`].
+///   Some models have this string, such as the PicoScope 5464E (`13474/0004`).
+/// - Other models have no serial string, such as the PicoScope 2208A and the USB TC-08.
+///   For these, the candidates are the devices of `driver` with no serial string.
+/// - When all candidates have the same link, it returns that link, with [`UsbMatch::NoSerialDevices`].
+/// - Returns `None` when there is no candidate, or the candidates have different links.
+///   For example, two 2000 series scopes at different speeds both get `None`.
+///
+/// ```
+/// use pico_common::{Driver, UsbLink, UsbSpeed};
+/// use pico_enumeration::{match_usb_link, UsbDevice, UsbMatch};
+///
+/// let listing = [UsbDevice {
+///     vendor_id: 0x0CE9,
+///     serial: None,
+///     link: UsbLink {
+///         speed: Some(UsbSpeed::High),
+///         usb_version: 0x0200,
+///         product_id: 0x1007,
+///     },
+/// }];
+///
+/// let matched = match_usb_link(&listing, Driver::PS2000, "AB123/0001").unwrap();
+/// assert_eq!(matched.by, UsbMatch::NoSerialDevices);
+/// assert_eq!(matched.link.speed, Some(UsbSpeed::High));
+/// ```
 pub fn match_usb_link(
     listing: &[UsbDevice],
     driver: Driver,
