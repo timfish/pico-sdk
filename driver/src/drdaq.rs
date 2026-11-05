@@ -1,17 +1,12 @@
-//! Safe wrapper for the USB DrDAQ educational data logger driver.
+//! The USB DrDAQ educational data logger driver
 //!
-//! Like the PL1000, the DrDAQ driver keeps a streaming buffer: `UsbDrDaqRun` with `BM_STREAM`
-//! starts a continuous capture, and each `UsbDrDaqGetValues`/`UsbDrDaqGetValuesF` call returns
-//! the readings taken since the last call (USB DrDAQ Programmer's Guide, usbdrdaqpg.en r9,
-//! section 2.5 Capture modes). DrDAQ's channels are fixed onboard sensors rather than generic
-//! analog inputs, and the driver applies each sensor's scaling, but the values it returns may
-//! still need dividing by the channel's divider from `UsbDrDaqGetChannelInfo` to move the decimal
-//! point (sections 2.6, 3.3 and 3.12); [`DrDAQChannelInfo::scale`] does that.
-//!
-//! This wrapper only covers what continuous channel streaming needs (open/close/ping, unit info,
-//! channel capability info, interval/run/stop, and reading the float value buffer), and the
-//! outputs: GPIO, PWM, the signal generator and the RGB LED ([`outputs`],
-//! [`DrDAQDriverInternal::set_output`]). Digital inputs and pulse counting are not wrapped.
+//! - The driver keeps a stream buffer.
+//!   `UsbDrDaqRun` with `BM_STREAM` starts a continuous capture, and each `UsbDrDaqGetValues` or `UsbDrDaqGetValuesF` call returns the values since the last call (USB DrDAQ Programmer's Guide, usbdrdaqpg.en r9, section 2.5 Capture modes).
+//! - The channels are fixed sensors on the board, and the driver scales the value of each sensor.
+//!   You may still need to divide a value by the divider of the channel from `UsbDrDaqGetChannelInfo` (sections 2.6, 3.3 and 3.12).
+//!   [`DrDAQChannelInfo::scale`] does that.
+//! - The wrapper covers what a continuous stream of the channels needs, and the outputs: GPIO, PWM, the signal generator and the RGB LED ([`outputs`], [`DrDAQDriverInternal::set_output`]).
+//!   It does not wrap the digital inputs or the pulse counter.
 
 mod outputs;
 
@@ -27,6 +22,10 @@ use pico_sys_dynamic::drdaq::{
 };
 use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
 
+/// The methods of the DrDAQ driver
+///
+/// - Get it through [`DrDAQDriver`], which dereferences to it.
+/// - Each method that takes a `handle` needs a unit that [`DrDAQDriverInternal::open_unit`] opened.
 pub struct DrDAQDriverInternal {
     bindings: crate::Kept<DrDAQLoader>,
 }
@@ -52,9 +51,9 @@ impl DrDAQDriverInternal {
         Ok(buffer.from_pico_i8_string(required_size as usize))
     }
 
-    /// Opens the next unit that is not already open
+    /// Opens the next unit that is not open, and returns its handle
     ///
-    /// Returns `PicoStatus::NOT_FOUND` once every connected unit has been opened.
+    /// - Returns Err with `PicoStatus::NOT_FOUND` when all connected units are open.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_next_unit(&self) -> Result<i16, PicoStatus> {
         let mut handle: i16 = 0;
@@ -70,10 +69,10 @@ impl DrDAQDriverInternal {
         }
     }
 
-    /// Iterates every connected unit, opening each one
+    /// Opens each connected unit that is not open, and gives its handle
     ///
-    /// The caller owns every handle this yields and must close the ones it does not keep. The
-    /// iteration ends after the first error, as an open that fails would fail again.
+    /// - You own each handle, so close the units that you do not keep.
+    /// - It stops after the first error, as an open that fails would fail again.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
         let mut done = false;
         iter::from_fn(move || {
@@ -91,10 +90,12 @@ impl DrDAQDriverInternal {
         })
     }
 
-    /// Opens a unit, optionally with a specific serial number
+    /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
-    /// Because units can only be found by opening them, looking for a particular serial means
-    /// opening others along the way. Those are closed again before returning.
+    /// - A unit matches when its batch and serial string contains `serial`.
+    /// - To find a serial, it must open other units.
+    ///   It closes them again before it returns.
+    /// - Returns Err with `NOT_FOUND` when no unit matches.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         let mut handles_to_close = Vec::new();
@@ -125,6 +126,9 @@ impl DrDAQDriverInternal {
         result
     }
 
+    /// The serial, variant and hardware version of the unit
+    ///
+    /// - The variant and the version are empty when the driver does not give them.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<DrDAQInfo> {
         let serial = self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL))?;
@@ -143,14 +147,14 @@ impl DrDAQDriverInternal {
         })
     }
 
-    /// Pings the unit to check the connection is still alive
+    /// Checks that the unit is still connected
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn ping_unit(&self, handle: i16) -> PicoResult<()> {
         let status = unsafe { self.bindings.UsbDrDaqPingUnit(handle) };
         PicoStatus::from(status).to_result((), "ping_unit")
     }
 
-    /// The range, decimal places and divider of the scaling a channel uses (section 3.3)
+    /// The range, the decimal places and the divider of the scale of a channel (section 3.3)
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn channel_info(&self, handle: i16, channel: DrDAQChannel) -> PicoResult<DrDAQChannelInfo> {
         let mut min: f32 = 0.0;
@@ -180,14 +184,15 @@ impl DrDAQDriverInternal {
         )
     }
 
-    /// Sets the interval between sample sets and the channels to collect, returning the interval
-    /// the driver set, in microseconds
+    /// Sets the channels to collect and the interval between sample sets
     ///
-    /// `UsbDrDaqSetInterval` takes the time for a whole block of `ideal_samples` per channel and
-    /// returns the time it set (usbdrdaqpg.en r9, section 3.21), so the interval is multiplied up
-    /// on the way in and divided down on the way out. `ideal_samples` is used only for that timing
-    /// calculation; it does not limit a stream. In `BM_STREAM` mode the shortest interval between
-    /// two samples is 10 µs per channel.
+    /// - Returns the interval in microseconds that the driver set.
+    /// - `UsbDrDaqSetInterval` takes the time for a block of `ideal_samples` for each channel, and returns the time it set (usbdrdaqpg.en r9, section 3.21).
+    ///   So the wrapper multiplies the interval by `ideal_samples`, and divides the result by it.
+    /// - `ideal_samples` is only for that calculation.
+    ///   It does not limit a stream.
+    /// - In `BM_STREAM` mode the shortest interval between two samples is 10 µs for each channel.
+    /// - Returns Err with `INVALID_SAMPLE_INTERVAL` when the block time does not fit in a `u32`.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_interval(
         &self,
@@ -218,12 +223,12 @@ impl DrDAQDriverInternal {
         )
     }
 
-    /// Starts collecting samples into the driver's buffer
+    /// Starts to collect samples into the driver buffer
     ///
-    /// `stream = true` runs continuously (`BM_STREAM`); `false` collects a single block
-    /// (`BM_SINGLE`) of `num_values` samples per channel. In a stream, `num_values` must hold
-    /// what arrives between two calls to [`Self::get_values`], and the total over all channels is
-    /// at most 1,000,010 samples (sections 2.5 and 3.19).
+    /// - With `stream` set to `true` it runs continuously (`BM_STREAM`).
+    ///   With `false` it collects one block (`BM_SINGLE`) of `num_values` samples for each channel.
+    /// - In a stream, `num_values` must hold the samples that come between two calls to [`Self::get_values`].
+    /// - The total for all channels is at most 1,000,010 samples (sections 2.5 and 3.19).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn run(&self, handle: i16, num_values: u32, stream: bool) -> PicoResult<()> {
         let method: BLOCK_METHOD = if stream {
@@ -236,13 +241,14 @@ impl DrDAQDriverInternal {
         PicoStatus::from(status).to_result((), "run")
     }
 
-    /// Reads the samples taken since the last call
+    /// Reads the samples since the last call
     ///
-    /// Returns the values from `UsbDrDaqGetValuesF`, before the channel's divider, interleaved
-    /// channel-major within each sample set (i.e. `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`) in
-    /// channel number order whatever order the channels were set in, and an over-range bit field
-    /// by channel number: the least significant bit is channel 1, set when that channel is over
-    /// range in at least one returned sample (sections 3.11 and 3.12).
+    /// - Returns the values from `UsbDrDaqGetValuesF`, before the divider of the channel.
+    /// - Each sample set has one value for each channel, in channel number order, as `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`.
+    ///   The order does not depend on the order in which you set the channels.
+    /// - Also returns an over-range bit field by channel number.
+    ///   Bit 0 is channel 1, and a bit is set when its channel is over range in one or more of the samples (sections 3.11 and 3.12).
+    /// - Returns no values when the driver has no new samples.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,
@@ -279,12 +285,14 @@ impl DrDAQDriverInternal {
         }
     }
 
+    /// Stops the capture
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn stop(&self, handle: i16) -> PicoResult<()> {
         let status = unsafe { self.bindings.UsbDrDaqStop(handle) };
         PicoStatus::from(status).to_result((), "stop")
     }
 
+    /// Closes the unit
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
         let status = unsafe { self.bindings.UsbDrDaqCloseUnit(handle) };
@@ -299,16 +307,26 @@ fn interval_from_block(us_for_block: u32, ideal_samples: u32) -> u32 {
 }
 
 /// A loaded USB DrDAQ driver
+///
+/// - It dereferences to [`DrDAQDriverInternal`], which has the methods.
+/// - Clones share the loaded library.
 #[derive(Clone)]
 pub struct DrDAQDriver(Arc<DrDAQDriverInternal>);
 
 impl DrDAQDriver {
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(DrDAQDriver(Arc::new(DrDAQDriverInternal {
             bindings: crate::Kept::new(unsafe { DrDAQLoader::new(path.as_ref())? }),
         })))
     }
 
+    /// Loads the library that `resolution` finds
+    ///
+    /// - Returns Err when the library does not load.
     pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
         DrDAQDriver::new(resolution.get_path(Driver::DrDAQ))
     }

@@ -4,24 +4,28 @@ use pico_common::{
     TriggerConfig, TriggerSource, TriggerState,
 };
 
-/// Triggers for block, rapid block and streaming. Each family turns
-/// [`TriggerConfig`] into its own trigger model. Block mode calls
-/// `set_trigger` before it arms; streaming calls it before
-/// `start_streaming`.
+/// The trigger, for block, rapid block and streaming
+///
+/// - Each range turns [`TriggerConfig`] into its own trigger model.
+/// - For block mode, call [`TriggerDriver::set_trigger`] before you arm the capture.
+///   For a stream, call it before `start_streaming`.
 pub trait TriggerDriver {
-    /// Sets the trigger, or turns it off with `TriggerConfig::None`.
-    /// Refuses a term the unit lacks before any driver call.
+    /// Sets the trigger, or turns it off with `TriggerConfig::None`
+    ///
+    /// - Returns Err before any driver call when the unit does not have a part of the trigger.
     fn set_trigger(&self, _handle: i16, _trigger: &TriggerConfig) -> PicoResult<()> {
         Err(PicoError::not_supported("set_trigger"))
     }
-    /// Whether the trigger and the pulse width qualifier are on. Families
-    /// whose driver cannot say (ps2000, ps6000a, psospa) give what the
-    /// last `set_trigger` on this handle turned on.
+    /// Tells if the trigger and the pulse width qualifier are on
+    ///
+    /// - The ps2000, ps6000a and psospa drivers cannot tell.
+    ///   Their wrappers give what the last `set_trigger` on this handle turned on.
     fn trigger_enabled(&self, _handle: i16) -> PicoResult<(bool, bool)> {
         Err(PicoError::not_supported("trigger_enabled"))
     }
-    /// Where the trigger fired in the samples the last streaming poll
-    /// returned, as an offset from the first of them. Taken once.
+    /// Where the trigger fired in the samples of the last stream poll, from the first of those samples
+    ///
+    /// - It returns each trigger one time.
     fn streaming_trigger(&self, _handle: i16) -> Option<usize> {
         None
     }

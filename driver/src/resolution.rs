@@ -5,20 +5,40 @@ use crate::{
 use pico_common::Driver;
 use std::{env::current_exe, path::PathBuf};
 
-/// Instructs the loader where to load drivers from
+/// Where the loader finds the library file of a driver
+///
+/// - The file name comes from [`Driver::get_binary_name`]: `<name>.dll` on Windows, `lib<name>.dylib` on macOS and `lib<name>.so` on other systems.
+/// - The ps4000 and ps6000 drivers also need the `picoipp` library.
+///   The loader first loads `picoipp` from the same place as the driver.
+///   When that fails, it goes on, and the driver searches for `picoipp` itself.
+///
+/// ```no_run
+/// use pico_common::Driver;
+/// use pico_driver::{DriverLoad, LibraryResolution};
+///
+/// let resolution = LibraryResolution::Custom("/opt/picoscope/lib".into());
+/// println!("{}", resolution.get_path(Driver::PS4000A).display());
+///
+/// let driver = Driver::PS4000A.load(&resolution)?;
+/// println!("{driver:?}");
+/// # Ok::<(), pico_driver::DriverLoadError>(())
+/// ```
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub enum LibraryResolution {
-    /// Searches for drivers using the OS default path resolution
+    /// Gives the file name only, so the operating system searches its default path
     #[default]
     Default,
-    /// Searches for drivers in the application root directory
+    /// Looks in the directory of the running program
     AppRoot,
-    /// Searches for drivers at a specific path
+    /// Looks in the directory that the path gives
     Custom(PathBuf),
 }
 
 impl LibraryResolution {
-    /// Get the expected path for a driver for this resolution
+    /// The path of the library file of `driver`
+    ///
+    /// - It does not check that the file is there.
+    /// - Panics with [`LibraryResolution::AppRoot`] when the path of the running program is not known.
     pub fn get_path(&self, driver: Driver) -> PathBuf {
         let binary_name = driver.get_binary_name();
 
@@ -34,11 +54,27 @@ impl LibraryResolution {
     }
 }
 
-/// Loads the driver binary for a [`Driver`], returning whichever instrument family it belongs to
+/// Loads the library of a driver and gives the driver of its family
 ///
-/// This is where the two families meet. Callers that already know which family they want can
-/// construct the concrete driver directly instead.
+/// - Use the driver type of a family, such as [`TC08Driver::load`], when you know the family.
+/// - It does not check the driver version.
+///   Call [`OscilloscopeDriverInternal::check_version`](crate::oscilloscope::OscilloscopeDriverInternal::check_version) on an oscilloscope driver to do that.
 pub trait DriverLoad {
+    /// Loads the library that `resolution` finds
+    ///
+    /// - The library stays loaded until the process ends, also after all clones of the driver drop.
+    ///   The drivers start threads of their own, and those threads can still run after the last unit closes.
+    /// - Returns Err when the library does not load.
+    /// - Panics for [`Driver::PicoIPP`], as other drivers use that library and it has no driver of its own.
+    ///
+    /// ```no_run
+    /// use pico_common::Driver;
+    /// use pico_driver::{DriverLoad, LibraryResolution};
+    ///
+    /// let driver = Driver::TC08.load(&LibraryResolution::Default)?;
+    /// println!("{driver:?}");
+    /// # Ok::<(), pico_driver::DriverLoadError>(())
+    /// ```
     fn load(&self, resolution: &LibraryResolution) -> Result<PicoDriver, DriverLoadError>;
 }
 

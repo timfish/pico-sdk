@@ -1,11 +1,10 @@
 use pico_common::{PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoRange, PicoResult};
 
-/// Channel features beyond range and coupling. The bandwidth limit is
-/// part of `OscilloscopeChannelConfig` instead, as some families take it
-/// in their channel call.
+/// The channel features other than range and coupling
+///
+/// - The bandwidth limit is in `OscilloscopeChannelConfig` instead, as some ranges set it in their channel call.
 pub trait ChannelExtrasDriver {
-    /// The lowest and highest analogue offset in volts at `range` and
-    /// `coupling`.
+    /// The lowest and highest analogue offset in volts at `range` and `coupling`
     fn offset_limits(
         &self,
         _handle: i16,
@@ -14,18 +13,21 @@ pub trait ChannelExtrasDriver {
     ) -> PicoResult<(f64, f64)> {
         Err(PicoError::not_supported("offset_limits"))
     }
-    /// Channels whose overvoltage protection tripped. The protection is
-    /// on 50 Ω inputs.
+    /// The channels whose overvoltage protection tripped
+    ///
+    /// - Only 50 Ω inputs have this protection.
     fn overvoltage_tripped(&self, _handle: i16) -> PicoResult<Vec<PicoChannel>> {
         Err(PicoError::not_supported("overvoltage_tripped"))
     }
-    /// Resets the protection of every channel. Returns the channels
-    /// that tripped again at once.
+    /// Resets the overvoltage protection of all channels
+    ///
+    /// - Returns the channels that tripped again at once.
     fn reset_overvoltage(&self, _handle: i16) -> PicoResult<Vec<PicoChannel>> {
         Err(PicoError::not_supported("reset_overvoltage"))
     }
-    /// An info string of the accessory, such as a probe, on `channel`.
-    /// Takes the info types of the unit's own info call.
+    /// One information string of the accessory, such as a probe, on `channel`
+    ///
+    /// - `info` takes the same types as [`get_unit_info`](crate::oscilloscope::OscilloscopeDriverInternal::get_unit_info).
     fn accessory_info(
         &self,
         _handle: i16,

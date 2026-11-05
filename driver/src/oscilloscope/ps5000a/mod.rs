@@ -55,6 +55,9 @@ fn supply_channels(channels: Option<u8>) -> Vec<PicoChannel> {
     }
 }
 
+/// The wrapper of the `ps5000a` driver, for the PicoScope 5000 Series units that use it
+///
+/// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
 pub struct PS5000ADriver {
     _dependencies: LoadedDependencies,
     bindings: crate::Kept<PS5000ALoader>,
@@ -70,6 +73,10 @@ impl std::fmt::Debug for PS5000ADriver {
 impl PS5000ADriver {
     pub(crate) const DRIVER: Driver = Driver::PS5000A;
 
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,

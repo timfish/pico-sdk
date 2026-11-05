@@ -5,20 +5,20 @@ use pico_common::{
 };
 use std::ffi::c_void;
 
-/// Runs once when an armed capture ends, with the driver's status.
+/// The function that runs one time when an armed capture ends, with the status from the driver
 pub type BlockReady = Box<dyn FnOnce(PicoStatus) + Send>;
 
-/// Block mode: one capture around a trigger into the unit's memory,
-/// read after it ends.
+/// Block mode: one capture around a trigger into the memory of the unit, read after it ends
 pub trait BlockDriver {
-    /// The downsample modes `get_values` takes. Empty where the family
-    /// reads raw samples only.
+    /// The downsample modes that [`BlockDriver::get_values`] takes
+    ///
+    /// - Empty when the range reads raw samples only.
     fn block_downsample_modes(&self) -> &'static [DownsampleKind] {
         &[]
     }
-    /// The interval and most samples of timebase `index`, for a capture
-    /// of `samples` into `segment`, with the channels and resolution the
-    /// unit has now.
+    /// The interval and the most samples of timebase `index`, for a capture of `samples` into `segment`
+    ///
+    /// - It uses the channels and the resolution that the unit has now.
     fn timebase(
         &self,
         _handle: i16,
@@ -28,15 +28,14 @@ pub trait BlockDriver {
     ) -> PicoResult<Timebase> {
         Err(PicoError::not_supported("timebase"))
     }
-    /// The highest timebase index of the family.
+    /// The highest timebase index of the range
     fn max_timebase(&self) -> u32 {
         u32::MAX
     }
-    /// The timebase nearest to `interval_s` with `channels` and `ports`
-    /// on at `resolution`. Families with a stateless call use the
-    /// arguments;
-    /// the others search `timebase`, which reads the channels and
-    /// resolution the unit has now, so set those first.
+    /// The timebase nearest to `interval_s`, with `channels` and `ports` on at `resolution`
+    ///
+    /// - Some ranges have a driver call that takes these arguments.
+    ///   The others search with [`BlockDriver::timebase`], which uses the channels and the resolution that the unit has now, so set those first.
     fn nearest_timebase(
         &self,
         handle: i16,
@@ -51,9 +50,10 @@ pub trait BlockDriver {
             self.max_timebase(),
         )
     }
-    /// Give the driver a buffer for reads of `segment` with
-    /// `downsample`. An aggregate read needs `min` for the lows; the
-    /// highs go into `buffer`.
+    /// Gives the driver a buffer for reads of `segment` with `downsample`
+    ///
+    /// - An aggregate read needs `min` for the low values.
+    ///   The high values go into `buffer`.
     fn set_block_buffer(
         &self,
         _handle: i16,
@@ -65,9 +65,11 @@ pub trait BlockDriver {
     ) -> PicoResult<()> {
         Err(PicoError::not_supported("set_block_buffer"))
     }
-    /// Arms a capture. `ready` runs when it ends; with none, poll
-    /// `is_ready`. Returns the time in ms the unit will be busy
-    /// collecting.
+    /// Arms a capture
+    ///
+    /// - `ready` runs when the capture ends.
+    ///   With `None`, call [`BlockDriver::is_ready`] until it returns `true`.
+    /// - Returns the time in ms that the unit needs to collect the samples.
     fn run_block(
         &self,
         _handle: i16,
@@ -76,13 +78,14 @@ pub trait BlockDriver {
     ) -> PicoResult<f64> {
         Err(PicoError::not_supported("run_block"))
     }
-    /// Whether the armed capture has ended.
+    /// Tells if the armed capture has ended
     fn is_ready(&self, _handle: i16) -> PicoResult<bool> {
         Err(PicoError::not_supported("is_ready"))
     }
-    /// Reads `count` raw samples from `start` of `segment` into the
-    /// buffers, downsampled by `downsample`. Returns the values each
-    /// buffer got: `count` raw, or one per group.
+    /// Reads `count` raw samples from `start` of `segment` into the buffers, with `downsample`
+    ///
+    /// - Returns the number of values in each buffer, and the channels that went over range.
+    ///   The number is `count` for raw samples, or one for each group of a downsample.
     fn get_values(
         &self,
         _handle: i16,
@@ -93,7 +96,7 @@ pub trait BlockDriver {
     ) -> PicoResult<(u64, Overflow)> {
         Err(PicoError::not_supported("get_values"))
     }
-    /// The largest downsample ratio of `samples` in `segment`.
+    /// The largest downsample ratio for `samples` in `segment`
     fn max_downsample_ratio(
         &self,
         _handle: i16,
@@ -103,8 +106,9 @@ pub trait BlockDriver {
     ) -> PicoResult<u64> {
         Err(PicoError::not_supported("max_downsample_ratio"))
     }
-    /// Time in seconds from the trigger point to the trigger event of
-    /// `segment`, below one sample interval.
+    /// The time in seconds from the trigger point to the trigger event of `segment`
+    ///
+    /// - The time is less than one sample interval.
     fn trigger_time_offset(&self, _handle: i16, _segment: u64) -> PicoResult<f64> {
         Err(PicoError::not_supported("trigger_time_offset"))
     }

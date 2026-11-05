@@ -4,28 +4,31 @@ use pico_common::{
     PicoResult, PicoStatus, SegmentTimestamp, TriggerInfo, SINCE_PREVIOUS_MASK,
 };
 
-/// Rapid block: many block captures into memory segments with a short
-/// rearm time, and the trigger timing of each.
+/// Rapid block: many block captures into memory segments, with a short time to arm again, and the trigger time of each
 pub trait RapidBlockDriver {
-    /// Splits the unit's memory into `segments`. Returns the samples a
-    /// segment holds.
+    /// Divides the memory of the unit into `segments`
+    ///
+    /// - Returns the number of samples that one segment holds.
     fn memory_segments(&self, _handle: i16, _segments: u64) -> PicoResult<u64> {
         Err(PicoError::not_supported("memory_segments"))
     }
+    /// The most segments that the memory of the unit takes
     fn max_segments(&self, _handle: i16) -> PicoResult<u64> {
         Err(PicoError::not_supported("max_segments"))
     }
-    /// The captures the next run block takes, one a segment from
-    /// segment 0.
+    /// Sets the number of captures for the next block run
+    ///
+    /// - Each capture goes into one segment, from segment 0.
     fn set_captures(&self, _handle: i16, _captures: u64) -> PicoResult<()> {
         Err(PicoError::not_supported("set_captures"))
     }
-    /// Captures done and captures processed.
+    /// The number of captures done, and the number of captures processed
     fn captures_done(&self, _handle: i16) -> PicoResult<(u64, u64)> {
         Err(PicoError::not_supported("captures_done"))
     }
-    /// Give the driver a buffer for a bulk read of `segment`. An
-    /// aggregate read needs `min` for the lows.
+    /// Gives the driver a buffer for a bulk read of `segment`
+    ///
+    /// - An aggregate read needs `min` for the low values.
     fn set_bulk_buffer(
         &self,
         _handle: i16,
@@ -37,9 +40,10 @@ pub trait RapidBlockDriver {
     ) -> PicoResult<()> {
         Err(PicoError::not_supported("set_bulk_buffer"))
     }
-    /// Reads `count` raw samples of segments `from` to `to` into the
-    /// buffers given for them. Returns the values each buffer got and
-    /// the overflow of each segment.
+    /// Reads `count` raw samples of segments `from` to `to` into their buffers
+    ///
+    /// - Returns the number of values in each buffer, and the over-range channels of each segment.
+    /// - Returns Err with `SEGMENT_OUT_OF_RANGE` when `from` is more than `to`.
     fn get_values_bulk(
         &self,
         _handle: i16,
@@ -50,8 +54,9 @@ pub trait RapidBlockDriver {
     ) -> PicoResult<(u64, Vec<Overflow>)> {
         Err(PicoError::not_supported("get_values_bulk"))
     }
-    /// The trigger timing of segments `from` to `to`, as far as the
-    /// family gives it.
+    /// The trigger time of segments `from` to `to`
+    ///
+    /// - Each range gives only the parts of [`TriggerInfo`] that its driver has.
     fn trigger_info(&self, _handle: i16, _from: u64, _to: u64) -> PicoResult<Vec<TriggerInfo>> {
         Err(PicoError::not_supported("trigger_info"))
     }

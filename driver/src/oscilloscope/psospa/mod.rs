@@ -200,6 +200,9 @@ fn listed_resolutions(details: &JsonValue) -> Vec<enPicoDeviceResolution> {
     listed().unwrap_or_default()
 }
 
+/// The wrapper of the `psospa` driver, for the PicoScope 3000E and 5000E Series units that use it
+///
+/// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
 pub struct PSOSPADriver {
     _dependencies: LoadedDependencies,
     bindings: crate::Kept<PSOSPALoader>,
@@ -225,6 +228,10 @@ impl std::fmt::Debug for PSOSPADriver {
 impl PSOSPADriver {
     pub(crate) const DRIVER: Driver = Driver::PSOSPA;
 
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
