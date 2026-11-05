@@ -223,11 +223,13 @@ impl std::fmt::Debug for PSOSPADriver {
 }
 
 impl PSOSPADriver {
+    pub(crate) const DRIVER: Driver = Driver::PSOSPA;
+
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(Driver::PSOSPA, path.as_ref());
+        let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PSOSPALoader::new(path)? });
         Ok(PSOSPADriver {
             bindings,
@@ -290,7 +292,7 @@ impl PSOSPADriver {
 
 impl OscilloscopeDriverInternal for PSOSPADriver {
     fn get_driver(&self) -> Driver {
-        Driver::PS3000A
+        Self::DRIVER
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

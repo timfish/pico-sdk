@@ -326,7 +326,11 @@ pub trait OscilloscopeDriverInternal:
         let loaded_str = &self.get_version()?;
         let loaded_version = Version::from(loaded_str);
 
-        let required_str = get_min_required_version(self.get_driver());
+        let driver = self.get_driver();
+        let Some(required_str) = min_required_version(driver) else {
+            tracing::debug!(?driver, version = %loaded_str, "no minimum version to check");
+            return Ok(());
+        };
         let required_version = Version::from(required_str);
 
         if loaded_version < required_version {
@@ -500,21 +504,27 @@ pub fn check_channel_limit(
     }
 }
 
-/// Gets the minimum supported driver version
-fn get_min_required_version(driver: Driver) -> &'static str {
+/// The minimum driver version tested with these wrappers, or `None`
+/// where no minimum is known. No version is checked for `None`: a
+/// guessed number could refuse a driver that works.
+fn min_required_version(driver: Driver) -> Option<&'static str> {
     match driver {
-        Driver::PS2000 => "3.0.30.1878",
+        Driver::PS2000 => Some("3.0.30.1878"),
         Driver::PS2000A
         | Driver::PS3000A
         | Driver::PS4000
         | Driver::PS4000A
         | Driver::PS5000A
-        | Driver::PS6000 => "2.1.30.1878",
-        Driver::PS6000A => "1.0.54.2438",
-        _ => panic!(
-            "We don't know the minimum required version for the {:?} driver!",
-            driver,
-        ),
+        | Driver::PS6000 => Some("2.1.30.1878"),
+        Driver::PS6000A => Some("1.0.54.2438"),
+        Driver::PSOSPA
+        | Driver::PL1000
+        | Driver::PLCM3
+        | Driver::PT104
+        | Driver::TC08
+        | Driver::PicoHRDL
+        | Driver::DrDAQ
+        | Driver::PicoIPP => None,
     }
 }
 
@@ -529,6 +539,42 @@ mod tests {
             .into_iter()
             .map(|r| (r.serial, r.variant))
             .collect()
+    }
+
+    #[test]
+    fn each_family_reports_its_own_driver() {
+        let families = [
+            (ps2000::PS2000Driver::DRIVER, "2000"),
+            (ps2000a::PS2000ADriver::DRIVER, "2000A"),
+            (ps3000a::PS3000ADriver::DRIVER, "3000A"),
+            (ps4000::PS4000Driver::DRIVER, "4000"),
+            (ps4000a::PS4000ADriver::DRIVER, "4000A"),
+            (ps5000a::PS5000ADriver::DRIVER, "5000A"),
+            (ps6000::PS6000Driver::DRIVER, "6000"),
+            (ps6000a::PS6000ADriver::DRIVER, "6000A"),
+            (psospa::PSOSPADriver::DRIVER, "OSPA"),
+        ];
+        for (driver, name) in families {
+            assert_eq!(driver, name.parse::<Driver>().unwrap(), "{name}");
+        }
+    }
+
+    #[test]
+    fn min_required_version_is_known_or_none_for_every_driver() {
+        use Driver::*;
+        let all = [
+            PS2000, PS2000A, PS3000A, PS4000, PS4000A, PS5000A, PS6000, PS6000A, PSOSPA, PL1000,
+            PLCM3, PT104, TC08, PicoHRDL, DrDAQ, PicoIPP,
+        ];
+        for driver in all {
+            let version = min_required_version(driver);
+            assert_eq!(
+                version.is_some(),
+                driver.is_scope() && driver != PSOSPA,
+                "{driver:?}"
+            );
+        }
+        assert_eq!(min_required_version(PS6000A), Some("1.0.54.2438"));
     }
 
     #[test]

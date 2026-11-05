@@ -100,7 +100,7 @@ impl StreamDevice<(), Handle, (), ()> for Unit {
         }
         let lost = self
             .lost_starts
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
             .is_ok();
         if lost {
             return Err(PicoError::from_status(

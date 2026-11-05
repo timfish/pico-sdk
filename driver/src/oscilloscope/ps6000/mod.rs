@@ -43,11 +43,13 @@ impl std::fmt::Debug for PS6000Driver {
 }
 
 impl PS6000Driver {
+    pub(crate) const DRIVER: Driver = Driver::PS6000;
+
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(Driver::PS6000, path.as_ref());
+        let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS6000Loader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps6000ApplyFix(0x1ced9168, 0x11e6) };
@@ -60,7 +62,7 @@ impl PS6000Driver {
 
 impl OscilloscopeDriverInternal for PS6000Driver {
     fn get_driver(&self) -> Driver {
-        Driver::PS3000A
+        Self::DRIVER
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

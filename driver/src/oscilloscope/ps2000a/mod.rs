@@ -38,11 +38,13 @@ impl std::fmt::Debug for PS2000ADriver {
 }
 
 impl PS2000ADriver {
+    pub(crate) const DRIVER: Driver = Driver::PS2000A;
+
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(Driver::PS2000A, path.as_ref());
+        let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS2000ALoader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps2000aApplyFix(0x1ced9168, 0x11e6) };
@@ -55,7 +57,7 @@ impl PS2000ADriver {
 
 impl OscilloscopeDriverInternal for PS2000ADriver {
     fn get_driver(&self) -> Driver {
-        Driver::PS2000A
+        Self::DRIVER
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

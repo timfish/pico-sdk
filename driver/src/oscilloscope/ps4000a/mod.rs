@@ -51,11 +51,13 @@ impl std::fmt::Debug for PS4000ADriver {
 }
 
 impl PS4000ADriver {
+    pub(crate) const DRIVER: Driver = Driver::PS4000A;
+
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(Driver::PS4000A, path.as_ref());
+        let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS4000ALoader::new(path)? });
         // Disables the splash screen on Windows
         unsafe { bindings.ps4000aApplyFix(0x1ced9168, 0x11e6) };
@@ -69,7 +71,7 @@ impl PS4000ADriver {
 
 impl OscilloscopeDriverInternal for PS4000ADriver {
     fn get_driver(&self) -> Driver {
-        Driver::PS4000A
+        Self::DRIVER
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
