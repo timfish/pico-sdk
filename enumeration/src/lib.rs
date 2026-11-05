@@ -1,27 +1,87 @@
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
+#![warn(rustdoc::broken_intra_doc_links)]
 
-//! Enumerates Pico Technology devices.
+//! Finds the Pico Technology devices on USB and returns each one ready to open.
 //!
-//! This is a sub crate that you probably don't want to use directly. Try the top level
-//! [`pico-sdk`](https://crates.io/crates/pico-sdk) crate which exposes everything from here.
+//! The enumerator lists the USB devices with the Pico vendor id.
+//! It loads only the drivers those devices need, and it keeps each driver loaded for the next call.
+//! It asks each driver for its units in parallel.
+//! It returns one result per unit, or one error per USB device when a whole driver fails.
 //!
-//! Discovers Pico devices by USB Vendor ID, handles loading the required Pico drivers and
-//! enumerates them in parallel returning discovered devices and errors.
+//! # Quick start
 //!
-//! A machine can have instruments from more than one family plugged in at once, so
-//! [`DeviceEnumerator::enumerate`] returns a mixed list of [`PicoDevice`]. Callers that only care
-//! about one family can use [`DeviceEnumerator::enumerate_oscilloscopes`], which avoids loading
-//! the other families' drivers at all.
+//! ```no_run
+//! use pico_enumeration::{DeviceEnumerator, EnumResultHelpers};
 //!
-//! Each device the enumerator returns carries its USB link ([`UsbLink`]): the speed the host
-//! negotiated and the USB version the device declares, so an application can show the link and
-//! warn when a USB 3 scope runs on a USB 2 port. See [`match_usb_link`] for how a unit is matched
-//! to a USB device, and [`DeviceEnumerator::usb_link`] for a unit opened without enumeration;
-//! both say how they matched ([`UsbMatch`]). The speed is `None` where the operating system does
-//! not report it.
+//! let results = DeviceEnumerator::new().enumerate();
 //!
-//! [`EnumerationError`] and its variants are `#[non_exhaustive]`: match them with `..`, and build
-//! one with its constructor, such as [`EnumerationError::driver_error`].
+//! for driver in results.missing_drivers() {
+//!     println!("missing driver: {driver}");
+//! }
+//!
+//! let (devices, errors) = results.devices_and_errors();
+//! for device in &devices {
+//!     let model = device.get_variant().unwrap_or("data logger");
+//!     println!("{model} {}", device.get_serial());
+//! }
+//! for error in &errors {
+//!     println!("error: {error}");
+//! }
+//! ```
+//!
+//! # How the parts fit
+//!
+//! ```text
+//!  list_usb_devices()          every USB device with the Pico vendor id
+//!         │
+//!         ▼
+//!  UsbDevice ──► Driver        the product id selects the driver
+//!         │
+//!         ▼
+//!  DeviceEnumerator            loads each driver once, then keeps it
+//!         │
+//!         ▼
+//!  EnumerateDriver             each driver lists its units, in parallel
+//!         │
+//!         ▼
+//!  match_usb_link()            gives each unit its UsbLink
+//!         │
+//!         ▼
+//!  Vec<Result<PicoDevice, EnumerationError>>
+//!         │
+//!         ▼
+//!  EnumResultHelpers           devices, errors and missing drivers
+//!  PicoDeviceHelpers           devices of one family
+//! ```
+//!
+//! # USB link
+//!
+//! Each device carries its [`UsbLink`]: the speed the host negotiated and the USB version the device declares.
+//! An application can use it to show when a USB 3 scope runs on a USB 2 port.
+//! The speed is `None` when the operating system does not report it.
+//! [`match_usb_link`] tells how the enumerator matches a unit to a USB device.
+//! [`DeviceEnumerator::usb_link`] finds the link of a unit that you opened without the enumerator.
+//!
+//! # Main types
+//!
+//! - [`DeviceEnumerator`]: lists the devices of all families, or only the oscilloscopes.
+//! - [`EnumerationError`]: why a driver or a unit failed.
+//! - [`EnumResultHelpers`]: splits the results into devices and errors.
+//! - [`PicoDeviceHelpers`]: picks the devices of one family from a mixed list.
+//! - [`EnumerateDriver`]: lists the units of one loaded driver.
+//! - [`list_usb_devices`], [`UsbDevice`]: the Pico devices on USB, with no driver loaded.
+//! - [`match_usb_link`], [`MatchedUsbLink`], [`UsbMatch`]: the USB link of a unit, and how it matched.
+//!
+//! # Dependencies
+//!
+//! - [`pico_common`] gives [`Driver`], [`UsbLink`] and [`PicoError`].
+//! - [`pico_driver`] loads the driver libraries.
+//! - [`pico_device`] gives [`PicoDevice`] and the device of each family.
+//!
+//! # Cargo features
+//!
+//! - `serde`: adds `Serialize` and `Deserialize` to [`EnumerationError`], [`UsbDevice`], [`MatchedUsbLink`] and [`UsbMatch`].
 
 pub use extend::EnumerateDriver;
 pub use helpers::{EnumResultHelpers, PicoDeviceHelpers};
@@ -40,6 +100,12 @@ mod usb;
 
 pub use usb::{list_usb_devices, match_usb_link, MatchedUsbLink, UsbDevice, UsbMatch};
 
+/// Why the enumerator could not return a device
+///
+/// - The enum and each variant are `#[non_exhaustive]`.
+///   Match a variant with `..`, and make one with a constructor such as [`EnumerationError::driver_error`].
+/// - An error that stops a whole driver comes once for each USB device of that driver.
+///   [`EnumerationError::usb`] gives the link of that device.
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
@@ -48,43 +114,60 @@ pub use usb::{list_usb_devices, match_usb_link, MatchedUsbLink, UsbDevice, UsbMa
 #[derive(Error, Debug, Clone)]
 #[non_exhaustive]
 pub enum EnumerationError {
+    /// The driver returned an error
     #[error("Pico driver error: {error}")]
     #[non_exhaustive]
     DriverError {
+        /// The driver that returned the error
         driver: Driver,
+        /// The error from the driver
         #[source]
         error: PicoError,
         /// The USB device the error is for, when the error covers the whole driver
         usb: Option<UsbLink>,
     },
 
+    /// The driver found no units, and the kernel driver looks missing
+    ///
+    /// - Only Windows makes this check.
     #[error("The {driver} driver could not find any devices. The Pico Technology kernel driver appears to be missing.")]
     #[non_exhaustive]
     KernelDriverError {
+        /// The driver that found no units
         driver: Driver,
+        /// The USB device the error is for
         usb: Option<UsbLink>,
     },
 
+    /// The driver library is not there, or it did not load
     #[error("The {driver} driver could not be found or failed to load")]
     #[non_exhaustive]
     DriverLoadError {
+        /// The driver that did not load
         driver: Driver,
+        /// The loader's error message
         error: String,
+        /// The USB device the error is for
         usb: Option<UsbLink>,
     },
 
+    /// The driver library is older than this crate needs
     #[error("Invalid Driver Version: Requires >= {required}, Found: {found}")]
     #[non_exhaustive]
     VersionError {
+        /// The driver with the old version
         driver: Driver,
+        /// The version of the loaded library
         found: String,
+        /// The minimum version this crate needs
         required: String,
+        /// The USB device the error is for
         usb: Option<UsbLink>,
     },
 }
 
 impl EnumerationError {
-    /// An error the driver returned
+    /// Makes a [`EnumerationError::DriverError`] with no USB link
     pub fn driver_error(driver: Driver, error: PicoError) -> Self {
         EnumerationError::DriverError {
             driver,
@@ -93,12 +176,12 @@ impl EnumerationError {
         }
     }
 
-    /// The driver listed no devices and the kernel driver looks missing
+    /// Makes a [`EnumerationError::KernelDriverError`] with no USB link
     pub fn kernel_driver_error(driver: Driver) -> Self {
         EnumerationError::KernelDriverError { driver, usb: None }
     }
 
-    /// The driver library could not be found or failed to load
+    /// Makes a [`EnumerationError::DriverLoadError`] with no USB link
     pub fn driver_load_error(driver: Driver, error: impl Into<String>) -> Self {
         EnumerationError::DriverLoadError {
             driver,
@@ -107,7 +190,7 @@ impl EnumerationError {
         }
     }
 
-    /// The driver library is older than this crate needs
+    /// Makes a [`EnumerationError::VersionError`] with no USB link
     pub fn version_error(
         driver: Driver,
         found: impl Into<String>,
@@ -121,7 +204,9 @@ impl EnumerationError {
         }
     }
 
-    /// The error for a failed driver load
+    /// Makes the error for a driver that did not load
+    ///
+    /// - This is not the [`From`] trait, as it also needs the driver.
     pub fn from(driver: Driver, error: DriverLoadError) -> Self {
         match error {
             DriverLoadError::DriverError(error) => Self::driver_error(driver, error),
@@ -144,13 +229,10 @@ impl EnumerationError {
         }
     }
 
-    /// The USB link of the device the error is for, when the enumerator
-    /// knows which USB device that is
+    /// The USB link of the device the error is for
     ///
-    /// An error that stops a whole driver (it fails to load, or lists
-    /// nothing) is returned once for each USB device of that driver, each
-    /// with its own link. An error the driver returns for one of its units
-    /// has `None`, as the driver does not say which USB device it is.
+    /// - An error that stops a whole driver comes once for each USB device of that driver, each with its own link.
+    /// - An error that the driver returns for one unit has `None`, as the driver does not tell which USB device it is.
     pub fn usb(&self) -> Option<UsbLink> {
         match self {
             EnumerationError::DriverError { usb, .. }
@@ -172,16 +254,21 @@ impl EnumerationError {
     }
 }
 
-/// Enumerates Pico devices
+/// Finds the Pico devices on USB and loads the drivers they need
 ///
-/// Discovers Pico devices by USB Vendor ID, handles loading the required Pico
-/// drivers and enumerates them in parallel.
+/// - It keeps each driver that it loads, and uses it again on the next call.
+/// - Clones share the loaded drivers.
 ///
 /// ```no_run
 /// use pico_enumeration::DeviceEnumerator;
 ///
 /// let enumerator = DeviceEnumerator::new();
-/// let results = enumerator.enumerate();
+/// for result in enumerator.enumerate() {
+///     match result {
+///         Ok(device) => println!("found {}", device.get_serial()),
+///         Err(error) => println!("error: {error}"),
+///     }
+/// }
 /// ```
 #[derive(Clone, Default)]
 pub struct DeviceEnumerator {
@@ -190,11 +277,13 @@ pub struct DeviceEnumerator {
 }
 
 impl DeviceEnumerator {
+    /// Makes an enumerator that finds the drivers on the default search path of the operating system
     pub fn new() -> Self {
         DeviceEnumerator::with_resolution(Default::default())
     }
 
-    /// Creates a new `DeviceEnumerator` with the supplied resolution
+    /// Makes an enumerator that finds the drivers as `resolution` tells
+    ///
     #[tracing::instrument(level = "info")]
     pub fn with_resolution(resolution: LibraryResolution) -> Self {
         DeviceEnumerator {
@@ -203,8 +292,9 @@ impl DeviceEnumerator {
         }
     }
 
-    /// Enumerates Pico devices via USB Vendor ID. Returns the number of devices
-    /// discovered for each `Driver` type
+    /// Counts the Pico USB devices for each driver
+    ///
+    /// - It loads no driver.
     #[tracing::instrument(level = "debug")]
     pub fn enumerate_raw() -> HashMap<Driver, usize> {
         by_driver(&list_usb_devices())
@@ -215,17 +305,21 @@ impl DeviceEnumerator {
 
     /// Finds the USB link of a unit by driver and serial
     ///
-    /// Lists the USB devices but loads no driver, so it costs little. Use
-    /// it for a unit opened by serial without enumeration. Matches as
-    /// [`match_usb_link`] does, and says how it matched.
+    /// - Use it for a unit that you opened by serial without the enumerator.
+    /// - It lists the USB devices but loads no driver.
+    /// - It matches as [`match_usb_link`] does.
+    /// - Returns `None` when no single USB device matches.
     pub fn usb_link(driver: Driver, serial: &str) -> Option<MatchedUsbLink> {
         match_usb_link(&list_usb_devices(), driver, serial)
     }
 
-    /// Enumerates required drivers and returns a flattened list of results
+    /// Lists the units of all families, with one result for each unit
     ///
-    /// The list can contain devices from more than one instrument family.
-    /// Each device carries its USB link (see [`PicoDevice::usb`]).
+    /// - It loads only the drivers that the USB devices need.
+    /// - Each device carries its USB link, from [`PicoDevice::usb`].
+    /// - A driver that fails gives one error for each of its USB devices.
+    /// - Data logger devices come back open, as their drivers must open a unit to read its serial.
+    ///   Oscilloscope devices come back closed.
     #[tracing::instrument(level = "info", skip(self))]
     pub fn enumerate(&self) -> Vec<Result<PicoDevice, EnumerationError>> {
         let listing = list_usb_devices();
@@ -237,10 +331,10 @@ impl DeviceEnumerator {
             .collect()
     }
 
-    /// Enumerates oscilloscopes only
+    /// Lists the oscilloscope units only
     ///
-    /// Data logger drivers are never loaded, so this is not just a filter over
-    /// [`DeviceEnumerator::enumerate`].
+    /// - It does not load the data logger drivers, and it does not open their units.
+    /// - Otherwise it works as [`DeviceEnumerator::enumerate`] does.
     #[tracing::instrument(level = "info", skip(self))]
     pub fn enumerate_oscilloscopes(&self) -> Vec<Result<OscilloscopeDevice, EnumerationError>> {
         let listing = list_usb_devices();

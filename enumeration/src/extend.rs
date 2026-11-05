@@ -8,17 +8,20 @@ use pico_driver::{
     pl1000::PL1000Driver, pt104::PT104Driver, tc08::TC08Driver, PicoDriver,
 };
 
-/// Lists the devices a loaded driver can see
+/// Lists the units of one loaded driver
 ///
-/// Implemented per family because discovery works differently for each, then for [`PicoDriver`]
-/// to dispatch to the right one.
+/// - Each family has its own implementation, as each finds its units in a different way.
+/// - The implementation for [`PicoDriver`] calls the one for its family.
 pub trait EnumerateDriver<D> {
+    /// Lists the units that the driver can see, with one result for each unit
+    ///
+    /// - Returns `Err` when the driver cannot list its units.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<D>>>;
 }
 
 impl EnumerateDriver<DrDAQDevice> for DrDAQDriver {
-    /// Like the TC-08, the DrDAQ has no enumerate call and reports no serial until a unit is open,
-    /// so discovery means opening every connected unit in turn.
+    /// The DrDAQ driver has no enumerate call, and reports no serial until a unit is open.
+    /// So this opens each attached unit in turn, and the devices come back open.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<DrDAQDevice>>> {
         Ok(self
             .open_unit_iter()
@@ -36,6 +39,7 @@ impl EnumerateDriver<DrDAQDevice> for DrDAQDriver {
 }
 
 impl EnumerateDriver<OscilloscopeDevice> for OscilloscopeDriver {
+    /// The oscilloscope driver lists its units without opening them, so the devices come back closed.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<OscilloscopeDevice>>> {
         Ok(self
             .enumerate_units()?
@@ -52,8 +56,8 @@ impl EnumerateDriver<OscilloscopeDevice> for OscilloscopeDriver {
 }
 
 impl EnumerateDriver<HRDLDevice> for HRDLDriver {
-    /// Like the TC-08, the HRDL has no enumerate call and reports no serial until a unit is open,
-    /// so discovery means opening every connected unit in turn.
+    /// The HRDL driver has no enumerate call, and reports no serial until a unit is open.
+    /// So this opens each attached unit in turn, and the devices come back open.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<HRDLDevice>>> {
         Ok(self
             .open_unit_iter()
@@ -71,8 +75,8 @@ impl EnumerateDriver<HRDLDevice> for HRDLDriver {
 }
 
 impl EnumerateDriver<PL1000Device> for PL1000Driver {
-    /// Like the TC-08, the PL1000 has no enumerate call and reports no serial until a unit is
-    /// open, so discovery means opening every connected unit in turn.
+    /// The PL1000 driver has no enumerate call, and reports no serial until a unit is open.
+    /// So this opens each attached unit in turn, and the devices come back open.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<PL1000Device>>> {
         Ok(self
             .open_unit_iter()
@@ -90,8 +94,9 @@ impl EnumerateDriver<PL1000Device> for PL1000Driver {
 }
 
 impl EnumerateDriver<PLCM3Device> for PLCM3Driver {
-    /// The CM3 lists the serials attached with `PLCM3Enumerate`, and discovery opens each one by
-    /// serial (PicoLog CM3 Programmer's Guide, plcm3pg r4, sections 2.3 and 2.7).
+    /// The CM3 driver lists the attached serials with `PLCM3Enumerate`, and this opens each unit by serial.
+    /// The devices come back open.
+    /// See the PicoLog CM3 Programmer's Guide (plcm3pg r4), sections 2.3 and 2.7.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<PLCM3Device>>> {
         Ok(self
             .open_unit_iter()
@@ -109,8 +114,8 @@ impl EnumerateDriver<PLCM3Device> for PLCM3Driver {
 }
 
 impl EnumerateDriver<PT104Device> for PT104Driver {
-    /// Like the TC-08, the PT-104 (over USB) has no enumerate call and reports no serial until a
-    /// unit is open, so discovery means opening every connected unit in turn.
+    /// The PT-104 driver has no enumerate call for USB units, and reports no serial until a unit is open.
+    /// So this opens each attached unit in turn, and the devices come back open.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<PT104Device>>> {
         Ok(self
             .open_unit_iter()
@@ -128,9 +133,8 @@ impl EnumerateDriver<PT104Device> for PT104Driver {
 }
 
 impl EnumerateDriver<TC08Device> for TC08Driver {
-    /// The TC-08 has no enumerate call and will not report a serial number until a unit is open,
-    /// so discovery means opening every connected unit. The devices this returns are therefore
-    /// already open, unlike the oscilloscope ones.
+    /// The TC-08 driver has no enumerate call, and reports no serial until a unit is open.
+    /// So this opens each attached unit in turn, and the devices come back open.
     fn enumerate_devices(&self) -> PicoResult<Vec<PicoResult<TC08Device>>> {
         Ok(self
             .open_unit_iter()

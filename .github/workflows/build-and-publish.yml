@@ -37,6 +37,13 @@ jobs:
           echo "CARGO_BUILD_TARGET=x86_64-apple-darwin" >> "$GITHUB_ENV"
       - name: ⚡ Cache
         uses: Swatinem/rust-cache@v2
+      - name: 📝 README check
+        # cargo-rdme needs a pinned nightly to resolve intra-doc links
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo install cargo-rdme --locked
+          cargo rdme install-rust-toolchain-for-intralinks
+          scripts/readme.sh --check
       - name: 🔎 Test
         run: cargo test
       - name: 🔌 Download & load drivers

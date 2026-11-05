@@ -5,11 +5,15 @@ use pico_device::{
     pl1000::PL1000Device, pt104::PT104Device, tc08::TC08Device, PicoDevice,
 };
 
-/// Generic over the device type so it works for both the mixed
-/// [`crate::DeviceEnumerator::enumerate`] and the family specific
-/// [`crate::DeviceEnumerator::enumerate_oscilloscopes`].
+/// Helpers for the results of an enumeration
+///
+/// - Works on the results of [`crate::DeviceEnumerator::enumerate`] and [`crate::DeviceEnumerator::enumerate_oscilloscopes`].
 pub trait EnumResultHelpers<D> {
+    /// The drivers that did not load or are too old, sorted, each one time
+    ///
+    /// - Use it to find the drivers to install or update.
     fn missing_drivers(&self) -> Vec<Driver>;
+    /// Splits the results into the devices and the errors, in their order
     fn devices_and_errors(self) -> (Vec<D>, Vec<EnumerationError>);
 }
 
@@ -45,14 +49,23 @@ impl<D> EnumResultHelpers<D> for Vec<Result<D, EnumerationError>> {
     }
 }
 
-/// Splits a mixed enumeration result by instrument family
+/// Picks the devices of one family from a mixed list
+///
+/// - Each method drops the devices of the other families.
 pub trait PicoDeviceHelpers {
+    /// The PicoLog CM3 devices
     fn cm3s(self) -> Vec<PLCM3Device>;
+    /// The DrDAQ devices
     fn drdaqs(self) -> Vec<DrDAQDevice>;
+    /// The PicoLog ADC-20 and ADC-24 devices
     fn hrdls(self) -> Vec<HRDLDevice>;
+    /// The oscilloscopes
     fn oscilloscopes(self) -> Vec<OscilloscopeDevice>;
+    /// The PicoLog 1000 series devices
     fn pl1000s(self) -> Vec<PL1000Device>;
+    /// The PT-104 devices
     fn pt104s(self) -> Vec<PT104Device>;
+    /// The USB TC-08 devices
     fn tc08s(self) -> Vec<TC08Device>;
 }
 
