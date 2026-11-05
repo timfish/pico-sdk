@@ -165,11 +165,13 @@ impl std::fmt::Debug for PS2000Driver {
 }
 
 impl PS2000Driver {
+    pub(crate) const DRIVER: Driver = Driver::PS2000;
+
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
-        let dependencies = load_dependencies(Driver::PS2000, path.as_ref());
+        let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS2000Loader::new(path)? });
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {
@@ -189,7 +191,7 @@ impl PS2000Driver {
 
 impl OscilloscopeDriverInternal for PS2000Driver {
     fn get_driver(&self) -> Driver {
-        Driver::PS2000
+        Self::DRIVER
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
