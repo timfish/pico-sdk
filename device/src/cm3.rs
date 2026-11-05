@@ -1,3 +1,5 @@
+//! PicoLog CM3 current data logger
+
 use crate::DeviceOpen;
 use pico_common::{
     MainsRejectionFreq, PLCM3Channel, PLCM3DataType, PLCM3Info, PicoResult, UsbLink,
@@ -6,36 +8,55 @@ use pico_common::{
 use pico_driver::cm3::PLCM3Driver;
 use std::{collections::BTreeMap, sync::Arc};
 
-/// Configuration for a PicoLog CM3 device
+/// The settings to start a PicoLog CM3 capture
 ///
-/// Each channel can be configured with the type of current clamp (or voltage) connected to it.
+/// - Each channel has the type of current clamp on it, or a voltage input.
+///
+/// ```
+/// use pico_common::{PLCM3Channel, PLCM3DataType};
+/// use pico_device::cm3::PLCM3Config;
+///
+/// let mut config = PLCM3Config::default();
+/// config.enable_channel(PLCM3Channel::CHANNEL_1, PLCM3DataType::OneMillivoltPerAmp);
+/// assert_eq!(config.poll_interval_ms(), 720);
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct PLCM3Config {
+    /// The mains frequency the unit filters out
     pub mains_rejection: MainsRejectionFreq,
+    /// The data type of each channel
+    ///
+    /// - A channel that is not in the map is off.
     pub channels: BTreeMap<PLCM3Channel, PLCM3DataType>,
 }
 
 impl PLCM3Config {
-    /// Enables a channel with a given clamp/voltage type
+    /// Sets the data type of `channel`
     pub fn enable_channel(&mut self, channel: PLCM3Channel, data_type: PLCM3DataType) {
         self.channels.insert(channel, data_type);
     }
 
-    /// Disables a channel (sets it to Off)
+    /// Turns off `channel`
+    ///
+    /// - It removes the channel from the map.
     pub fn disable_channel(&mut self, channel: PLCM3Channel) {
         self.channels.remove(&channel);
     }
 
-    /// Returns all configured channels in channel order
+    /// Each channel in the map, in channel order
+    ///
+    /// - It includes a channel with the data type [`PLCM3DataType::Off`].
     pub fn enabled_channels(&self) -> impl Iterator<Item = (PLCM3Channel, PLCM3DataType)> + '_ {
         self.channels
             .iter()
             .map(|(channel, data_type)| (*channel, *data_type))
     }
 
-    /// How often each channel gets a new conversion: about 720 ms per channel that is not off
-    /// (PicoLog CM3 Programmer's Guide, `PLCM3SetChannel`)
+    /// The time between two new values of a channel, in milliseconds
+    ///
+    /// - The unit takes about 720 ms for each channel that is not off (PicoLog CM3 Programmer's Guide, `PLCM3SetChannel`).
+    /// - With no channel on, it gives the time of one channel.
     pub fn poll_interval_ms(&self) -> u32 {
         let converted = self
             .enabled_channels()
@@ -45,16 +66,26 @@ impl PLCM3Config {
     }
 }
 
+/// A PicoLog CM3 data logger
+///
+/// - It closes its unit on drop, when it is the last holder of the handle in `info`.
 #[derive(Clone, Debug)]
 pub struct PLCM3Device {
+    /// The driver that opened the unit
     pub driver: PLCM3Driver,
+    /// The serial of the unit
     pub serial: String,
-    /// The USB link, when enumeration matched this unit to a USB device
+    /// The USB link of the unit, when it is known
     pub usb: Option<UsbLink>,
+    /// The open handle and the unit info, or `None` when the unit is not open
     pub info: Option<PLCM3Info>,
 }
 
 impl PLCM3Device {
+    /// Makes a device value from its parts, with no USB link
+    ///
+    /// - It does not open the unit.
+    /// - With the `info` of an open unit, it closes that unit on drop, when it is the last holder of the handle.
     pub fn new_closed(driver: &PLCM3Driver, serial: String, info: Option<PLCM3Info>) -> Self {
         Self {
             driver: driver.clone(),

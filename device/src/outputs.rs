@@ -1,6 +1,25 @@
-//! [`Outputs`] on open devices. A device that went into a streaming
-//! runner has given its info to the runner; the runner's own `Outputs`
-//! reaches the handle it holds, so outputs change while it streams.
+//! The outputs of each device: digital lines, PWM, signal generators and lights
+//!
+//! - Each device type has [`Outputs`], which uses the `info` of the device.
+//!   It returns Err when the device has no `info`.
+//! - [`DeviceOutputs`] takes the info as an argument.
+//!   Use it when other code holds the info of the open unit.
+//! - The TC-08, PT-104 and PicoLog CM3 have no outputs.
+//!
+//! ```no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! use pico_common::{Driver, Outputs};
+//! use pico_device::DeviceOpen;
+//! use pico_driver::{pl1000::PL1000Driver, LibraryResolution};
+//!
+//! let driver = PL1000Driver::new(LibraryResolution::Default.get_path(Driver::PL1000))?;
+//! let device = driver.open_device(None)?;
+//! for spec in device.outputs()? {
+//!     println!("{}: {}", spec.id, spec.label);
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
 use crate::{
     cm3::PLCM3Device, drdaq::DrDAQDevice, hrdl::HRDLDevice, oscilloscope::OscilloscopeDevice,
@@ -12,9 +31,16 @@ use pico_common::{
 };
 use pico_driver::oscilloscope::outputs::{scope_outputs, set_scope_output};
 
-/// The outputs of a device, given the info of its open unit.
+/// The outputs of a device, with the info of its open unit as an argument
 pub trait DeviceOutputs<Info> {
+    /// The outputs the unit has
+    ///
+    /// - Returns an empty list for a family with no outputs.
     fn outputs_of(&self, info: &Info) -> PicoResult<Vec<OutputSpec>>;
+    /// Sets output `id` to `value`, and returns the value the unit took
+    ///
+    /// - The value can be different from `value` when the unit rounds it.
+    /// - Returns Err when the unit has no output `id`, or the driver refuses the value.
     fn set_output_of(&self, info: &Info, id: &str, value: &OutputValue) -> PicoResult<OutputValue>;
 }
 

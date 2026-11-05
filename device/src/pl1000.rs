@@ -1,46 +1,75 @@
+//! PicoLog 1000 series data logger
+
 use crate::DeviceOpen;
 use pico_common::{PL1000Channel, PL1000Info, PicoResult, UsbLink};
 use pico_driver::pl1000::PL1000Driver;
 use std::{collections::BTreeSet, sync::Arc};
 
-/// Configuration for a PicoLog 1000 series device
+/// The settings to start a PicoLog 1000 series capture
 ///
-/// Every channel shares the device's one fixed input range, so there is no per-channel type or
-/// range to set - a channel is either collected or it is not.
+/// - All channels share the one fixed input range of the device, so a channel has no type or range.
+///   A channel is on or off.
+///
+/// ```
+/// use pico_common::PL1000Channel;
+/// use pico_device::pl1000::PL1000Config;
+///
+/// let mut config = PL1000Config {
+///     sample_interval_us: 1_000,
+///     ..Default::default()
+/// };
+/// config.enable_channel(PL1000Channel::CHANNEL_1);
+/// config.enable_channel(PL1000Channel::CHANNEL_2);
+/// assert_eq!(config.enabled_channels().count(), 2);
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct PL1000Config {
-    /// Requested interval between samples, in microseconds. The driver may adjust this; the
-    /// actual value it settles on is reported back on the streaming event.
+    /// The time between samples that you ask for, in microseconds
+    ///
+    /// - The driver can use a different time.
     pub sample_interval_us: u32,
+    /// The channels that are on
     pub channels: BTreeSet<PL1000Channel>,
 }
 
 impl PL1000Config {
+    /// Turns on `channel`
     pub fn enable_channel(&mut self, channel: PL1000Channel) {
         self.channels.insert(channel);
     }
 
+    /// Turns off `channel`
     pub fn disable_channel(&mut self, channel: PL1000Channel) {
         self.channels.remove(&channel);
     }
 
-    /// The channels that are enabled, in channel order
+    /// The channels that are on, in channel order
     pub fn enabled_channels(&self) -> impl Iterator<Item = PL1000Channel> + '_ {
         self.channels.iter().copied()
     }
 }
 
+/// A PicoLog 1000 series data logger
+///
+/// - It closes its unit on drop, when it is the last holder of the handle in `info`.
 #[derive(Clone, Debug)]
 pub struct PL1000Device {
+    /// The driver that opened the unit
     pub driver: PL1000Driver,
+    /// The serial of the unit
     pub serial: String,
-    /// The USB link, when enumeration matched this unit to a USB device
+    /// The USB link of the unit, when it is known
     pub usb: Option<UsbLink>,
+    /// The open handle and the unit info, or `None` when the unit is not open
     pub info: Option<PL1000Info>,
 }
 
 impl PL1000Device {
+    /// Makes a device value from its parts, with no USB link
+    ///
+    /// - It does not open the unit.
+    /// - With the `info` of an open unit, it closes that unit on drop, when it is the last holder of the handle.
     pub fn new_closed(driver: &PL1000Driver, serial: String, info: Option<PL1000Info>) -> Self {
         Self {
             driver: driver.clone(),
