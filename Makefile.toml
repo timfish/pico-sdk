@@ -2,5 +2,5 @@
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 
 [tasks.readme]
-install_crate = {crate_name = "cargo-readme", binary = "cargo", test_arg = ["readme", "--help"]}
-script = ["cargo readme > README.md"]
+workspace = false
+script = ["scripts/readme.sh"]
