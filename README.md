@@ -47,6 +47,7 @@ for device in DeviceEnumerator::new().enumerate().into_iter().flatten() {
 ```
 
 The enumerator matches each unit to a USB device by serial: some models list a USB serial-number string equal to the driver's serial (a PicoScope 5464E lists `13474/0004`), others list none (a PicoScope 2208A).
+A USB TC-08 lists none either, and its descriptor changes when its driver opens it: `bcdUSB` 0x0200 and no strings before, 0x0100 with a product and maker string after, so `usb_version` depends on whether the driver has opened the unit.
 A unit with no match takes the link of the driver's USB devices that have no serial string, when all of them share one link; else the link is `None` (two 2000 series scopes at different speeds both get `None`).
 A unit opened by serial without enumeration has `None`; `DeviceEnumerator::usb_link(driver, serial)` looks it up without loading a driver.
 The speed is `None` where the operating system does not report it.

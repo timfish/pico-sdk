@@ -81,7 +81,8 @@ fn speed(speed: nusb::Speed) -> Option<UsbSpeed> {
 ///
 /// A USB device whose serial-number string equals `serial` wins. Some
 /// models have a serial string equal to the driver's serial (a PicoScope
-/// 5464E lists `13474/0004`); others have none (a PicoScope 2208A). For a
+/// 5464E lists `13474/0004`); others have none (a PicoScope 2208A, a
+/// USB TC-08). For a
 /// unit with no match, the candidates are the devices of the driver with
 /// no serial string, since a device with a string belongs to the unit
 /// that string names. When every candidate has the same link, that link
