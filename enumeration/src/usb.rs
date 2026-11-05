@@ -1,5 +1,6 @@
 use nusb::MaybeFuture;
 use pico_common::{Driver, UsbLink, UsbSpeed};
+use std::fmt;
 
 pub(crate) const PICO_VENDOR_ID: u16 = 0x0CE9;
 
@@ -77,19 +78,53 @@ fn speed(speed: nusb::Speed) -> Option<UsbSpeed> {
     }
 }
 
+/// How [`match_usb_link`] chose a unit's USB device
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum UsbMatch {
+    /// A USB device's serial-number string equals the unit's serial
+    Serial,
+    /// No serial matched, and every device of the driver with no serial
+    /// string has the same link
+    NoSerialDevices,
+}
+
+impl fmt::Display for UsbMatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            UsbMatch::Serial => "serial",
+            UsbMatch::NoSerialDevices => "no-serial devices",
+        })
+    }
+}
+
+/// A unit's USB link and how it was matched
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct MatchedUsbLink {
+    pub link: UsbLink,
+    pub by: UsbMatch,
+}
+
 /// Finds the USB link of the unit `serial` that `driver` lists
 ///
-/// A USB device whose serial-number string equals `serial` wins. Some
-/// models have a serial string equal to the driver's serial (a PicoScope
-/// 5464E lists `13474/0004`); others have none (a PicoScope 2208A, a
-/// USB TC-08). For a
-/// unit with no match, the candidates are the devices of the driver with
-/// no serial string, since a device with a string belongs to the unit
-/// that string names. When every candidate has the same link, that link
-/// is the answer. Otherwise the units cannot be told apart, and this
-/// returns `None`: two 2000 series scopes at different speeds both get
-/// `None`.
-pub fn match_usb_link(listing: &[UsbDevice], driver: Driver, serial: &str) -> Option<UsbLink> {
+/// A USB device whose serial-number string equals `serial` wins
+/// ([`UsbMatch::Serial`]). Some models have a serial string equal to the
+/// driver's serial (a PicoScope 5464E lists `13474/0004`); others have
+/// none (a PicoScope 2208A, a USB TC-08). For a unit with no match, the
+/// candidates are the devices of the driver with no serial string, since
+/// a device with a string belongs to the unit that string names. When
+/// every candidate has the same link, that link is the answer
+/// ([`UsbMatch::NoSerialDevices`]). Otherwise the units cannot be told
+/// apart, and this returns `None`: two 2000 series scopes at different
+/// speeds both get `None`.
+pub fn match_usb_link(
+    listing: &[UsbDevice],
+    driver: Driver,
+    serial: &str,
+) -> Option<MatchedUsbLink> {
     let serial = serial.trim();
     let of_driver = listing.iter().filter(|d| d.driver() == Some(driver));
 
@@ -97,12 +132,18 @@ pub fn match_usb_link(listing: &[UsbDevice], driver: Driver, serial: &str) -> Op
         .clone()
         .find(|d| d.serial.as_deref() == Some(serial))
     {
-        return Some(device.link);
+        return Some(MatchedUsbLink {
+            link: device.link,
+            by: UsbMatch::Serial,
+        });
     }
 
     let mut unnamed = of_driver.filter(|d| d.serial.is_none());
     let first = unnamed.next()?.link;
-    unnamed.all(|d| d.link == first).then_some(first)
+    unnamed.all(|d| d.link == first).then_some(MatchedUsbLink {
+        link: first,
+        by: UsbMatch::NoSerialDevices,
+    })
 }
 
 #[cfg(test)]
@@ -131,16 +172,18 @@ mod tests {
             device(PS5000A, Some("AB123/0001"), UsbSpeed::High),
             device(PS5000A, Some("AB123/0002"), UsbSpeed::Super),
         ];
-        let link = match_usb_link(&listing, Driver::PS5000A, "AB123/0002").unwrap();
-        assert_eq!(link.speed, Some(UsbSpeed::Super));
+        let matched = match_usb_link(&listing, Driver::PS5000A, "AB123/0002").unwrap();
+        assert_eq!(matched.link.speed, Some(UsbSpeed::Super));
+        assert_eq!(matched.by, UsbMatch::Serial);
     }
 
     #[test]
     fn one_unnamed_device_is_the_fallback() {
         let listing = [device(PS2000, None, UsbSpeed::Full)];
-        let link = match_usb_link(&listing, Driver::PS2000, "XY987/0001").unwrap();
-        assert_eq!(link.speed, Some(UsbSpeed::Full));
-        assert_eq!(link.product_id, PS2000);
+        let matched = match_usb_link(&listing, Driver::PS2000, "XY987/0001").unwrap();
+        assert_eq!(matched.link.speed, Some(UsbSpeed::Full));
+        assert_eq!(matched.link.product_id, PS2000);
+        assert_eq!(matched.by, UsbMatch::NoSerialDevices);
     }
 
     #[test]
@@ -149,8 +192,9 @@ mod tests {
             device(PS2000, None, UsbSpeed::High),
             device(PS2000, None, UsbSpeed::High),
         ];
-        let link = match_usb_link(&listing, Driver::PS2000, "XY987/0001").unwrap();
-        assert_eq!(link.speed, Some(UsbSpeed::High));
+        let matched = match_usb_link(&listing, Driver::PS2000, "XY987/0001").unwrap();
+        assert_eq!(matched.link.speed, Some(UsbSpeed::High));
+        assert_eq!(matched.by, UsbMatch::NoSerialDevices);
     }
 
     #[test]
@@ -170,8 +214,9 @@ mod tests {
             device(PS5000A, Some("AB123/0001"), UsbSpeed::Super),
             device(PS5000A, None, UsbSpeed::High),
         ];
-        let link = match_usb_link(&listing, Driver::PS5000A, "AB123/0002").unwrap();
-        assert_eq!(link.speed, Some(UsbSpeed::High));
+        let matched = match_usb_link(&listing, Driver::PS5000A, "AB123/0002").unwrap();
+        assert_eq!(matched.link.speed, Some(UsbSpeed::High));
+        assert_eq!(matched.by, UsbMatch::NoSerialDevices);
 
         let listing = [device(PS5000A, Some("AB123/0001"), UsbSpeed::Super)];
         assert_eq!(
@@ -189,13 +234,19 @@ mod tests {
             device(PS5000A, None, UsbSpeed::Super),
             device(PS2000, None, UsbSpeed::Full),
         ];
-        let link = match_usb_link(&listing, Driver::PS2000, "XY987/0001").unwrap();
-        assert_eq!(link.speed, Some(UsbSpeed::Full));
-        assert_eq!(link.product_id, PS2000);
+        let matched = match_usb_link(&listing, Driver::PS2000, "XY987/0001").unwrap();
+        assert_eq!(matched.link.speed, Some(UsbSpeed::Full));
+        assert_eq!(matched.link.product_id, PS2000);
     }
 
     #[test]
     fn no_device_gives_none() {
         assert_eq!(match_usb_link(&[], Driver::PS2000, "XY987/0001"), None);
+    }
+
+    #[test]
+    fn match_kinds_display() {
+        assert_eq!(UsbMatch::Serial.to_string(), "serial");
+        assert_eq!(UsbMatch::NoSerialDevices.to_string(), "no-serial devices");
     }
 }

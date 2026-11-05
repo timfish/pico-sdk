@@ -50,7 +50,10 @@ The enumerator matches each unit to a USB device by serial: some models list a U
 A USB TC-08 lists none either, and its descriptor changes when its driver opens it: `bcdUSB` 0x0200 and no strings before, 0x0100 with a product and maker string after, so `usb_version` depends on whether the driver has opened the unit.
 A unit with no match takes the link of the driver's USB devices that have no serial string, when all of them share one link; else the link is `None` (two 2000 series scopes at different speeds both get `None`).
 A unit opened by serial without enumeration has `None`; `DeviceEnumerator::usb_link(driver, serial)` looks it up without loading a driver.
+It returns a `MatchedUsbLink`: the `link` and `by`, a `UsbMatch` that says how it matched (`Serial` or `NoSerialDevices`), so an application can log it.
 The speed is `None` where the operating system does not report it.
+
+`EnumerationError` and its variants are `#[non_exhaustive]`, so new fields do not break callers: match a variant with `..`, and build one with its constructor (`EnumerationError::driver_error(driver, error)`, `kernel_driver_error`, `driver_load_error`, `version_error`), adding a link with `with_usb(link)`.
 
 ## Tests
 Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.

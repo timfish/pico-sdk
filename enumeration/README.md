@@ -10,8 +10,12 @@ enumerates them in parallel returning discovered devices and errors.
 
 Each device carries its USB link (`PicoDevice::usb()`): the speed the host negotiated and the USB
 version the device declares. `list_usb_devices()` lists the Pico devices on USB without loading a
-driver, and `match_usb_link()` shows how a unit is matched to one of them. The speed is `None`
-where the operating system does not report it.
+driver, and `match_usb_link()` shows how a unit is matched to one of them. It and
+`DeviceEnumerator::usb_link()` return a `MatchedUsbLink`, whose `by` field (`UsbMatch`) says how
+the link was matched. The speed is `None` where the operating system does not report it.
+
+`EnumerationError` and its variants are `#[non_exhaustive]`: match a variant with `..`, and build
+one with its constructor, such as `EnumerationError::driver_error(driver, error)`.
 
 `cargo run -p pico-enumeration --example usb_links` prints each device and its link.
 

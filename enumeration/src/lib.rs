@@ -16,7 +16,12 @@
 //! Each device the enumerator returns carries its USB link ([`UsbLink`]): the speed the host
 //! negotiated and the USB version the device declares, so an application can show the link and
 //! warn when a USB 3 scope runs on a USB 2 port. See [`match_usb_link`] for how a unit is matched
-//! to a USB device. The speed is `None` where the operating system does not report it.
+//! to a USB device, and [`DeviceEnumerator::usb_link`] for a unit opened without enumeration;
+//! both say how they matched ([`UsbMatch`]). The speed is `None` where the operating system does
+//! not report it.
+//!
+//! [`EnumerationError`] and its variants are `#[non_exhaustive]`: match them with `..`, and build
+//! one with its constructor, such as [`EnumerationError::driver_error`].
 
 pub use extend::EnumerateDriver;
 pub use helpers::{EnumResultHelpers, PicoDeviceHelpers};
@@ -33,7 +38,7 @@ mod extend;
 mod helpers;
 mod usb;
 
-pub use usb::{list_usb_devices, match_usb_link, UsbDevice};
+pub use usb::{list_usb_devices, match_usb_link, MatchedUsbLink, UsbDevice, UsbMatch};
 
 #[cfg_attr(
     feature = "serde",
@@ -41,8 +46,10 @@ pub use usb::{list_usb_devices, match_usb_link, UsbDevice};
     serde(tag = "type")
 )]
 #[derive(Error, Debug, Clone)]
+#[non_exhaustive]
 pub enum EnumerationError {
     #[error("Pico driver error: {error}")]
+    #[non_exhaustive]
     DriverError {
         driver: Driver,
         #[source]
@@ -52,12 +59,14 @@ pub enum EnumerationError {
     },
 
     #[error("The {driver} driver could not find any devices. The Pico Technology kernel driver appears to be missing.")]
+    #[non_exhaustive]
     KernelDriverError {
         driver: Driver,
         usb: Option<UsbLink>,
     },
 
     #[error("The {driver} driver could not be found or failed to load")]
+    #[non_exhaustive]
     DriverLoadError {
         driver: Driver,
         error: String,
@@ -65,6 +74,7 @@ pub enum EnumerationError {
     },
 
     #[error("Invalid Driver Version: Requires >= {required}, Found: {found}")]
+    #[non_exhaustive]
     VersionError {
         driver: Driver,
         found: String,
@@ -74,24 +84,53 @@ pub enum EnumerationError {
 }
 
 impl EnumerationError {
+    /// An error the driver returned
+    pub fn driver_error(driver: Driver, error: PicoError) -> Self {
+        EnumerationError::DriverError {
+            driver,
+            error,
+            usb: None,
+        }
+    }
+
+    /// The driver listed no devices and the kernel driver looks missing
+    pub fn kernel_driver_error(driver: Driver) -> Self {
+        EnumerationError::KernelDriverError { driver, usb: None }
+    }
+
+    /// The driver library could not be found or failed to load
+    pub fn driver_load_error(driver: Driver, error: impl Into<String>) -> Self {
+        EnumerationError::DriverLoadError {
+            driver,
+            error: error.into(),
+            usb: None,
+        }
+    }
+
+    /// The driver library is older than this crate needs
+    pub fn version_error(
+        driver: Driver,
+        found: impl Into<String>,
+        required: impl Into<String>,
+    ) -> Self {
+        EnumerationError::VersionError {
+            driver,
+            found: found.into(),
+            required: required.into(),
+            usb: None,
+        }
+    }
+
+    /// The error for a failed driver load
     pub fn from(driver: Driver, error: DriverLoadError) -> Self {
         match error {
-            DriverLoadError::DriverError(error) => EnumerationError::DriverError {
-                driver,
-                error,
-                usb: None,
-            },
-            DriverLoadError::LibloadingError(error) => EnumerationError::DriverLoadError {
-                driver,
-                error: error.to_string(),
-                usb: None,
-            },
-            DriverLoadError::VersionError { found, required } => EnumerationError::VersionError {
-                driver,
-                found,
-                required,
-                usb: None,
-            },
+            DriverLoadError::DriverError(error) => Self::driver_error(driver, error),
+            DriverLoadError::LibloadingError(error) => {
+                Self::driver_load_error(driver, error.to_string())
+            }
+            DriverLoadError::VersionError { found, required } => {
+                Self::version_error(driver, found, required)
+            }
         }
     }
 
@@ -121,7 +160,8 @@ impl EnumerationError {
         }
     }
 
-    fn with_usb(mut self, link: UsbLink) -> Self {
+    /// Sets the USB link of the device the error is for
+    pub fn with_usb(mut self, link: UsbLink) -> Self {
         match &mut self {
             EnumerationError::DriverError { usb, .. }
             | EnumerationError::KernelDriverError { usb, .. }
@@ -177,8 +217,8 @@ impl DeviceEnumerator {
     ///
     /// Lists the USB devices but loads no driver, so it costs little. Use
     /// it for a unit opened by serial without enumeration. Matches as
-    /// [`match_usb_link`] does.
-    pub fn usb_link(driver: Driver, serial: &str) -> Option<UsbLink> {
+    /// [`match_usb_link`] does, and says how it matched.
+    pub fn usb_link(driver: Driver, serial: &str) -> Option<MatchedUsbLink> {
         match_usb_link(&list_usb_devices(), driver, serial)
     }
 
@@ -255,25 +295,20 @@ impl DeviceEnumerator {
                 // USB product ID were found. Check whether the kernel driver
                 // appears to be missing.
                 if results.is_empty() && kernel_driver::is_missing() {
-                    per_device(EnumerationError::KernelDriverError {
-                        driver: driver_type,
-                        usb: None,
-                    })
+                    per_device(EnumerationError::kernel_driver_error(driver_type))
                 } else {
                     results
                         .into_iter()
                         .map(|result| {
-                            let mut device =
-                                result.map_err(|error| EnumerationError::DriverError {
-                                    driver: driver_type,
-                                    error,
-                                    usb: None,
-                                })?;
-                            let link = match_usb_link(listing, driver_type, device.get_serial());
-                            match link {
-                                Some(link) => tracing::debug!(
+                            let mut device = result.map_err(|error| {
+                                EnumerationError::driver_error(driver_type, error)
+                            })?;
+                            let matched = match_usb_link(listing, driver_type, device.get_serial());
+                            match matched {
+                                Some(MatchedUsbLink { link, by }) => tracing::debug!(
                                     driver = %driver_type,
                                     serial = device.get_serial(),
+                                    matched_by = %by,
                                     product_id = format_args!("{:#06x}", link.product_id),
                                     speed = ?link.speed,
                                     usb_version = %link.usb_version_string(),
@@ -286,17 +321,13 @@ impl DeviceEnumerator {
                                     "device not matched to one USB device"
                                 ),
                             }
-                            device.set_usb(link);
+                            device.set_usb(matched.map(|m| m.link));
                             Ok(device)
                         })
                         .collect()
                 }
             }
-            Err(error) => per_device(EnumerationError::DriverError {
-                driver: driver_type,
-                error,
-                usb: None,
-            }),
+            Err(error) => per_device(EnumerationError::driver_error(driver_type, error)),
         }
     }
 
