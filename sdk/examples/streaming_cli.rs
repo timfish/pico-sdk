@@ -129,6 +129,7 @@ fn select_device(enumerator: &DeviceEnumerator) -> Result<OscilloscopeDevice> {
                 Err(EnumerationError::VersionError { driver, .. }) => {
                     format!("PicoScope {} (Driver Version Error)", driver)
                 }
+                Err(error) => format!("PicoScope {} ({})", error.driver(), error),
             })
             .collect::<Vec<String>>();
 
