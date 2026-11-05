@@ -1,38 +1,103 @@
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
+#![warn(rustdoc::broken_intra_doc_links)]
 
 //! Downloads Pico Technology oscilloscope and data logger drivers.
 //!
-//! This is a sub crate that you probably don't want to use directly. Try the top level
-//! [`pico-sdk`](https://crates.io/crates/pico-sdk) crate which exposes everything from here.
+//! With this crate, your software can use every Pico instrument, but you do not ship the driver binaries with it.
+//! It downloads the drivers that you ask for to a cache directory, and it does not download them again.
+//! It covers every driver this SDK wraps: the oscilloscopes, the data loggers (usbtc08, pl1000, picohrdl, usbpt104, usbdrdaq, plcm3) and `picoipp`, which ps4000 and ps6000 load at runtime.
 //!
-//! This helper crate allows the distribution of software that can communicate with every Pico
-//! instrument without the need to ship every driver binary. It covers every driver this SDK
-//! wraps: the scopes and the data loggers (usbtc08, pl1000, picohrdl, usbpt104, usbdrdaq,
-//! plcm3), plus `picoipp`, which ps4000 and ps6000 load at runtime.
+//! # Quick start
 //!
-//! Supported platforms:
-//!  - Windows (x86, x86_64 or aarch64)
-//!  - macOS (x86_64 or aarch64)
-//!  - Linux (x86_64, aarch64 or arm for Raspberry Pi)
+//! ```no_run
+//! use pico_common::Driver;
+//! use pico_download::{available_drivers, cache_resolution, download_drivers_to_cache};
+//! use pico_driver::DriverLoad;
 //!
-//! Pico do not build every driver for every platform, so use [`driver_binary`] or
-//! [`available_drivers`] if you need to know up front whether a particular driver can be
-//! downloaded here.
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let available = available_drivers();
+//! let drivers: Vec<Driver> = [Driver::PS2000A, Driver::TC08]
+//!     .into_iter()
+//!     .filter(|driver| available.contains(driver))
+//!     .collect();
 //!
-//! Each version of this crate is built against one *bundle* of drivers, extracted from Pico's
-//! public installers by the `generate-manifest` example. [`BUNDLE`] identifies it, and every
-//! binary in that bundle is listed in [`BINARIES`] along with its upstream version and SHA-256
-//! hash. Those hashes are compiled into the crate, so a download that has been tampered with in
-//! transit is rejected.
+//! // Downloads only the drivers that are not in the cache.
+//! download_drivers_to_cache(&drivers)?;
 //!
-//! The bundle identifier is also part of the cache path, which means downloaded drivers are
-//! immutable: two applications built against different versions of this crate get their own
-//! cache directory rather than overwriting each other's drivers.
+//! for driver in drivers {
+//!     driver.load(&cache_resolution())?;
+//!     println!("loaded {driver}");
+//! }
+//! # Ok(())
+//! # }
+//! ```
 //!
-//! [`download_drivers_to_cache`] downloads the passed drivers and [`cache_resolution`] returns
-//! a `Resolution` that can be used to resolve them.
+//! # How the parts fit
 //!
-//! `let enumerator = DeviceEnumerator::with_resolution(cache_resolution());`
+//! ```text
+//!  &[Driver]                      the drivers you ask for
+//!         │
+//!         ▼
+//!  download_drivers_to_cache()    adds picoipp for ps4000 and ps6000
+//!         │
+//!         ▼
+//!  driver_binary() ──► DriverBinary   file name, size and SHA-256 for this platform
+//!         │
+//!         ▼
+//!  download_url()                 BASE_URL or PICO_DRIVERS_BASE_URL, then BUNDLE
+//!         │
+//!         ▼
+//!  SHA-256 check                  a bad file gives DriverDownloadError::HashMismatch
+//!         │
+//!         ▼
+//!  get_cache_dir()                one directory for each bundle and platform
+//!         │
+//!         ▼
+//!  cache_resolution() ──► LibraryResolution   pico_driver loads the drivers from here
+//! ```
+//!
+//! # Platforms
+//!
+//! - Windows: x86, x86_64 and aarch64.
+//! - macOS: x86_64 and aarch64.
+//! - Linux: x86_64, aarch64 and arm (Raspberry Pi).
+//!
+//! Pico do not build every driver for every platform.
+//! Use [`available_drivers`] or [`driver_binary`] to find if a driver is available.
+//!
+//! - Windows x86_64, macOS x86_64 and Linux x86_64 have every driver.
+//! - Windows x86 has no psospa.
+//! - Windows aarch64, macOS aarch64 and Linux aarch64 have no ps4000, ps6000, usbdrdaq or picoipp.
+//! - Linux arm has ps2000, ps4000, ps6000 and the six data logger drivers only.
+//!
+//! # Bundles and the cache
+//!
+//! Each version of this crate uses one *bundle* of drivers, which comes from the public Pico installers.
+//! `BUNDLE` is the name of the bundle.
+//! `BINARIES` lists each binary in the bundle, with its Pico version and its SHA-256 hash.
+//! The hashes are in the compiled crate, so the crate does not accept a changed download.
+//!
+//! The bundle name is part of the cache path.
+//! So two applications that use different versions of this crate get different cache directories, and they do not change the files of each other.
+//!
+//! The binaries are assets of a [GitHub release](https://github.com/timfish/pico-sdk/releases), with one release for each bundle.
+//! Set the `PICO_DRIVERS_BASE_URL` environment variable to download them from a mirror.
+//! The crate still checks each file against its hash.
+//!
+//! # Main types
+//!
+//! - [`download_drivers_to_cache`], [`download_drivers`]: download drivers and their dependencies.
+//! - [`cache_resolution`]: tells [`pico_driver`] to load the drivers from the cache.
+//! - [`DriverDownloadError`]: why a download failed.
+//! - [`available_drivers`], [`driver_binary`], [`DriverBinary`]: the binaries for each platform.
+//! - [`get_cache_dir`], [`cached_driver_path`]: where the drivers go.
+//! - [`download_url`], `BASE_URL`, `BASE_URL_ENV_VAR`: where the drivers come from.
+//!
+//! # Dependencies
+//!
+//! - [`pico_common`] gives [`Driver`].
+//! - [`pico_driver`] gives [`LibraryResolution`], which loads the drivers from the cache.
 
 use http_req::{request::Request, uri::Uri};
 use pico_common::Driver;
@@ -53,51 +118,95 @@ mod paths;
 pub use manifest::{lookup as driver_binary, DriverBinary, BASE_URL, BINARIES, BUNDLE};
 pub use paths::get_cache_dir;
 
-/// Overrides [`BASE_URL`], for mirroring the drivers somewhere else
+/// The name of the environment variable that replaces [`BASE_URL`]
 ///
-/// Only where they're fetched from changes. Binaries still have to hash to what the manifest
-/// says, so a mirror can't substitute a different driver.
+/// - Use it to download the drivers from a mirror.
+/// - Each file must still have the SHA-256 hash in [`BINARIES`], so a mirror cannot supply a different driver.
 pub const BASE_URL_ENV_VAR: &str = "PICO_DRIVERS_BASE_URL";
 
+/// Why a driver download failed
 #[derive(Error, Debug)]
 pub enum DriverDownloadError {
+    /// A file or directory operation failed
     #[error("IO Error: {0}")]
     IoError(#[from] std::io::Error),
 
+    /// The URL was not valid, or the HTTP request failed
     #[error("HTTP request Error: {0}")]
     HttpRequestError(#[from] http_req::error::Error),
 
+    /// The server sent a status code that is not a success
     #[error("HTTP response Error: {0}")]
     HttpResponseError(http_req::response::StatusCode),
 
+    /// The bundle has no binary of the driver for this platform
     #[error("{driver} is not published for {os}-{arch} in driver bundle {bundle}")]
     Unavailable {
+        /// The driver that you asked for
         driver: Driver,
+        /// The operating system, as in [`std::env::consts::OS`]
         os: &'static str,
+        /// The CPU architecture, as in [`std::env::consts::ARCH`]
         arch: &'static str,
+        /// The bundle name, as in [`BUNDLE`]
         bundle: &'static str,
     },
 
+    /// The SHA-256 hash of the downloaded file is not the hash in [`BINARIES`]
     #[error(
         "Downloaded {driver} does not match its expected hash (expected {expected}, got {actual})"
     )]
     HashMismatch {
+        /// The driver that was downloaded
         driver: Driver,
+        /// The hash in [`BINARIES`], in lowercase hex
         expected: &'static str,
+        /// The hash of the downloaded file, in lowercase hex
         actual: String,
     },
 }
 
-/// Gets a `Resolution` that points to the download cache location
+/// The [`LibraryResolution`] that loads the drivers from [`get_cache_dir`]
+///
+/// - Use it with [`download_drivers_to_cache`].
+///
+/// ```no_run
+/// use pico_common::Driver;
+/// use pico_download::cache_resolution;
+/// use pico_driver::DriverLoad;
+///
+/// let driver = Driver::PS2000A.load(&cache_resolution());
+/// ```
 pub fn cache_resolution() -> LibraryResolution {
     LibraryResolution::Custom(get_cache_dir())
 }
 
-/// Downloads the requested drivers to the supplied path.
+/// Downloads the drivers and their dependencies to the directory `path`
 ///
-/// Drivers already present at `path` are left alone, so this is cheap to call on every start
-/// up. Returns [`DriverDownloadError::Unavailable`] if Pico do not publish one of the drivers
-/// for the current platform.
+/// - It makes `path` if it is not there.
+/// - It also downloads the dependencies of each driver (picoipp for ps4000 and ps6000), when the bundle has them for this platform.
+/// - It does not download a file that is already in `path` with the size in [`BINARIES`].
+///   It does not check the hash of a file that is already there.
+///   Thus you can call it each time your application starts.
+/// - It writes each download to a temporary file in `path`, then renames it.
+///   Thus a part file never has the name of a driver, also when more than one process downloads to `path`.
+/// - It stops at the first error.
+///   The drivers that it downloaded before the error stay in `path`.
+/// - Returns Err [`DriverDownloadError::Unavailable`] when the bundle has no binary of a driver for this platform.
+/// - Returns Err [`DriverDownloadError::HashMismatch`] when a downloaded file has the wrong SHA-256 hash.
+/// - Returns Err [`DriverDownloadError::HttpRequestError`] or [`DriverDownloadError::HttpResponseError`] when the HTTP request fails.
+/// - Returns Err [`DriverDownloadError::IoError`] when a file or directory operation fails.
+///
+/// ```no_run
+/// use pico_common::Driver;
+/// use pico_download::download_drivers;
+/// use pico_driver::LibraryResolution;
+///
+/// let dir = std::path::PathBuf::from("drivers");
+/// download_drivers(&[Driver::PS4000], &dir)?;
+/// let resolution = LibraryResolution::Custom(dir);
+/// # Ok::<(), pico_download::DriverDownloadError>(())
+/// ```
 pub fn download_drivers<P: AsRef<Path>>(
     drivers: &[Driver],
     path: P,
@@ -125,17 +234,32 @@ pub fn download_drivers<P: AsRef<Path>>(
     Ok(())
 }
 
-/// Downloads the requested drivers to the cache location.
+/// Downloads the drivers and their dependencies to [`get_cache_dir`]
 ///
-/// Drivers downloaded using this function can be loaded using the `Resolution`
-/// returned from `cache_resolution()`.
+/// - Load the drivers with [`cache_resolution`].
+/// - It works as [`download_drivers`] does, with the same errors.
+/// - Panics when [`get_cache_dir`] panics.
 ///
-/// `DeviceEnumerator::with_resolution(cache_resolution())`
+/// ```no_run
+/// use pico_common::Driver;
+/// use pico_download::download_drivers_to_cache;
+///
+/// download_drivers_to_cache(&[Driver::PS2000A, Driver::TC08])?;
+/// # Ok::<(), pico_download::DriverDownloadError>(())
+/// ```
 pub fn download_drivers_to_cache(drivers: &[Driver]) -> Result<(), DriverDownloadError> {
     download_drivers(drivers, get_cache_dir())
 }
 
-/// Every driver this crate can download for the platform it was built for.
+/// The drivers that the bundle has for this platform
+///
+/// - The platform is the target of the build.
+/// - The list includes [`Driver::PicoIPP`] where the bundle has it.
+///
+/// ```
+/// let drivers = pico_download::available_drivers();
+/// println!("{} drivers for this platform", drivers.len());
+/// ```
 pub fn available_drivers() -> Vec<Driver> {
     BINARIES
         .iter()
@@ -144,12 +268,20 @@ pub fn available_drivers() -> Vec<Driver> {
         .collect()
 }
 
-/// The path a driver is downloaded to in the cache, whether or not it's there yet.
+/// The path of a driver in [`get_cache_dir`]
+///
+/// - It does not check if the file is there.
+/// - Returns Err [`DriverDownloadError::Unavailable`] when the bundle has no binary of the driver for this platform.
+/// - Panics when [`get_cache_dir`] panics.
 pub fn cached_driver_path(driver: Driver) -> Result<PathBuf, DriverDownloadError> {
     Ok(get_cache_dir().join(binary_for_this_platform(driver)?.file_name))
 }
 
-/// Where a binary is downloaded from.
+/// The URL of a binary
+///
+/// - The URL is `<base>/<BUNDLE>/<asset_name>`.
+/// - The base is the value of [`BASE_URL_ENV_VAR`] when it is set, or else [`BASE_URL`].
+///   It removes each `/` at the end of the base.
 pub fn download_url(binary: &DriverBinary) -> String {
     let base = std::env::var(BASE_URL_ENV_VAR).unwrap_or_else(|_| BASE_URL.to_string());
 
