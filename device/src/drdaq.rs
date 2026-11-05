@@ -1,46 +1,74 @@
+//! USB DrDAQ data logger
+
 use crate::DeviceOpen;
 use pico_common::{DrDAQChannel, DrDAQInfo, PicoResult, UsbLink};
 use pico_driver::drdaq::DrDAQDriver;
 use std::{collections::BTreeSet, sync::Arc};
 
-/// Configuration for a USB DrDAQ device
+/// The settings to start a USB DrDAQ capture
 ///
-/// DrDAQ's channels are fixed onboard sensors rather than generic analog inputs, so there is no
-/// per-channel type or range to set - a channel is either collected or it is not.
+/// - The channels are fixed sensors on the board, so a channel has no type or range.
+///   A channel is on or off.
+///
+/// ```
+/// use pico_common::DrDAQChannel;
+/// use pico_device::drdaq::DrDAQConfig;
+///
+/// let mut config = DrDAQConfig {
+///     sample_interval_us: 100_000,
+///     ..Default::default()
+/// };
+/// config.enable_channel(DrDAQChannel::CHANNEL_TEMP);
+/// assert_eq!(config.enabled_channels().count(), 1);
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct DrDAQConfig {
-    /// Requested interval between samples, in microseconds. The driver may adjust this; the
-    /// actual value it settles on is reported back on the streaming event.
+    /// The time between samples that you ask for, in microseconds
+    ///
+    /// - The driver can use a different time.
     pub sample_interval_us: u32,
+    /// The channels that are on
     pub channels: BTreeSet<DrDAQChannel>,
 }
 
 impl DrDAQConfig {
+    /// Turns on `channel`
     pub fn enable_channel(&mut self, channel: DrDAQChannel) {
         self.channels.insert(channel);
     }
 
+    /// Turns off `channel`
     pub fn disable_channel(&mut self, channel: DrDAQChannel) {
         self.channels.remove(&channel);
     }
 
-    /// The channels that are enabled, in channel order
+    /// The channels that are on, in channel order
     pub fn enabled_channels(&self) -> impl Iterator<Item = DrDAQChannel> + '_ {
         self.channels.iter().copied()
     }
 }
 
+/// A USB DrDAQ data logger
+///
+/// - It closes its unit on drop, when it is the last holder of the handle in `info`.
 #[derive(Clone, Debug)]
 pub struct DrDAQDevice {
+    /// The driver that opened the unit
     pub driver: DrDAQDriver,
+    /// The serial of the unit
     pub serial: String,
-    /// The USB link, when enumeration matched this unit to a USB device
+    /// The USB link of the unit, when it is known
     pub usb: Option<UsbLink>,
+    /// The open handle and the unit info, or `None` when the unit is not open
     pub info: Option<DrDAQInfo>,
 }
 
 impl DrDAQDevice {
+    /// Makes a device value from its parts, with no USB link
+    ///
+    /// - It does not open the unit.
+    /// - With the `info` of an open unit, it closes that unit on drop, when it is the last holder of the handle.
     pub fn new_closed(driver: &DrDAQDriver, serial: String, info: Option<DrDAQInfo>) -> Self {
         Self {
             driver: driver.clone(),

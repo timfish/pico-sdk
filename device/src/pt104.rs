@@ -1,3 +1,5 @@
+//! USB PT-104 platinum resistance data logger
+
 use crate::DeviceOpen;
 use pico_common::{
     MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info, PT104Wires, PicoResult, UsbLink,
@@ -7,20 +9,33 @@ use pico_driver::pt104::PT104Driver;
 use std::collections::BTreeSet;
 use std::{collections::BTreeMap, sync::Arc};
 
-/// Configuration for a USB PT-104 device
+/// The settings to start a USB PT-104 capture
 ///
-/// Each channel can be configured with a sensor type (PT100, PT1000, voltage range, etc.)
-/// and for resistive sensors, the wire configuration (2/3/4-wire).
+/// - Each channel has a data type, such as PT100, PT1000 or a voltage range.
+/// - Each channel also has the wire count, which a resistive sensor uses.
+///
+/// ```
+/// use pico_common::{PT104Channel, PT104DataType, PT104Wires};
+/// use pico_device::pt104::PT104Config;
+///
+/// let mut config = PT104Config::default();
+/// config.enable_channel(PT104Channel::CHANNEL_1, PT104DataType::PT100, PT104Wires::FourWire);
+/// config.enable_channel(PT104Channel::CHANNEL_2, PT104DataType::PT1000, PT104Wires::ThreeWire);
+/// assert_eq!(config.poll_interval_ms(), 2 * 720);
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct PT104Config {
+    /// The mains frequency the unit filters out
     pub mains_rejection: MainsRejectionFreq,
-    /// Per-channel configuration: channel -> (data type, wires if applicable)
+    /// The data type and the wire count of each channel
+    ///
+    /// - A channel that is not in the map is off.
     pub channels: BTreeMap<PT104Channel, (PT104DataType, PT104Wires)>,
 }
 
 impl PT104Config {
-    /// Enables a channel with a given sensor type and wire configuration
+    /// Sets the data type and the wire count of `channel`
     pub fn enable_channel(
         &mut self,
         channel: PT104Channel,
@@ -30,12 +45,16 @@ impl PT104Config {
         self.channels.insert(channel, (data_type, wires));
     }
 
-    /// Disables a channel (sets it to Off)
+    /// Turns off `channel`
+    ///
+    /// - It removes the channel from the map.
     pub fn disable_channel(&mut self, channel: PT104Channel) {
         self.channels.remove(&channel);
     }
 
-    /// Returns all configured channels in channel order
+    /// Each channel in the map, in channel order
+    ///
+    /// - It includes a channel with the data type [`PT104DataType::Off`].
     pub fn enabled_channels(
         &self,
     ) -> impl Iterator<Item = (PT104Channel, PT104DataType, PT104Wires)> + '_ {
@@ -44,7 +63,7 @@ impl PT104Config {
             .map(|(channel, (data_type, wires))| (*channel, *data_type, *wires))
     }
 
-    /// The channels the unit converts: each one that is not off
+    /// The channels the unit converts: each one in the map that is not [`PT104DataType::Off`]
     pub fn converted_channels(&self) -> BTreeSet<PT104Channel> {
         self.enabled_channels()
             .filter(|(_, data_type, _)| *data_type != PT104DataType::Off)
@@ -52,23 +71,35 @@ impl PT104Config {
             .collect()
     }
 
-    /// How often each channel gets a new conversion: about 720 ms per converted channel
-    /// (USB PT-104 Programmer's Guide, `UsbPt104SetChannel`)
+    /// The time between two new values of a channel, in milliseconds
+    ///
+    /// - The unit takes about 720 ms for each converted channel (USB PT-104 Programmer's Guide, `UsbPt104SetChannel`).
+    /// - With no converted channel, it gives the time of one channel.
     pub fn poll_interval_ms(&self) -> u32 {
         LOGGER_CONVERSION_MS * self.converted_channels().len().max(1) as u32
     }
 }
 
+/// A USB PT-104 data logger
+///
+/// - It closes its unit on drop, when it is the last holder of the handle in `info`.
 #[derive(Clone, Debug)]
 pub struct PT104Device {
+    /// The driver that opened the unit
     pub driver: PT104Driver,
+    /// The serial of the unit
     pub serial: String,
-    /// The USB link, when enumeration matched this unit to a USB device
+    /// The USB link of the unit, when it is known
     pub usb: Option<UsbLink>,
+    /// The open handle and the unit info, or `None` when the unit is not open
     pub info: Option<PT104Info>,
 }
 
 impl PT104Device {
+    /// Makes a device value from its parts, with no USB link
+    ///
+    /// - It does not open the unit.
+    /// - With the `info` of an open unit, it closes that unit on drop, when it is the last holder of the handle.
     pub fn new_closed(driver: &PT104Driver, serial: String, info: Option<PT104Info>) -> Self {
         Self {
             driver: driver.clone(),

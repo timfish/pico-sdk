@@ -1,3 +1,5 @@
+//! ADC-20 and ADC-24 high resolution data loggers (PicoHRDL driver)
+
 use crate::DeviceOpen;
 use pico_common::{
     HRDLChannel, HRDLConversionTime, HRDLInfo, HRDLRange, MainsRejectionFreq, PicoResult, UsbLink,
@@ -5,57 +7,85 @@ use pico_common::{
 use pico_driver::hrdl::HRDLDriver;
 use std::{collections::BTreeMap, sync::Arc};
 
-/// Configuration for an ADC-20/ADC-24 (PicoHRDL) device
+/// The settings to start an ADC-20 or ADC-24 capture
 ///
-/// Each channel can be enabled with a voltage range and single-ended/differential mode.
-/// `conversion_time` is set once for the whole unit, not per channel - a slower conversion time
-/// rejects more noise but limits how many channels fit within a given sample interval.
+/// - Each channel has a voltage range, and is single-ended or differential.
+/// - `conversion_time` is for the whole unit, not for each channel.
+///   A longer conversion time removes more noise, but fewer channels fit in one sample interval.
+///
+/// ```
+/// use pico_common::{HRDLChannel, HRDLRange};
+/// use pico_device::hrdl::HRDLConfig;
+///
+/// let mut config = HRDLConfig::default();
+/// config.enable_channel(HRDLChannel::CHANNEL_1, HRDLRange::Range2500mV, true);
+/// config.enable_channel(HRDLChannel::CHANNEL_5, HRDLRange::Range39mV, false);
+/// config.sample_interval_ms = config.min_interval_ms();
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct HRDLConfig {
+    /// The time between samples, in milliseconds
+    ///
+    /// - It must be at least [`HRDLConfig::min_interval_ms`].
     pub sample_interval_ms: i32,
+    /// The time the unit takes to convert one channel
     pub conversion_time: HRDLConversionTime,
+    /// The mains frequency the unit filters out
     pub mains_rejection: MainsRejectionFreq,
-    /// Per-channel configuration: channel -> (range, single_ended)
+    /// The range of each channel, and `true` for single-ended or `false` for differential
+    ///
+    /// - A channel that is not in the map is off.
     pub channels: BTreeMap<HRDLChannel, (HRDLRange, bool)>,
 }
 
 impl HRDLConfig {
-    /// Enables a channel with a given range and wiring mode
+    /// Turns on `channel` with `range`, single-ended or differential
     pub fn enable_channel(&mut self, channel: HRDLChannel, range: HRDLRange, single_ended: bool) {
         self.channels.insert(channel, (range, single_ended));
     }
 
-    /// Disables a channel
+    /// Turns off `channel`
     pub fn disable_channel(&mut self, channel: HRDLChannel) {
         self.channels.remove(&channel);
     }
 
-    /// Returns all configured channels in channel order
+    /// The channels that are on, with their range and mode, in channel order
     pub fn enabled_channels(&self) -> impl Iterator<Item = (HRDLChannel, HRDLRange, bool)> + '_ {
         self.channels
             .iter()
             .map(|(channel, (range, single_ended))| (*channel, *range, *single_ended))
     }
 
-    /// The shortest sample interval the unit takes: more than the conversion time times the
-    /// channels that are on (ADC-20/ADC-24 Programmer's Guide, section 5.18 `HRDLSetInterval`:
-    /// two channels at 60 ms give a minimum of 121 ms)
+    /// The shortest sample interval the unit accepts, in milliseconds
+    ///
+    /// - It must be more than the conversion time multiplied by the number of channels that are on (ADC-20/ADC-24 Programmer's Guide, section 5.18 `HRDLSetInterval`).
+    ///   Two channels at 60 ms give a minimum of 121 ms.
     pub fn min_interval_ms(&self) -> i32 {
         self.conversion_time.ms() * self.channels.len() as i32 + 1
     }
 }
 
+/// An ADC-20 or ADC-24 data logger
+///
+/// - It closes its unit on drop, when it is the last holder of the handle in `info`.
 #[derive(Clone, Debug)]
 pub struct HRDLDevice {
+    /// The driver that opened the unit
     pub driver: HRDLDriver,
+    /// The serial of the unit
     pub serial: String,
-    /// The USB link, when enumeration matched this unit to a USB device
+    /// The USB link of the unit, when it is known
     pub usb: Option<UsbLink>,
+    /// The open handle and the unit info, or `None` when the unit is not open
     pub info: Option<HRDLInfo>,
 }
 
 impl HRDLDevice {
+    /// Makes a device value from its parts, with no USB link
+    ///
+    /// - It does not open the unit.
+    /// - With the `info` of an open unit, it closes that unit on drop, when it is the last holder of the handle.
     pub fn new_closed(driver: &HRDLDriver, serial: String, info: Option<HRDLInfo>) -> Self {
         Self {
             driver: driver.clone(),

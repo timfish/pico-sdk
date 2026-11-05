@@ -1,3 +1,9 @@
+//! PicoScope oscilloscopes
+//!
+//! - [`OscilloscopeDevice`] reads its channels, ranges, resolutions and capabilities into [`OscilloscopeInfo`] when it opens.
+//! - [`OscilloscopeConfig`] holds the settings to start a stream.
+//! - [`OscilloscopeInfo::check_config`] tells if the unit can run a config.
+
 use crate::DeviceOpen;
 use pico_common::{
     BandwidthLimit, DigitalPort, DigitalPortConfig, Downsample, OscilloscopeChannelConfig,
@@ -7,36 +13,58 @@ use pico_common::{
 use pico_driver::oscilloscope::OscilloscopeDriver;
 use std::{collections::HashMap, sync::Arc};
 
-/// Everything an oscilloscope needs to start streaming
+/// The settings to start an oscilloscope stream
+///
+/// ```
+/// use pico_common::{PicoChannel, PicoCoupling, PicoRange};
+/// use pico_device::oscilloscope::OscilloscopeConfig;
+///
+/// let mut config = OscilloscopeConfig::default();
+/// config.set_sample_rate(1_000_000);
+/// config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+/// config.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_5V, PicoCoupling::AC);
+/// assert_eq!(config.stored_samples_per_second(), 1_000_000.0);
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct OscilloscopeConfig {
-    /// The device's rate. A downsample divides it for the stored rate.
+    /// The sample rate of the device
+    ///
+    /// - A downsample divides it to give the stored rate.
     pub samples_per_second: u32,
+    /// The settings of each analog channel that is on
+    ///
+    /// - A channel that is not in the map is off.
     pub channels: HashMap<PicoChannel, OscilloscopeChannelConfig>,
-    /// `None` keeps the resolution the unit opened at, or, on a unit
-    /// whose resolutions limit the channel count, the highest one that
-    /// allows the channels on. Ignored by units with a fixed resolution.
+    /// The resolution of the stream
+    ///
+    /// - `None` keeps the resolution the unit opened at.
+    ///   On a unit whose resolutions limit the channel count, `None` selects the highest resolution that allows the channels that are on.
+    /// - A unit with a fixed resolution ignores it.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub resolution: Option<PicoResolution>,
-    /// `None` streams every sample.
+    /// How the stream reduces the samples
+    ///
+    /// - `None` streams every sample.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub downsample: Option<Downsample>,
-    /// The trigger set before the stream starts. A stream does not
-    /// wait for it; each event says where it fired.
+    /// The trigger to set before the stream starts
+    ///
+    /// - The stream does not wait for the trigger.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "TriggerConfig::is_none")
     )]
     pub trigger: TriggerConfig,
-    /// MSO ports to stream beside the channels, each with its logic
-    /// threshold. Ports stream raw samples only.
+    /// The MSO digital ports to stream with the channels, each with its logic threshold
+    ///
+    /// - Ports stream raw samples only.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "HashMap::is_empty")
@@ -45,6 +73,9 @@ pub struct OscilloscopeConfig {
 }
 
 impl OscilloscopeConfig {
+    /// Turns on `channel` with `range` and `coupling`
+    ///
+    /// - It sets an offset of zero and no bandwidth limit.
     pub fn enable_channel(
         &mut self,
         channel: PicoChannel,
@@ -62,90 +93,103 @@ impl OscilloscopeConfig {
         );
     }
 
+    /// Turns off `channel`
     pub fn disable_channel(&mut self, channel: PicoChannel) {
         self.channels.remove(&channel);
     }
 
+    /// Turns on digital port `port` with `config`
     pub fn enable_digital_port(&mut self, port: DigitalPort, config: DigitalPortConfig) {
         self.digital.insert(port, config);
     }
 
+    /// Turns off digital port `port`
     pub fn disable_digital_port(&mut self, port: DigitalPort) {
         self.digital.remove(&port);
     }
 
-    /// Whether the config streams ports with no analog channel on.
+    /// Whether the config streams digital ports with no analog channel on
     pub fn digital_only(&self) -> bool {
         self.channels.is_empty() && !self.digital.is_empty()
     }
 
+    /// Sets the sample rate of the device
     pub fn set_sample_rate(&mut self, samples_per_second: u32) {
         self.samples_per_second = samples_per_second;
     }
 
+    /// Sets the downsample, or `None` to stream every sample
     pub fn set_downsample(&mut self, downsample: Option<Downsample>) {
         self.downsample = downsample;
     }
 
-    /// The rate of the samples the stream delivers, as asked for.
+    /// The rate of the samples the stream gives, as the config asks for it
+    ///
+    /// - It is the sample rate divided by the downsample ratio.
     pub fn stored_samples_per_second(&self) -> f64 {
         self.samples_per_second as f64 / Downsample::ratio_of(self.downsample) as f64
     }
 }
 
-/// What was discovered about a device once it was opened
+/// The open handle of an oscilloscope, and what the unit reported when it opened
 ///
-/// Only available while the device is open, since every field has to be read from the driver.
-///
-/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
-/// unit handle), not a capability. The other fields (`usb_version`, `max_adc_value`,
-/// `valid_channel_ranges`) are already trivially serializable on their own (`String`, `i16`, and
-/// a map of `PicoChannel` to `Vec<PicoRange>`, both of which derive serde) — a consumer wanting
-/// to ship capability data over the wire can build that from these fields without this type
-/// needing to derive serde itself.
+/// - The device has it only while the unit is open, as the driver gives each field.
+/// - It has no `Serialize` or `Deserialize`, as `handle` is the handle of an open unit.
+///   You can serialize the other fields one by one.
 #[derive(Debug, Clone)]
 pub struct OscilloscopeInfo {
+    /// The handle of the open unit
+    ///
+    /// - The device closes the unit on drop when it holds the last clone.
     pub handle: Arc<i16>,
+    /// The USB version that the unit reports
     pub usb_version: String,
     /// The maximum ADC value at the resolution the unit opened at
     pub max_adc_value: i16,
+    /// The ranges of each channel
+    ///
+    /// - A channel with a connected probe has the ranges of the probe.
     pub valid_channel_ranges: HashMap<PicoChannel, Vec<PicoRange>>,
-    /// The resolution the unit opened at, or `None` if it is fixed
+    /// The resolution the unit opened at, or `None` when it is fixed
     pub resolution: Option<PicoResolution>,
-    /// Supported resolutions, each with its maximum ADC value. Empty, or
-    /// the one resolution, if the resolution is fixed.
+    /// The resolutions the unit supports, each with its maximum ADC value
+    ///
+    /// - It is empty, or holds one resolution, when the resolution is fixed.
     pub resolutions: Vec<(PicoResolution, i16)>,
-    /// Resolutions that allow fewer channels than the unit has, each
-    /// with the most channels it allows
+    /// The resolutions that allow fewer channels than the unit has, each with the most channels it allows
     pub channel_limits: Vec<(PicoResolution, u8)>,
-    /// The fastest rate with each count of channels on at each
-    /// resolution, where the driver can say. Streaming is slower.
+    /// The fastest rate for each number of channels at each resolution, when the driver gives it
+    ///
+    /// - A stream is slower than these rates.
     pub rate_limits: Vec<RateLimit>,
-    /// Where the unit takes its power from, or `None` for a unit with
-    /// no choice of power
+    /// The power source of the unit, or `None` for a unit with one power source
     pub power: Option<PowerSource>,
-    /// Channels that run only on the external supply
+    /// The channels that operate only on the external supply
     pub supply_channels: Vec<PicoChannel>,
-    /// What the unit can do beyond streaming
+    /// What the unit can do in addition to streaming
     pub capabilities: ScopeCapabilities,
-    /// The last probe state of each channel the unit reported one for,
-    /// by channel, on a unit that detects probes. A channel with a
-    /// connected probe has the probe's ranges in `valid_channel_ranges`.
+    /// The last probe state of each channel that has one, in channel order
+    ///
+    /// - Only a unit that detects probes reports probe states.
+    /// - A channel with a connected probe has the ranges of the probe in `valid_channel_ranges`.
     pub probes: Vec<ProbeState>,
-    /// The analogue offset each range of `valid_channel_ranges` takes,
-    /// per coupling, as the driver gives it. Empty for a family whose
-    /// driver gives none.
+    /// The analog offset limits of each range in `valid_channel_ranges`, for each coupling
+    ///
+    /// - It is empty for a family whose driver does not give them.
     pub offset_limits: Vec<OffsetLimits>,
 }
 
-/// The analogue offset a channel takes at one range and coupling, in
-/// the range's unit, as the driver's offset call gives it.
+/// The analog offset limits of a channel at one range and coupling, in the unit of the range
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OffsetLimits {
+    /// The range the limits are for
     pub range: PicoRange,
+    /// The coupling the limits are for
     pub coupling: PicoCoupling,
+    /// The lowest offset
     pub min: f64,
+    /// The highest offset
     pub max: f64,
 }
 
@@ -192,8 +236,9 @@ fn read_offset_limits(
 }
 
 impl OscilloscopeInfo {
-    /// The lowest and highest analogue offset at `range` and
-    /// `coupling`, in the range's unit, where the driver gave them.
+    /// The lowest and highest analog offset at `range` and `coupling`, in the unit of the range
+    ///
+    /// - Returns `None` when the driver did not give them.
     pub fn offset_limits(&self, range: PicoRange, coupling: PicoCoupling) -> Option<(f64, f64)> {
         self.offset_limits
             .iter()
@@ -201,17 +246,20 @@ impl OscilloscopeInfo {
             .map(|l| (l.min, l.max))
     }
 
-    /// The connected probe on `channel`, if any.
+    /// The probe connected to `channel`
+    ///
+    /// - Returns `None` when no probe is connected.
     pub fn probe(&self, channel: PicoChannel) -> Option<&ProbeState> {
         self.probes
             .iter()
             .find(|p| p.channel == channel && p.connected)
     }
 
-    /// Takes probe states the unit reported: each replaces its
-    /// channel's state, and the channel's ranges, with the offset
-    /// limits of ranges new to the unit, are read again from `driver`.
-    /// A channel whose ranges cannot be read keeps its old.
+    /// Updates the info with probe states that the unit reported
+    ///
+    /// - Each state replaces the state of its channel.
+    /// - It reads the ranges of the channel again from `driver`, and the offset limits of ranges that are new to the info.
+    /// - A channel whose ranges it cannot read keeps its old ranges.
     pub fn apply_probe_changes(&mut self, driver: &OscilloscopeDriver, changes: &[ProbeState]) {
         for change in changes {
             match self.probes.iter_mut().find(|p| p.channel == change.channel) {
@@ -241,16 +289,22 @@ impl OscilloscopeInfo {
         self.probes.sort_by_key(|p| p.channel);
     }
 
+    /// The channels of the unit, in no fixed order
+    ///
+    /// - It includes channels that the present power source does not operate.
+    ///   Use [`OscilloscopeInfo::available_channels`] for the channels you can turn on.
     pub fn get_channels(&self) -> Vec<PicoChannel> {
         self.valid_channel_ranges.keys().copied().collect()
     }
 
-    /// Whether `channel` runs on the power the unit has now
+    /// Whether `channel` operates on the present power source of the unit
     pub fn channel_powered(&self, channel: PicoChannel) -> bool {
         !self.supply_channels.contains(&channel) || self.power.is_none_or(|p| p.is_external())
     }
 
-    /// The channels the unit can turn on with the power it has now
+    /// The channels you can turn on with the present power source, in channel order
+    ///
+    /// - It leaves out a channel with no ranges.
     pub fn available_channels(&self) -> Vec<PicoChannel> {
         let mut channels: Vec<_> = self
             .valid_channel_ranges
@@ -262,8 +316,9 @@ impl OscilloscopeInfo {
         channels
     }
 
-    /// Refuses a config that turns on a channel the power the unit has
-    /// now does not run
+    /// Checks that the present power source operates each channel that `config` turns on
+    ///
+    /// - Returns Err with `CHANNEL_DISABLED_DUE_TO_USB_POWERED` when a channel needs the external supply.
     pub fn check_power(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         let mut unpowered: Vec<_> = config
             .channels
@@ -287,9 +342,11 @@ impl OscilloscopeInfo {
         ))
     }
 
-    /// Refuses a config the unit cannot run: a channel its power does
-    /// not run, more channels than its resolution allows, or a
-    /// bandwidth limit the channel cannot take
+    /// Checks that the unit can run `config`
+    ///
+    /// - It makes each check of [`check_power`](Self::check_power), [`check_digital`](Self::check_digital), [`check_resolution`](Self::check_resolution) and [`check_bandwidth`](Self::check_bandwidth), in that order.
+    /// - It also checks the trigger: the unit must support a trigger in a stream, and the trigger must suit the unit.
+    /// - Returns the first Err.
     pub fn check_config(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         self.check_power(config)?;
         self.check_digital(config)?;
@@ -298,10 +355,11 @@ impl OscilloscopeInfo {
         self.check_trigger(config)
     }
 
-    /// Refuses a bandwidth limit the unit does not list, or one above
-    /// the channel's bandwidth at the config's resolution and range,
-    /// which a driver can refuse at the stream start (a 3418E at 10
-    /// bits refuses 350 MHz).
+    /// Checks the bandwidth limit of each channel in `config`
+    ///
+    /// - Returns Err when the unit does not list the limit.
+    /// - Returns Err when the limit is more than the bandwidth of the channel at the resolution and range of the config.
+    ///   A driver can refuse such a limit when the stream starts: a 3418E at 10 bits refuses 350 MHz.
     pub fn check_bandwidth(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         let resolution = self.effective_resolution(config);
         let mut channels: Vec<_> = config.channels.iter().collect();
@@ -343,7 +401,10 @@ impl OscilloscopeInfo {
         config.trigger.check(&self.capabilities.triggers)
     }
 
-    /// Refuses ports the unit lacks, and ports with a downsample
+    /// Checks the digital ports in `config`
+    ///
+    /// - Returns Err when the unit does not have a port.
+    /// - Returns Err when the config has ports and a downsample.
     pub fn check_digital(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         let ports = self.capabilities.digital_ports;
         if let Some(port) = config.digital.keys().find(|p| p.index() >= ports) {
@@ -372,8 +433,9 @@ impl OscilloscopeInfo {
             .filter(|_| self.resolutions.len() > 1)
     }
 
-    /// The fastest rate of a stream with `config`, where the driver
-    /// gave rate limits
+    /// The fastest rate of a stream with `config`
+    ///
+    /// - Returns `None` when the driver gave no rate limit for that resolution and number of channels.
     pub fn max_samples_per_second_for(&self, config: &OscilloscopeConfig) -> Option<f64> {
         let resolution = self.effective_resolution(config);
         let on = config.channels.len().max(1);
@@ -392,7 +454,12 @@ impl OscilloscopeInfo {
             .map(|(_, most)| *most as usize)
     }
 
-    /// The resolution a stream with `config` runs at
+    /// The resolution of a stream with `config`
+    ///
+    /// - A resolution in the config that the unit does not list counts as `None`.
+    /// - With no resolution, digital ports alone run at 8 bits on a unit with more than one resolution.
+    /// - With no resolution, a unit with channel limits takes the highest resolution that allows the channels that are on.
+    /// - Otherwise it is the resolution the unit opened at.
     pub fn effective_resolution(&self, config: &OscilloscopeConfig) -> Option<PicoResolution> {
         let asked = config
             .resolution
@@ -414,8 +481,11 @@ impl OscilloscopeInfo {
             .or(self.resolution)
     }
 
-    /// Refuses a config whose resolution allows fewer channels than it
-    /// turns on
+    /// Checks the resolution of `config`
+    ///
+    /// - Returns Err when the config asks for a resolution that the unit does not list.
+    /// - Returns Err when the resolution allows fewer channels than the config turns on.
+    /// - Returns Err when the config has digital ports and no analog channel, and the resolution is not 8 bits.
     pub fn check_resolution(&self, config: &OscilloscopeConfig) -> PicoResult<()> {
         let unlisted = config.resolution.filter(|asked| {
             !self.resolutions.is_empty() && !self.resolutions.iter().any(|(r, _)| r == asked)
@@ -450,6 +520,9 @@ impl OscilloscopeInfo {
     }
 
     /// The maximum ADC value of a stream with `config`
+    ///
+    /// - It uses the resolution from [`OscilloscopeInfo::effective_resolution`].
+    /// - It falls back to `max_adc_value` when the unit lists no value for that resolution.
     pub fn max_adc_value_for(&self, config: &OscilloscopeConfig) -> i16 {
         self.effective_resolution(config)
             .and_then(|r| self.resolutions.iter().find(|(s, _)| *s == r))
@@ -457,21 +530,43 @@ impl OscilloscopeInfo {
     }
 }
 
+/// A PicoScope oscilloscope
+///
+/// - It closes its unit on drop, when it is the last holder of the handle in `info`.
+///
+/// ```no_run
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use pico_common::Driver;
+/// use pico_device::DeviceOpen;
+/// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+///
+/// if let PicoDriver::Oscilloscope(driver) = Driver::PS5000A.load(&LibraryResolution::Default)? {
+///     let scope = driver.open_device(Some("ABC/123"))?;
+///     let info = scope.info.as_ref().expect("an open device has its info");
+///     println!("{} {} at {:?}", scope.variant, scope.serial, info.resolution);
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub struct OscilloscopeDevice {
+    /// The driver of the unit
     pub driver: OscilloscopeDriver,
+    /// The serial of the unit
     pub serial: String,
-    /// The USB link, when enumeration matched this unit to a USB device
+    /// The USB link of the unit, when it is known
     pub usb: Option<UsbLink>,
+    /// The model of the unit, such as `5244D`
     pub variant: String,
+    /// The open handle and what the unit reported, or `None` when the unit is not open
     pub info: Option<OscilloscopeInfo>,
 }
 
 impl OscilloscopeDevice {
-    /// A device that is known to exist but has not been opened
+    /// Makes a device for a unit that is not open
     ///
-    /// Enumeration returns these so that discovering devices does not require holding every one
-    /// of them open.
+    /// - Code that lists units can return these, so it does not keep each unit open.
+    /// - [`OscilloscopeDevice::ensure_open`] opens it.
     pub fn new_closed(driver: &OscilloscopeDriver, serial: String, variant: String) -> Self {
         Self {
             driver: driver.clone(),
@@ -482,6 +577,11 @@ impl OscilloscopeDevice {
         }
     }
 
+    /// Opens the unit by its serial and reads its info, when it is not open
+    ///
+    /// - It does nothing when the device has its `info`.
+    /// - Returns Err when the driver cannot open the unit or read its info.
+    /// - Panics when the variant string has no channel count as its second character.
     pub fn ensure_open(&mut self) -> PicoResult<()> {
         if self.info.is_none() {
             let handle = self.driver.open_unit(Some(&self.serial))?;
