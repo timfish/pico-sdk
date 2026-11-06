@@ -12,7 +12,7 @@ mod outputs;
 
 pub use outputs::{outputs, sig_gen_info};
 
-use crate::LibraryResolution;
+use crate::{DriverLoadError, LibraryResolution};
 use pico_common::{
     DrDAQChannel, DrDAQChannelInfo, DrDAQInfo, Driver, FromPicoStr, PicoError, PicoInfo,
     PicoResult, PicoStatus,
@@ -92,7 +92,7 @@ impl DrDAQDriverInternal {
 
     /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
-    /// - A unit matches when its batch and serial string contains `serial`.
+    /// - A unit matches when its batch and serial string is `serial`, without white space at the ends.
     /// - To find a serial, it must open other units.
     ///   It closes them again before it returns.
     /// - Returns Err with `NOT_FOUND` when no unit matches.
@@ -106,7 +106,7 @@ impl DrDAQDriverInternal {
                     None => break Ok(handle),
                     Some(serial) => {
                         match self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL)) {
-                            Ok(found) if found.contains(serial) => break Ok(handle),
+                            Ok(found) if crate::serial_matches(&found, serial) => break Ok(handle),
                             Ok(_) => handles_to_close.push(handle),
                             Err(error) => {
                                 handles_to_close.push(handle);
@@ -306,6 +306,31 @@ fn interval_from_block(us_for_block: u32, ideal_samples: u32) -> u32 {
     ((us_for_block as u64 + ideal_samples as u64 / 2) / ideal_samples as u64) as u32
 }
 
+/// Checks that the library has each function that this wrapper calls
+fn required(b: &DrDAQLoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            UsbDrDaqOpenUnit,
+            UsbDrDaqCloseUnit,
+            UsbDrDaqGetUnitInfo,
+            UsbDrDaqRun,
+            UsbDrDaqStop,
+            UsbDrDaqSetInterval,
+            UsbDrDaqGetValuesF,
+            UsbDrDaqSetSigGenBuiltIn,
+            UsbDrDaqSetSigGenArbitrary,
+            UsbDrDaqStopSigGen,
+            UsbDrDaqSetDO,
+            UsbDrDaqSetPWM,
+            UsbDrDaqEnableRGBLED,
+            UsbDrDaqSetRGBLED,
+            UsbDrDaqGetChannelInfo,
+            UsbDrDaqPingUnit,
+        ]
+    )
+}
+
 /// A loaded USB DrDAQ driver
 ///
 /// - It dereferences to [`DrDAQDriverInternal`], which has the methods.
@@ -317,17 +342,17 @@ impl DrDAQDriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
-        Ok(DrDAQDriver(Arc::new(DrDAQDriverInternal {
-            bindings: crate::Kept::new(unsafe { DrDAQLoader::new(path.as_ref())? }),
-        })))
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
+        let bindings = crate::Kept::new(unsafe { DrDAQLoader::new(path.as_ref())? });
+        required(&bindings)?;
+        Ok(DrDAQDriver(Arc::new(DrDAQDriverInternal { bindings })))
     }
 
     /// Loads the library that `resolution` finds
     ///
-    /// - Returns Err when the library does not load.
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, DriverLoadError> {
         DrDAQDriver::new(resolution.get_path(Driver::DrDAQ))
     }
 }

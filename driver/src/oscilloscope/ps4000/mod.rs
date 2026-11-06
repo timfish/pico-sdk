@@ -17,6 +17,7 @@ use super::{
     trampoline::split_closure,
     EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
+use crate::DriverLoadError;
 use pico_common::BandwidthLimit;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
@@ -25,6 +26,55 @@ use pico_common::{
 use pico_sys_dynamic::ps4000::{
     enRatioMode_RATIO_MODE_AVERAGE, enRatioMode_RATIO_MODE_NONE, PS4000Loader,
 };
+
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out the signal generator calls but `ps4000SigGenOff`, as they run only after the model check in `siggen.rs` finds a generator.
+fn required(b: &PS4000Loader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps4000OpenUnitEx,
+            ps4000GetUnitInfo,
+            ps4000CloseUnit,
+            ps4000MemorySegments,
+            ps4000SetChannel,
+            ps4000SetNoOfCaptures,
+            ps4000GetTimebase2,
+            ps4000SigGenOff,
+            ps4000SetEts,
+            ps4000SetSimpleTrigger,
+            ps4000SetTriggerChannelProperties,
+            ps4000SetTriggerChannelConditions,
+            ps4000SetTriggerChannelDirections,
+            ps4000SetTriggerDelay,
+            ps4000SetPulseWidthQualifier,
+            ps4000IsTriggerOrPulseWidthQualifierEnabled,
+            ps4000GetTriggerTimeOffset64,
+            ps4000GetValuesTriggerTimeOffsetBulk64,
+            ps4000SetDataBufferBulk,
+            ps4000SetDataBuffers,
+            ps4000SetDataBufferWithMode,
+            ps4000SetDataBuffer,
+            ps4000SetEtsTimeBuffer,
+            ps4000RunBlock,
+            ps4000RunStreaming,
+            ps4000RunStreamingEx,
+            ps4000IsReady,
+            ps4000GetStreamingLatestValues,
+            ps4000GetMaxDownSampleRatio,
+            ps4000GetValues,
+            ps4000GetValuesBulk,
+            ps4000Stop,
+            ps4000GetChannelInformation,
+            ps4000EnumerateUnits,
+            ps4000PingUnit,
+            ps4000SetBwFilter,
+            ps4000GetNoOfCaptures,
+            ps4000ApplyFix,
+        ]
+    )
+}
 
 /// The wrapper of the `ps4000` driver, for the PicoScope 4000 Series units that use it
 ///
@@ -47,13 +97,14 @@ impl PS4000Driver {
     ///
     /// - It first loads `picoipp` from the same directory, when it can.
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS4000Loader::new(path)? });
+        required(&bindings)?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps4000ApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS4000Driver {

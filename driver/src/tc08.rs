@@ -7,7 +7,7 @@
 //! - Most driver functions return only a success flag, and `usb_tc08_get_last_error` gives the cause of a failure.
 //!   The wrapper reads the cause for you, so each method returns a normal `PicoResult`.
 
-use crate::LibraryResolution;
+use crate::{DriverLoadError, LibraryResolution};
 use pico_common::{
     Driver, FromPicoStr, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, TC08Channel,
     TC08Error, TC08Info, TCType,
@@ -84,6 +84,7 @@ impl TC08DriverInternal {
 
     /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
+    /// - A unit matches when its serial is `serial`, without white space at the ends.
     /// - To find a serial, it must open other units.
     ///   It closes them again before it returns.
     /// - Returns Err with `NOT_FOUND` when no unit matches.
@@ -106,7 +107,9 @@ impl TC08DriverInternal {
                 Ok(handle) => match serial {
                     None => break Ok(handle),
                     Some(serial) => match self.get_unit_info(handle) {
-                        Ok(info) if info.serial == serial => break Ok(handle),
+                        Ok(info) if crate::serial_matches(&info.serial, serial) => {
+                            break Ok(handle)
+                        }
                         Ok(_) => handles_to_close.push(handle),
                         Err(error) => {
                             handles_to_close.push(handle);
@@ -256,6 +259,25 @@ impl TC08DriverInternal {
     }
 }
 
+/// Checks that the library has each function that this wrapper calls
+fn required(b: &TC08Loader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            usb_tc08_set_channel,
+            usb_tc08_run,
+            usb_tc08_get_temp,
+            usb_tc08_open_unit,
+            usb_tc08_close_unit,
+            usb_tc08_stop,
+            usb_tc08_set_mains,
+            usb_tc08_get_minimum_interval_ms,
+            usb_tc08_get_unit_info,
+            usb_tc08_get_last_error,
+        ]
+    )
+}
+
 /// A loaded USB TC-08 driver
 ///
 /// - It dereferences to [`TC08DriverInternal`], which has the methods.
@@ -267,17 +289,17 @@ impl TC08Driver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
-        Ok(TC08Driver(Arc::new(TC08DriverInternal {
-            bindings: crate::Kept::new(unsafe { TC08Loader::new(path.as_ref())? }),
-        })))
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
+        let bindings = crate::Kept::new(unsafe { TC08Loader::new(path.as_ref())? });
+        required(&bindings)?;
+        Ok(TC08Driver(Arc::new(TC08DriverInternal { bindings })))
     }
 
     /// Loads the library that `resolution` finds
     ///
-    /// - Returns Err when the library does not load.
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, DriverLoadError> {
         TC08Driver::new(resolution.get_path(Driver::TC08))
     }
 }

@@ -18,6 +18,7 @@ use super::{
     variant_channel_count, EnumerationResult, OscilloscopeDriverInternal, PowerStates,
     SampleBuffer,
 };
+use crate::DriverLoadError;
 use pico_common::BandwidthLimit;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
@@ -55,6 +56,63 @@ fn supply_channels(channels: Option<u8>) -> Vec<PicoChannel> {
     }
 }
 
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
+/// - Leaves out the V2 trigger calls, as `v2_calls` checks them first.
+/// - Leaves out `ps5000aGetMinimumTimebaseStateless`, as `get_rate_limits` checks it first.
+fn required(b: &PS5000ALoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps5000aOpenUnit,
+            ps5000aGetUnitInfo,
+            ps5000aCloseUnit,
+            ps5000aMemorySegments,
+            ps5000aSetChannel,
+            ps5000aSetDigitalPort,
+            ps5000aSetBandwidthFilter,
+            ps5000aGetTimebase2,
+            ps5000aNearestSampleIntervalStateless,
+            ps5000aSetEts,
+            ps5000aGetMaxEtsValues,
+            ps5000aSetSimpleTrigger,
+            ps5000aSetTriggerDigitalPortProperties,
+            ps5000aSetPulseWidthDigitalPortProperties,
+            ps5000aSetTriggerDelay,
+            ps5000aIsTriggerOrPulseWidthQualifierEnabled,
+            ps5000aGetTriggerTimeOffset64,
+            ps5000aGetValuesTriggerTimeOffsetBulk64,
+            ps5000aSetDataBuffers,
+            ps5000aSetDataBuffer,
+            ps5000aSetEtsTimeBuffer,
+            ps5000aIsReady,
+            ps5000aRunBlock,
+            ps5000aRunStreaming,
+            ps5000aGetStreamingLatestValues,
+            ps5000aGetMaxDownSampleRatio,
+            ps5000aGetValues,
+            ps5000aGetValuesBulk,
+            ps5000aGetTriggerInfoBulk,
+            ps5000aEnumerateUnits,
+            ps5000aGetChannelInformation,
+            ps5000aMaximumValue,
+            ps5000aGetAnalogueOffset,
+            ps5000aGetMaxSegments,
+            ps5000aChangePowerSource,
+            ps5000aCurrentPowerSource,
+            ps5000aStop,
+            ps5000aPingUnit,
+            ps5000aSetNoOfCaptures,
+            ps5000aGetNoOfCaptures,
+            ps5000aGetNoOfProcessedCaptures,
+            ps5000aSetDeviceResolution,
+            ps5000aGetDeviceResolution,
+            ps5000aApplyFix,
+        ]
+    )
+}
+
 /// The wrapper of the `ps5000a` driver, for the PicoScope 5000 Series units that use it
 ///
 /// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
@@ -76,13 +134,14 @@ impl PS5000ADriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS5000ALoader::new(path)? });
+        required(&bindings)?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps5000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS5000ADriver {

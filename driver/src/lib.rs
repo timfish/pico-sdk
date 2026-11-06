@@ -92,7 +92,7 @@ pub mod tc08;
 
 pub use resolution::{DriverLoad, LibraryResolution};
 
-use pico_common::PicoError;
+use pico_common::{PicoError, PicoStatus};
 use std::{fmt, mem::ManuallyDrop};
 use thiserror::Error;
 
@@ -160,5 +160,96 @@ impl fmt::Debug for PicoDriver {
             Self::PT104(driver) => driver.fmt(f),
             Self::TC08(driver) => driver.fmt(f),
         }
+    }
+}
+
+/// Checks that a driver library has each function that its wrapper calls
+///
+/// - Takes the name of each function, and whether the library has it.
+/// - Returns Err with [`PicoStatus::NOT_USED`] ("The function is not available") and the name of the first function that the library lacks.
+pub(crate) fn require_functions(found: &[(&str, bool)]) -> Result<(), DriverLoadError> {
+    match found.iter().find(|(_, has)| !has) {
+        Some((name, _)) => Err(PicoError::from_status(
+            PicoStatus::NOT_USED,
+            &format!("the library lacks {name}"),
+        )
+        .into()),
+        None => Ok(()),
+    }
+}
+
+/// Calls [`require_functions`] with each named function of a loader
+macro_rules! required_functions {
+    ($bindings:expr, [$($name:ident),+ $(,)?]) => {
+        $crate::require_functions(&[$((stringify!($name), $bindings.$name.is_ok())),+])
+    };
+}
+pub(crate) use required_functions;
+
+/// Whether the serial that a unit gives is `wanted`
+///
+/// - The two must be equal after white space is cut from their ends.
+pub(crate) fn serial_matches(found: &str, wanted: &str) -> bool {
+    found.trim() == wanted.trim()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_first_missing_function_fails_the_check() {
+        assert!(require_functions(&[("fn_a", true), ("fn_b", true)]).is_ok());
+        let found = [("fn_a", true), ("fn_b", false), ("fn_c", false)];
+        let error = require_functions(&found).unwrap_err();
+        assert!(matches!(
+            &error,
+            DriverLoadError::DriverError(e) if e.status == PicoStatus::NOT_USED
+        ));
+        assert!(
+            error.to_string().contains("the library lacks fn_b"),
+            "{error}"
+        );
+        assert!(!error.to_string().contains("fn_c"), "{error}");
+    }
+
+    #[test]
+    fn a_serial_matches_only_the_whole_serial() {
+        assert!(!serial_matches("AB123/0001", "AB123/000"));
+        assert!(!serial_matches("AB123/0001", "123"));
+        assert!(!serial_matches("AB123/0001", ""));
+        assert!(serial_matches("AB123/0001", "AB123/0001"));
+        assert!(serial_matches("AB123/0001 ", " AB123/0001"));
+    }
+
+    // A system library that has none of the driver functions
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn a_library_without_the_functions_does_not_load() {
+        const LIBRARY: &str = "libc.so.6";
+
+        fn refused<T, E: fmt::Display>(result: Result<T, E>, first: &str) {
+            match result {
+                Ok(_) => panic!("loaded a library that lacks {first}"),
+                Err(e) => assert!(e.to_string().contains(first), "{e}"),
+            }
+        }
+
+        use oscilloscope::*;
+        refused(PS2000Driver::new(LIBRARY), "ps2000_open_unit");
+        refused(PS2000ADriver::new(LIBRARY), "ps2000aOpenUnit");
+        refused(PS3000ADriver::new(LIBRARY), "ps3000aOpenUnit");
+        refused(PS4000Driver::new(LIBRARY), "ps4000OpenUnitEx");
+        refused(PS4000ADriver::new(LIBRARY), "ps4000aOpenUnit");
+        refused(PS5000ADriver::new(LIBRARY), "ps5000aOpenUnit");
+        refused(PS6000Driver::new(LIBRARY), "ps6000OpenUnit");
+        refused(PS6000ADriver::new(LIBRARY), "ps6000aOpenUnit");
+        refused(PSOSPADriver::new(LIBRARY), "psospaOpenUnit");
+        refused(tc08::TC08Driver::new(LIBRARY), "usb_tc08_set_channel");
+        refused(pt104::PT104Driver::new(LIBRARY), "UsbPt104OpenUnit");
+        refused(hrdl::HRDLDriver::new(LIBRARY), "HRDLOpenUnit");
+        refused(cm3::PLCM3Driver::new(LIBRARY), "PLCM3Enumerate");
+        refused(drdaq::DrDAQDriver::new(LIBRARY), "UsbDrDaqOpenUnit");
+        refused(pl1000::PL1000Driver::new(LIBRARY), "pl1000OpenUnit");
     }
 }

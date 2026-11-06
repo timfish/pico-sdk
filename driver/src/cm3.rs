@@ -11,7 +11,7 @@
 //! - This wrapper is for USB only.
 //!   It does not wrap the Ethernet calls.
 
-use crate::LibraryResolution;
+use crate::{DriverLoadError, LibraryResolution};
 use pico_common::{
     Driver, FromPicoStr, LoggerReading, MainsRejectionFreq, PLCM3Channel, PLCM3DataType, PLCM3Info,
     PicoError, PicoInfo, PicoResult, PicoStatus, ToPicoStr,
@@ -204,6 +204,22 @@ fn parse_usb_serials(details: &str) -> Vec<String> {
         .collect()
 }
 
+/// Checks that the library has each function that this wrapper calls
+fn required(b: &PLCM3Loader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            PLCM3Enumerate,
+            PLCM3OpenUnit,
+            PLCM3CloseUnit,
+            PLCM3GetUnitInfo,
+            PLCM3SetChannel,
+            PLCM3SetMains,
+            PLCM3GetValue,
+        ]
+    )
+}
+
 /// A loaded PicoLog CM3 driver
 ///
 /// - It dereferences to [`PLCM3DriverInternal`], which has the methods.
@@ -215,17 +231,17 @@ impl PLCM3Driver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
-        Ok(PLCM3Driver(Arc::new(PLCM3DriverInternal {
-            bindings: crate::Kept::new(unsafe { PLCM3Loader::new(path.as_ref())? }),
-        })))
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
+        let bindings = crate::Kept::new(unsafe { PLCM3Loader::new(path.as_ref())? });
+        required(&bindings)?;
+        Ok(PLCM3Driver(Arc::new(PLCM3DriverInternal { bindings })))
     }
 
     /// Loads the library that `resolution` finds
     ///
-    /// - Returns Err when the library does not load.
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, DriverLoadError> {
         PLCM3Driver::new(resolution.get_path(Driver::PLCM3))
     }
 }

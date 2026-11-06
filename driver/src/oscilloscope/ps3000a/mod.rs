@@ -17,6 +17,7 @@ use super::{
     trampoline::split_closure,
     EnumerationResult, OscilloscopeDriverInternal, PowerStates, SampleBuffer,
 };
+use crate::DriverLoadError;
 use pico_common::BandwidthLimit;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
@@ -29,6 +30,64 @@ use pico_sys_dynamic::ps3000a::{
     enPS3000ARatioMode_PS3000A_RATIO_MODE_AVERAGE, enPS3000ARatioMode_PS3000A_RATIO_MODE_NONE,
     PS3000ALoader,
 };
+
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
+fn required(b: &PS3000ALoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps3000aOpenUnit,
+            ps3000aGetUnitInfo,
+            ps3000aCloseUnit,
+            ps3000aMemorySegments,
+            ps3000aSetChannel,
+            ps3000aSetDigitalPort,
+            ps3000aSetBandwidthFilter,
+            ps3000aSetNoOfCaptures,
+            ps3000aGetTimebase2,
+            ps3000aGetMaxEtsValues,
+            ps3000aSetEts,
+            ps3000aSetSimpleTrigger,
+            ps3000aSetTriggerDigitalPortProperties,
+            ps3000aSetPulseWidthDigitalPortProperties,
+            ps3000aSetTriggerChannelProperties,
+            ps3000aSetTriggerChannelConditions,
+            ps3000aSetTriggerChannelConditionsV2,
+            ps3000aSetTriggerChannelDirections,
+            ps3000aSetTriggerDelay,
+            ps3000aSetPulseWidthQualifier,
+            ps3000aSetPulseWidthQualifierV2,
+            ps3000aIsTriggerOrPulseWidthQualifierEnabled,
+            ps3000aGetTriggerTimeOffset64,
+            ps3000aGetValuesTriggerTimeOffsetBulk64,
+            ps3000aGetNoOfCaptures,
+            ps3000aGetNoOfProcessedCaptures,
+            ps3000aSetDataBuffer,
+            ps3000aSetDataBuffers,
+            ps3000aSetEtsTimeBuffer,
+            ps3000aIsReady,
+            ps3000aRunBlock,
+            ps3000aRunStreaming,
+            ps3000aGetStreamingLatestValues,
+            ps3000aGetMaxDownSampleRatio,
+            ps3000aGetValues,
+            ps3000aGetValuesBulk,
+            ps3000aGetTriggerInfoBulk,
+            ps3000aStop,
+            ps3000aGetChannelInformation,
+            ps3000aEnumerateUnits,
+            ps3000aPingUnit,
+            ps3000aMaximumValue,
+            ps3000aGetAnalogueOffset,
+            ps3000aGetMaxSegments,
+            ps3000aChangePowerSource,
+            ps3000aCurrentPowerSource,
+            ps3000aApplyFix,
+        ]
+    )
+}
 
 /// The wrapper of the `ps3000a` driver, for the PicoScope 3000 Series units that use it
 ///
@@ -51,13 +110,14 @@ impl PS3000ADriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS3000ALoader::new(path)? });
+        required(&bindings)?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps3000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS3000ADriver {

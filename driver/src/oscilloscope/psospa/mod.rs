@@ -16,6 +16,7 @@ use super::{
     get_version_string, parse_enum_result, rate_limits, EnumerationResult,
     OscilloscopeDriverInternal, PicoStreamMode, SampleBuffer,
 };
+use crate::DriverLoadError;
 use parking_lot::RwLock;
 use pico_common::{
     BandwidthCase, BandwidthCondition, Downsample, DownsampleKind, Driver, FromPicoStr,
@@ -200,6 +201,76 @@ fn listed_resolutions(details: &JsonValue) -> Vec<enPicoDeviceResolution> {
     listed().unwrap_or_default()
 }
 
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out `psospaGetMinimumTimebaseStateless` and `psospaSetTriggerHoldoffCounterBySamples`, as the wrapper checks them before each call.
+fn required(b: &PSOSPALoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            psospaOpenUnit,
+            psospaGetUnitInfo,
+            psospaGetVariantDetails,
+            psospaCloseUnit,
+            psospaMemorySegments,
+            psospaSetChannelOn,
+            psospaSetChannelOff,
+            psospaSetDigitalPortOn,
+            psospaSetDigitalPortOff,
+            psospaGetTimebase,
+            psospaSigGenWaveform,
+            psospaSigGenRange,
+            psospaSigGenWaveformDutyCycle,
+            psospaSigGenTrigger,
+            psospaSigGenFrequency,
+            psospaSigGenFrequencySweep,
+            psospaSigGenSoftwareTriggerControl,
+            psospaSigGenApply,
+            psospaSigGenLimits,
+            psospaSigGenFrequencyLimits,
+            psospaSigGenPause,
+            psospaSigGenRestart,
+            psospaSetSimpleTrigger,
+            psospaSetTriggerChannelProperties,
+            psospaSetTriggerChannelConditions,
+            psospaSetTriggerChannelDirections,
+            psospaSetTriggerDelay,
+            psospaSetPulseWidthQualifierProperties,
+            psospaSetPulseWidthQualifierConditions,
+            psospaSetPulseWidthQualifierDirections,
+            psospaSetTriggerDigitalPortProperties,
+            psospaSetPulseWidthDigitalPortProperties,
+            psospaGetTriggerTimeOffset,
+            psospaSetDataBuffer,
+            psospaSetDataBuffers,
+            psospaRunBlock,
+            psospaIsReady,
+            psospaRunStreaming,
+            psospaGetStreamingLatestValues,
+            psospaGetValues,
+            psospaGetValuesBulk,
+            psospaGetNoOfCaptures,
+            psospaGetNoOfProcessedCaptures,
+            psospaStop,
+            psospaSetNoOfCaptures,
+            psospaGetTriggerInfo,
+            psospaEnumerateUnits,
+            psospaPingUnit,
+            psospaGetAnalogueOffsetLimits,
+            psospaNearestSampleIntervalStateless,
+            psospaSetDeviceResolution,
+            psospaGetDeviceResolution,
+            psospaGetAdcLimits,
+            psospaResetChannelsAndReportAllChannelsOvervoltageTripStatus,
+            psospaReportAllChannelsOvervoltageTripStatus,
+            psospaSetLedColours,
+            psospaSetLedBrightness,
+            psospaSetLedStates,
+            psospaSetAuxIoMode,
+        ]
+    )
+}
+
 /// The wrapper of the `psospa` driver, for the PicoScope 3000E and 5000E Series units that use it
 ///
 /// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
@@ -231,13 +302,14 @@ impl PSOSPADriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PSOSPALoader::new(path)? });
+        required(&bindings)?;
         Ok(PSOSPADriver {
             bindings,
             _dependencies: dependencies,

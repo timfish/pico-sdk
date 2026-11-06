@@ -11,7 +11,7 @@ mod outputs;
 
 pub use outputs::outputs;
 
-use crate::LibraryResolution;
+use crate::{DriverLoadError, LibraryResolution};
 use parking_lot::Mutex;
 use pico_common::{
     Driver, FromPicoStr, HRDLChannel, HRDLConversionTime, HRDLError, HRDLInfo, HRDLRange,
@@ -129,6 +129,7 @@ impl HRDLDriverInternal {
 
     /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
+    /// - A unit matches when its serial is `serial`, without white space at the ends.
     /// - To find a serial, it must open other units.
     ///   It closes them again before it returns.
     /// - Returns Err with `NOT_FOUND` when no unit matches.
@@ -141,7 +142,9 @@ impl HRDLDriverInternal {
                 Ok(handle) => match serial {
                     None => break Ok(handle),
                     Some(serial) => match self.get_unit_info(handle) {
-                        Ok(info) if info.serial == serial => break Ok(handle),
+                        Ok(info) if crate::serial_matches(&info.serial, serial) => {
+                            break Ok(handle)
+                        }
                         Ok(_) => handles_to_close.push(handle),
                         Err(error) => {
                             handles_to_close.push(handle);
@@ -377,6 +380,29 @@ fn open_error_status(code: i32) -> PicoStatus {
     }
 }
 
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out `HRDLSetDigitalIOChannel`, as only an ADC-24 has the pins that it sets.
+fn required(b: &HRDLLoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            HRDLOpenUnit,
+            HRDLGetUnitInfo,
+            HRDLCloseUnit,
+            HRDLGetMinMaxAdcCounts,
+            HRDLSetAnalogInChannel,
+            HRDLSetInterval,
+            HRDLRun,
+            HRDLReady,
+            HRDLStop,
+            HRDLGetValues,
+            HRDLSetMains,
+            HRDLAcknowledge,
+        ]
+    )
+}
+
 /// A loaded ADC-20 and ADC-24 (PicoHRDL) driver
 ///
 /// - It dereferences to [`HRDLDriverInternal`], which has the methods.
@@ -388,18 +414,20 @@ impl HRDLDriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
+        let bindings = crate::Kept::new(unsafe { HRDLLoader::new(path.as_ref())? });
+        required(&bindings)?;
         Ok(HRDLDriver(Arc::new(HRDLDriverInternal {
-            bindings: crate::Kept::new(unsafe { HRDLLoader::new(path.as_ref())? }),
+            bindings,
             digital_io: Mutex::new(HashMap::new()),
         })))
     }
 
     /// Loads the library that `resolution` finds
     ///
-    /// - Returns Err when the library does not load.
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, DriverLoadError> {
         HRDLDriver::new(resolution.get_path(Driver::PicoHRDL))
     }
 }

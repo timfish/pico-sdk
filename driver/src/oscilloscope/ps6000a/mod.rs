@@ -16,6 +16,7 @@ use super::{
     get_version_string, parse_enum_result, rate_limits, variant_channel_count, EnumerationResult,
     OscilloscopeDriverInternal, PicoStreamMode, SampleBuffer,
 };
+use crate::DriverLoadError;
 use parking_lot::RwLock;
 use pico_common::{
     Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
@@ -55,6 +56,74 @@ fn variant_resolutions(variant: &str) -> &'static [PicoResolution] {
     }
 }
 
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out `ps6000aGetMinimumTimebaseStateless` and `ps6000aSetTriggerHoldoffCounterBySamples`, as the wrapper checks them before each call.
+fn required(b: &PS6000ALoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps6000aOpenUnit,
+            ps6000aGetUnitInfo,
+            ps6000aGetAccessoryInfo,
+            ps6000aCloseUnit,
+            ps6000aSetAuxIoMode,
+            ps6000aMemorySegments,
+            ps6000aSetChannelOn,
+            ps6000aSetChannelOff,
+            ps6000aSetDigitalPortOn,
+            ps6000aSetDigitalPortOff,
+            ps6000aGetTimebase,
+            ps6000aSigGenWaveform,
+            ps6000aSigGenRange,
+            ps6000aSigGenWaveformDutyCycle,
+            ps6000aSigGenTrigger,
+            ps6000aSigGenFilter,
+            ps6000aSigGenFrequency,
+            ps6000aSigGenFrequencySweep,
+            ps6000aSigGenSoftwareTriggerControl,
+            ps6000aSigGenApply,
+            ps6000aSigGenLimits,
+            ps6000aSigGenFrequencyLimits,
+            ps6000aSigGenPause,
+            ps6000aSigGenRestart,
+            ps6000aSetSimpleTrigger,
+            ps6000aSetTriggerChannelProperties,
+            ps6000aSetTriggerChannelConditions,
+            ps6000aSetTriggerChannelDirections,
+            ps6000aSetTriggerDelay,
+            ps6000aSetPulseWidthQualifierProperties,
+            ps6000aSetPulseWidthQualifierConditions,
+            ps6000aSetPulseWidthQualifierDirections,
+            ps6000aSetTriggerDigitalPortProperties,
+            ps6000aSetPulseWidthDigitalPortProperties,
+            ps6000aGetTriggerTimeOffset,
+            ps6000aSetDataBuffer,
+            ps6000aSetDataBuffers,
+            ps6000aRunBlock,
+            ps6000aIsReady,
+            ps6000aRunStreaming,
+            ps6000aGetStreamingLatestValues,
+            ps6000aGetValues,
+            ps6000aGetValuesBulk,
+            ps6000aGetNoOfCaptures,
+            ps6000aGetNoOfProcessedCaptures,
+            ps6000aStop,
+            ps6000aSetNoOfCaptures,
+            ps6000aGetTriggerInfo,
+            ps6000aEnumerateUnits,
+            ps6000aPingUnit,
+            ps6000aGetAnalogueOffsetLimits,
+            ps6000aNearestSampleIntervalStateless,
+            ps6000aSetDeviceResolution,
+            ps6000aGetDeviceResolution,
+            ps6000aGetAdcLimits,
+            ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus,
+            ps6000aReportAllChannelsOvervoltageTripStatus,
+        ]
+    )
+}
+
 /// The wrapper of the `ps6000a` driver, for the PicoScope 6000E Series units that use it
 ///
 /// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
@@ -79,13 +148,14 @@ impl PS6000ADriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS6000ALoader::new(path)? });
+        required(&bindings)?;
         Ok(PS6000ADriver {
             bindings,
             _dependencies: dependencies,
