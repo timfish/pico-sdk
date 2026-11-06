@@ -213,7 +213,7 @@ pub mod prelude {
         LedColour, LedState, MainsRejectionFreq, OscilloscopeChannelConfig, OutputKind, OutputSpec,
         OutputValue, Outputs, PicoChannel, PicoCoupling, PicoError, PicoInfo, PicoLed, PicoProbe,
         PicoRange, PicoResolution, PicoStatus, PowerSource, ProbeState, RateLimit, SampleType,
-        ScopeCapabilities, SegmentTimestamp, SigGenConfig, SigGenInfo, SigGenShape,
+        ScopeCapabilities, ScopeDriver, SegmentTimestamp, SigGenConfig, SigGenInfo, SigGenShape,
         SigGenShapeKind, SigGenTrigger, SigGenTriggerKind, SigGenTriggerSource, Sweep, SweepKind,
         TC08Channel, TCType, Timebase, TriggerConfig, TriggerInfo,
     };

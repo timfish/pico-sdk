@@ -40,12 +40,12 @@ pub use features::{
     LedDriver, RapidBlockDriver, SigGenDriver, StreamingDriver, TriggerDriver,
 };
 
-use crate::DriverLoadError;
+use crate::{DriverLoadError, LibraryResolution};
 use parking_lot::RwLock;
 use pico_common::{
     BandwidthLimit, Downsample, DownsampleKind, Driver, FromPicoStr, OscilloscopeChannelConfig,
     PicoChannel, PicoError, PicoInfo, PicoRange, PicoResolution, PicoResult, PicoStatus,
-    PowerSource, ProbeState, RateLimit, SampleType, ScopeCapabilities,
+    PowerSource, ProbeState, RateLimit, SampleType, ScopeCapabilities, ScopeDriver,
 };
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
@@ -430,6 +430,39 @@ impl OscilloscopeDriver {
     /// Wraps the driver of one range, such as [`PS2000ADriver`]
     pub fn new<D: OscilloscopeDriverInternal + 'static>(driver: D) -> Self {
         OscilloscopeDriver(Arc::new(driver))
+    }
+
+    /// Loads the library of `driver` that `resolution` finds
+    ///
+    /// - Use [`DriverLoad::load`](crate::DriverLoad::load) instead when the program picks the driver when it runs.
+    /// - It does not check the driver version.
+    /// - Returns Err when the library does not load.
+    ///
+    /// ```no_run
+    /// use pico_common::ScopeDriver;
+    /// use pico_driver::{oscilloscope::OscilloscopeDriver, LibraryResolution};
+    ///
+    /// let driver = OscilloscopeDriver::load(ScopeDriver::PS2000A, &LibraryResolution::Default)?;
+    /// println!("{driver:?}");
+    /// # Ok::<(), pico_driver::DriverLoadError>(())
+    /// ```
+    pub fn load(
+        driver: ScopeDriver,
+        resolution: &LibraryResolution,
+    ) -> Result<Self, DriverLoadError> {
+        let path = resolution.get_path(driver.into());
+
+        Ok(match driver {
+            ScopeDriver::PS2000 => Self::new(PS2000Driver::new(path)?),
+            ScopeDriver::PS2000A => Self::new(PS2000ADriver::new(path)?),
+            ScopeDriver::PS3000A => Self::new(PS3000ADriver::new(path)?),
+            ScopeDriver::PS4000 => Self::new(PS4000Driver::new(path)?),
+            ScopeDriver::PS4000A => Self::new(PS4000ADriver::new(path)?),
+            ScopeDriver::PS5000A => Self::new(PS5000ADriver::new(path)?),
+            ScopeDriver::PS6000 => Self::new(PS6000Driver::new(path)?),
+            ScopeDriver::PS6000A => Self::new(PS6000ADriver::new(path)?),
+            ScopeDriver::PSOSPA => Self::new(PSOSPADriver::new(path)?),
+        })
     }
 }
 
