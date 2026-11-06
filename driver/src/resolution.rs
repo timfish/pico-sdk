@@ -2,7 +2,7 @@ use crate::{
     cm3::PLCM3Driver, drdaq::DrDAQDriver, hrdl::HRDLDriver, oscilloscope, pl1000::PL1000Driver,
     pt104::PT104Driver, tc08::TC08Driver, DriverLoadError, PicoDriver,
 };
-use pico_common::Driver;
+use pico_common::{Driver, PicoLibrary};
 use std::{env::current_exe, path::PathBuf};
 
 /// Where the loader finds the library file of a driver
@@ -35,12 +35,12 @@ pub enum LibraryResolution {
 }
 
 impl LibraryResolution {
-    /// The path of the library file of `driver`
+    /// The path of the file of `library`, such as a [`Driver`]
     ///
     /// - It does not check that the file is there.
     /// - Panics with [`LibraryResolution::AppRoot`] when the path of the running program is not known.
-    pub fn get_path(&self, driver: Driver) -> PathBuf {
-        let binary_name = driver.get_binary_name();
+    pub fn get_path(&self, library: impl Into<PicoLibrary>) -> PathBuf {
+        let binary_name = library.into().get_binary_name();
 
         match self {
             LibraryResolution::Default => PathBuf::from(binary_name),
@@ -65,7 +65,6 @@ pub trait DriverLoad {
     /// - The library stays loaded until the process ends, also after all clones of the driver drop.
     ///   The drivers start threads of their own, and those threads can still run after the last unit closes.
     /// - Returns Err when the library does not load.
-    /// - Panics for [`Driver::PicoIPP`], as other drivers use that library and it has no driver of its own.
     ///
     /// ```no_run
     /// use pico_common::Driver;
@@ -117,9 +116,6 @@ impl DriverLoad for Driver {
             Driver::PicoHRDL => PicoDriver::PicoHRDL(HRDLDriver::new(path)?),
             Driver::PLCM3 => PicoDriver::PLCM3(PLCM3Driver::new(path)?),
             Driver::DrDAQ => PicoDriver::DrDAQ(DrDAQDriver::new(path)?),
-            Driver::PicoIPP => {
-                panic!("{self} is a library used by Pico drivers and cannot be loaded directly",)
-            }
             Driver::PL1000 => PicoDriver::PL1000(PL1000Driver::new(path)?),
         })
     }

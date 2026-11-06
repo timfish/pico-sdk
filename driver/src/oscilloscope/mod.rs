@@ -601,8 +601,7 @@ fn min_required_version(driver: Driver) -> Option<&'static str> {
         | Driver::PT104
         | Driver::TC08
         | Driver::PicoHRDL
-        | Driver::DrDAQ
-        | Driver::PicoIPP => None,
+        | Driver::DrDAQ => None,
     }
 }
 
@@ -642,7 +641,7 @@ mod tests {
         use Driver::*;
         let all = [
             PS2000, PS2000A, PS3000A, PS4000, PS4000A, PS5000A, PS6000, PS6000A, PSOSPA, PL1000,
-            PLCM3, PT104, TC08, PicoHRDL, DrDAQ, PicoIPP,
+            PLCM3, PT104, TC08, PicoHRDL, DrDAQ,
         ];
         for driver in all {
             let version = min_required_version(driver);

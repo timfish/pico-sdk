@@ -100,7 +100,7 @@
 //! - [`pico_driver`] gives [`LibraryResolution`], which loads the drivers from the cache.
 
 use http_req::{request::Request, uri::Uri};
-use pico_common::Driver;
+use pico_common::{Driver, PicoLibrary};
 use pico_driver::LibraryResolution;
 use sha2::{Digest, Sha256};
 use std::{
@@ -139,11 +139,11 @@ pub enum DriverDownloadError {
     #[error("HTTP response Error: {0}")]
     HttpResponseError(http_req::response::StatusCode),
 
-    /// The bundle has no binary of the driver for this platform
-    #[error("{driver} is not published for {os}-{arch} in driver bundle {bundle}")]
+    /// The bundle has no binary of the library for this platform
+    #[error("{library} is not published for {os}-{arch} in driver bundle {bundle}")]
     Unavailable {
-        /// The driver that you asked for
-        driver: Driver,
+        /// The library that you asked for, or one that it needs
+        library: PicoLibrary,
         /// The operating system, as in [`std::env::consts::OS`]
         os: &'static str,
         /// The CPU architecture, as in [`std::env::consts::ARCH`]
@@ -154,11 +154,11 @@ pub enum DriverDownloadError {
 
     /// The SHA-256 hash of the downloaded file is not the hash in [`BINARIES`]
     #[error(
-        "Downloaded {driver} does not match its expected hash (expected {expected}, got {actual})"
+        "Downloaded {library} does not match its expected hash (expected {expected}, got {actual})"
     )]
     HashMismatch {
-        /// The driver that was downloaded
-        driver: Driver,
+        /// The library that was downloaded
+        library: PicoLibrary,
         /// The hash in [`BINARIES`], in lowercase hex
         expected: &'static str,
         /// The hash of the downloaded file, in lowercase hex
@@ -219,7 +219,7 @@ pub fn download_drivers<P: AsRef<Path>>(
     // just the requested drivers rather than fetching picoipp for everything.
     let mut dependencies = std::collections::BTreeSet::new();
     for &driver in drivers {
-        download_driver(driver, driver_dir)?;
+        download_library(driver.into(), driver_dir)?;
         dependencies.extend(driver.dependencies().iter().copied());
     }
 
@@ -227,7 +227,7 @@ pub fn download_drivers<P: AsRef<Path>>(
     // Pico don't publish it (e.g. Linux armhf), where the driver loads without it.
     for dependency in dependencies {
         if driver_binary(dependency, std::env::consts::OS, std::env::consts::ARCH).is_some() {
-            download_driver(dependency, driver_dir)?;
+            download_library(dependency, driver_dir)?;
         }
     }
 
@@ -254,7 +254,7 @@ pub fn download_drivers_to_cache(drivers: &[Driver]) -> Result<(), DriverDownloa
 /// The drivers that the bundle has for this platform
 ///
 /// - The platform is the target of the build.
-/// - The list includes [`Driver::PicoIPP`] where the bundle has it.
+/// - The list has no `picoipp`, as it is not a driver.
 ///
 /// ```
 /// let drivers = pico_download::available_drivers();
@@ -264,7 +264,10 @@ pub fn available_drivers() -> Vec<Driver> {
     BINARIES
         .iter()
         .filter(|binary| binary.os == std::env::consts::OS && binary.arch == std::env::consts::ARCH)
-        .map(|binary| binary.driver)
+        .filter_map(|binary| match binary.library {
+            PicoLibrary::Driver(driver) => Some(driver),
+            PicoLibrary::PicoIPP => None,
+        })
         .collect()
 }
 
@@ -274,7 +277,7 @@ pub fn available_drivers() -> Vec<Driver> {
 /// - Returns Err [`DriverDownloadError::Unavailable`] when the bundle has no binary of the driver for this platform.
 /// - Panics when [`get_cache_dir`] panics.
 pub fn cached_driver_path(driver: Driver) -> Result<PathBuf, DriverDownloadError> {
-    Ok(get_cache_dir().join(binary_for_this_platform(driver)?.file_name))
+    Ok(get_cache_dir().join(binary_for_this_platform(driver.into())?.file_name))
 }
 
 /// The URL of a binary
@@ -293,8 +296,8 @@ pub fn download_url(binary: &DriverBinary) -> String {
     )
 }
 
-fn download_driver(driver: Driver, driver_dir: &Path) -> Result<(), DriverDownloadError> {
-    let binary = binary_for_this_platform(driver)?;
+fn download_library(library: PicoLibrary, driver_dir: &Path) -> Result<(), DriverDownloadError> {
+    let binary = binary_for_this_platform(library)?;
     let dst_path = driver_dir.join(binary.file_name);
 
     if is_cached(&dst_path, binary) {
@@ -322,11 +325,13 @@ fn download_driver(driver: Driver, driver_dir: &Path) -> Result<(), DriverDownlo
     result
 }
 
-/// Looks up the binary published for `driver` on the platform we're running on.
-fn binary_for_this_platform(driver: Driver) -> Result<&'static DriverBinary, DriverDownloadError> {
-    driver_binary(driver, std::env::consts::OS, std::env::consts::ARCH).ok_or(
+/// Looks up the binary published for `library` on the platform we're running on.
+fn binary_for_this_platform(
+    library: PicoLibrary,
+) -> Result<&'static DriverBinary, DriverDownloadError> {
+    driver_binary(library, std::env::consts::OS, std::env::consts::ARCH).ok_or(
         DriverDownloadError::Unavailable {
-            driver,
+            library,
             os: std::env::consts::OS,
             arch: std::env::consts::ARCH,
             bundle: BUNDLE,
@@ -357,7 +362,7 @@ fn download_verified(binary: &DriverBinary, tmp_path: &Path) -> Result<(), Drive
         Ok(())
     } else {
         Err(DriverDownloadError::HashMismatch {
-            driver: binary.driver,
+            library: binary.library,
             expected: binary.sha256,
             actual,
         })
@@ -404,19 +409,19 @@ mod tests {
     use super::*;
     use enum_iterator::all;
 
-    /// Every target, and the drivers Pico do not build for it. Everything else in
-    /// `Driver` must be in the manifest.
-    const TARGETS: &[(&str, &str, &[Driver])] = &[
+    /// Every target, and the libraries Pico do not build for it. Every other
+    /// `PicoLibrary` must be in the manifest.
+    const TARGETS: &[(&str, &str, &[PicoLibrary])] = &[
         ("windows", "x86_64", &[]),
-        ("windows", "x86", &[Driver::PSOSPA]),
+        ("windows", "x86", &[PicoLibrary::Driver(Driver::PSOSPA)]),
         (
             "windows",
             "aarch64",
             &[
-                Driver::PS4000,
-                Driver::PS6000,
-                Driver::DrDAQ,
-                Driver::PicoIPP,
+                PicoLibrary::Driver(Driver::PS4000),
+                PicoLibrary::Driver(Driver::PS6000),
+                PicoLibrary::Driver(Driver::DrDAQ),
+                PicoLibrary::PicoIPP,
             ],
         ),
         ("macos", "x86_64", &[]),
@@ -424,10 +429,10 @@ mod tests {
             "macos",
             "aarch64",
             &[
-                Driver::PS4000,
-                Driver::PS6000,
-                Driver::DrDAQ,
-                Driver::PicoIPP,
+                PicoLibrary::Driver(Driver::PS4000),
+                PicoLibrary::Driver(Driver::PS6000),
+                PicoLibrary::Driver(Driver::DrDAQ),
+                PicoLibrary::PicoIPP,
             ],
         ),
         ("linux", "x86_64", &[]),
@@ -435,23 +440,23 @@ mod tests {
             "linux",
             "aarch64",
             &[
-                Driver::PS4000,
-                Driver::PS6000,
-                Driver::DrDAQ,
-                Driver::PicoIPP,
+                PicoLibrary::Driver(Driver::PS4000),
+                PicoLibrary::Driver(Driver::PS6000),
+                PicoLibrary::Driver(Driver::DrDAQ),
+                PicoLibrary::PicoIPP,
             ],
         ),
         (
             "linux",
             "arm",
             &[
-                Driver::PS2000A,
-                Driver::PS3000A,
-                Driver::PS4000A,
-                Driver::PS5000A,
-                Driver::PS6000A,
-                Driver::PSOSPA,
-                Driver::PicoIPP,
+                PicoLibrary::Driver(Driver::PS2000A),
+                PicoLibrary::Driver(Driver::PS3000A),
+                PicoLibrary::Driver(Driver::PS4000A),
+                PicoLibrary::Driver(Driver::PS5000A),
+                PicoLibrary::Driver(Driver::PS6000A),
+                PicoLibrary::Driver(Driver::PSOSPA),
+                PicoLibrary::PicoIPP,
             ],
         ),
     ];
@@ -459,12 +464,12 @@ mod tests {
     #[test]
     fn every_driver_is_published_for_every_target() {
         for &(os, arch, absent) in TARGETS {
-            for driver in all::<Driver>() {
-                let published = driver_binary(driver, os, arch).is_some();
-                let expected = !absent.contains(&driver);
+            for library in all::<PicoLibrary>() {
+                let published = driver_binary(library, os, arch).is_some();
+                let expected = !absent.contains(&library);
                 assert_eq!(
                     published, expected,
-                    "{driver} on {os}-{arch}: published {published}, expected {expected}"
+                    "{library} on {os}-{arch}: published {published}, expected {expected}"
                 );
             }
         }
@@ -486,12 +491,12 @@ mod tests {
             Driver::DrDAQ,
             Driver::PLCM3,
         ] {
-            if absent.contains(&driver) {
-                assert!(binary_for_this_platform(driver).is_err(), "{driver}");
+            if absent.contains(&driver.into()) {
+                assert!(binary_for_this_platform(driver.into()).is_err(), "{driver}");
                 continue;
             }
             assert!(available.contains(&driver), "{driver} not available");
-            let binary = binary_for_this_platform(driver).unwrap();
+            let binary = binary_for_this_platform(driver.into()).unwrap();
             assert_eq!(binary.file_name, driver.get_binary_name());
         }
     }
@@ -499,7 +504,7 @@ mod tests {
     #[test]
     fn file_names_match_the_driver() {
         for binary in BINARIES {
-            let base = binary.driver.to_string();
+            let base = binary.library.to_string();
             let expected = match binary.os {
                 "windows" => format!("{base}.dll"),
                 "macos" => format!("lib{base}.dylib"),
@@ -519,7 +524,7 @@ mod tests {
         let mut seen = std::collections::BTreeSet::new();
         for binary in BINARIES {
             assert!(
-                seen.insert((binary.driver, binary.os, binary.arch)),
+                seen.insert((binary.library, binary.os, binary.arch)),
                 "{} listed twice",
                 binary.asset_name
             );

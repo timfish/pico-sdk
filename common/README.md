@@ -55,6 +55,7 @@ assert_eq!(thermocouple, TCType::K);
 
 Drivers:
 - [`Driver`](https://docs.rs/pico-common/latest/pico_common/driver/enum.Driver.html): each driver library, its USB product ids and its file name.
+- [`PicoLibrary`](https://docs.rs/pico-common/latest/pico_common/driver/enum.PicoLibrary.html): a driver library, or the `picoipp` library that some drivers load.
 
 Oscilloscope settings:
 - [`PicoChannel`](https://docs.rs/pico-common/latest/pico_common/enums/enum.PicoChannel.html), [`PicoRange`](https://docs.rs/pico-common/latest/pico_common/range/enum.PicoRange.html), [`PicoCoupling`](https://docs.rs/pico-common/latest/pico_common/enums/enum.PicoCoupling.html), [`PicoResolution`](https://docs.rs/pico-common/latest/pico_common/enums/enum.PicoResolution.html): a channel and its input.
