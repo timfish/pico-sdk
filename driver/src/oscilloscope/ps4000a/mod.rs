@@ -18,6 +18,7 @@ use super::{
     trampoline::split_closure,
     EnumerationResult, OscilloscopeDriverInternal, PowerStates, SampleBuffer,
 };
+use crate::DriverLoadError;
 use pico_common::BandwidthLimit;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
@@ -37,6 +38,58 @@ use std::matches;
 /// How long an open waits for the driver's first probe reports. The
 /// guide gives no count of reports to wait for.
 const PROBE_WAIT: std::time::Duration = std::time::Duration::from_millis(800);
+
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
+fn required(b: &PS4000ALoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps4000aOpenUnit,
+            ps4000aGetUnitInfo,
+            ps4000aGetAccessoryInfo,
+            ps4000aCloseUnit,
+            ps4000aMemorySegments,
+            ps4000aSetChannel,
+            ps4000aSetBandwidthFilter,
+            ps4000aGetTimebase2,
+            ps4000aSetTriggerChannelProperties,
+            ps4000aSetTriggerChannelConditions,
+            ps4000aSetTriggerChannelDirections,
+            ps4000aSetSimpleTrigger,
+            ps4000aSetTriggerDelay,
+            ps4000aSetPulseWidthQualifierProperties,
+            ps4000aSetPulseWidthQualifierConditions,
+            ps4000aIsTriggerOrPulseWidthQualifierEnabled,
+            ps4000aGetTriggerTimeOffset64,
+            ps4000aGetValuesTriggerTimeOffsetBulk64,
+            ps4000aSetDataBuffers,
+            ps4000aSetDataBuffer,
+            ps4000aIsReady,
+            ps4000aRunBlock,
+            ps4000aRunStreaming,
+            ps4000aGetStreamingLatestValues,
+            ps4000aGetMaxDownSampleRatio,
+            ps4000aGetValues,
+            ps4000aGetValuesBulk,
+            ps4000aEnumerateUnits,
+            ps4000aGetChannelInformation,
+            ps4000aSetProbeInteractionCallback,
+            ps4000aMaximumValue,
+            ps4000aGetAnalogueOffset,
+            ps4000aGetMaxSegments,
+            ps4000aChangePowerSource,
+            ps4000aCurrentPowerSource,
+            ps4000aStop,
+            ps4000aPingUnit,
+            ps4000aSetNoOfCaptures,
+            ps4000aGetNoOfCaptures,
+            ps4000aGetNoOfProcessedCaptures,
+            ps4000aApplyFix,
+        ]
+    )
+}
 
 /// The wrapper of the `ps4000a` driver, for the PicoScope 4000 Series units that use it
 ///
@@ -59,13 +112,14 @@ impl PS4000ADriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS4000ALoader::new(path)? });
+        required(&bindings)?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps4000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS4000ADriver {

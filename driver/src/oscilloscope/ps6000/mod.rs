@@ -17,6 +17,7 @@ use super::{
     trampoline::split_closure,
     EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
+use crate::DriverLoadError;
 use pico_common::BandwidthLimit;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
@@ -30,6 +31,53 @@ use pico_sys_dynamic::ps6000::{
     enPS6000RatioMode_PS6000_RATIO_MODE_AVERAGE, enPS6000RatioMode_PS6000_RATIO_MODE_NONE,
     PS6000Loader,
 };
+
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
+fn required(b: &PS6000Loader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps6000OpenUnit,
+            ps6000GetUnitInfo,
+            ps6000CloseUnit,
+            ps6000MemorySegments,
+            ps6000SetChannel,
+            ps6000GetTimebase2,
+            ps6000SetSimpleTrigger,
+            ps6000SetEts,
+            ps6000SetTriggerChannelProperties,
+            ps6000SetTriggerChannelConditions,
+            ps6000SetTriggerChannelDirections,
+            ps6000SetTriggerDelay,
+            ps6000SetPulseWidthQualifier,
+            ps6000IsTriggerOrPulseWidthQualifierEnabled,
+            ps6000GetTriggerTimeOffset64,
+            ps6000GetValuesTriggerTimeOffsetBulk64,
+            ps6000SetDataBuffers,
+            ps6000SetDataBuffer,
+            ps6000SetDataBufferBulk,
+            ps6000SetDataBuffersBulk,
+            ps6000SetEtsTimeBuffer,
+            ps6000RunBlock,
+            ps6000IsReady,
+            ps6000RunStreaming,
+            ps6000GetStreamingLatestValues,
+            ps6000GetMaxDownSampleRatio,
+            ps6000GetValues,
+            ps6000GetValuesBulk,
+            ps6000GetNoOfCaptures,
+            ps6000GetNoOfProcessedCaptures,
+            ps6000Stop,
+            ps6000SetNoOfCaptures,
+            ps6000EnumerateUnits,
+            ps6000PingUnit,
+            ps6000GetAnalogueOffset,
+            ps6000ApplyFix,
+        ]
+    )
+}
 
 /// The wrapper of the `ps6000` driver, for the PicoScope 6000 Series units that use it
 ///
@@ -52,13 +100,14 @@ impl PS6000Driver {
     ///
     /// - It first loads `picoipp` from the same directory, when it can.
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS6000Loader::new(path)? });
+        required(&bindings)?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps6000ApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS6000Driver {

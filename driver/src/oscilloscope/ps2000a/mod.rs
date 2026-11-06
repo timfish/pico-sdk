@@ -17,6 +17,7 @@ use super::{
     trampoline::split_closure,
     EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
+use crate::DriverLoadError;
 use pico_common::{
     Downsample, Driver, FromPicoStr, OscilloscopeChannelConfig, OscilloscopeSampleConfig,
     PicoChannel, PicoError, PicoInfo, PicoRange, PicoResult, PicoStatus, ToPicoStr,
@@ -25,6 +26,59 @@ use pico_sys_dynamic::ps2000a::{
     enPS2000ARatioMode_PS2000A_RATIO_MODE_AVERAGE, enPS2000ARatioMode_PS2000A_RATIO_MODE_NONE,
     PS2000ALoader,
 };
+
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
+fn required(b: &PS2000ALoader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps2000aOpenUnit,
+            ps2000aGetUnitInfo,
+            ps2000aCloseUnit,
+            ps2000aMemorySegments,
+            ps2000aSetChannel,
+            ps2000aSetDigitalPort,
+            ps2000aSetNoOfCaptures,
+            ps2000aGetTimebase2,
+            ps2000aSetEts,
+            ps2000aGetMaxEtsValues,
+            ps2000aSetSimpleTrigger,
+            ps2000aSetTriggerDigitalPortProperties,
+            ps2000aSetDigitalAnalogTriggerOperand,
+            ps2000aSetPulseWidthDigitalPortProperties,
+            ps2000aSetTriggerChannelProperties,
+            ps2000aSetTriggerChannelConditions,
+            ps2000aSetTriggerChannelDirections,
+            ps2000aSetTriggerDelay,
+            ps2000aSetPulseWidthQualifier,
+            ps2000aIsTriggerOrPulseWidthQualifierEnabled,
+            ps2000aGetTriggerTimeOffset64,
+            ps2000aGetValuesTriggerTimeOffsetBulk64,
+            ps2000aGetNoOfCaptures,
+            ps2000aGetNoOfProcessedCaptures,
+            ps2000aSetDataBuffer,
+            ps2000aSetDataBuffers,
+            ps2000aSetEtsTimeBuffer,
+            ps2000aIsReady,
+            ps2000aRunBlock,
+            ps2000aRunStreaming,
+            ps2000aGetStreamingLatestValues,
+            ps2000aGetMaxDownSampleRatio,
+            ps2000aGetValues,
+            ps2000aGetValuesBulk,
+            ps2000aStop,
+            ps2000aGetChannelInformation,
+            ps2000aEnumerateUnits,
+            ps2000aPingUnit,
+            ps2000aMaximumValue,
+            ps2000aGetAnalogueOffset,
+            ps2000aGetMaxSegments,
+            ps2000aApplyFix,
+        ]
+    )
+}
 
 /// The wrapper of the `ps2000a` driver, for the PicoScope 2000 Series units that use it
 ///
@@ -46,13 +100,14 @@ impl PS2000ADriver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS2000ALoader::new(path)? });
+        required(&bindings)?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps2000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS2000ADriver {

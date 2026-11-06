@@ -13,7 +13,7 @@ mod outputs;
 
 pub use outputs::outputs;
 
-use crate::LibraryResolution;
+use crate::{DriverLoadError, LibraryResolution};
 use pico_common::{
     Driver, FromPicoStr, PL1000Channel, PL1000Info, PicoError, PicoInfo, PicoResult, PicoStatus,
 };
@@ -94,7 +94,7 @@ impl PL1000DriverInternal {
 
     /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
-    /// - A unit matches when its batch and serial string contains `serial`.
+    /// - A unit matches when its batch and serial string is `serial`, without white space at the ends.
     /// - To find a serial, it must open other units.
     ///   It closes them again before it returns.
     /// - Returns Err with `NOT_FOUND` when no unit matches.
@@ -108,7 +108,7 @@ impl PL1000DriverInternal {
                     None => break Ok(handle),
                     Some(serial) => {
                         match self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL)) {
-                            Ok(found) if found.contains(serial) => break Ok(handle),
+                            Ok(found) if crate::serial_matches(&found, serial) => break Ok(handle),
                             Ok(_) => handles_to_close.push(handle),
                             Err(error) => {
                                 handles_to_close.push(handle);
@@ -290,6 +290,26 @@ fn interval_from_block(us_for_block: u32, ideal_samples: u32) -> u32 {
     ((us_for_block as u64 + ideal_samples as u64 / 2) / ideal_samples as u64) as u32
 }
 
+/// Checks that the library has each function that this wrapper calls
+fn required(b: &PL1000Loader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            pl1000OpenUnit,
+            pl1000CloseUnit,
+            pl1000GetUnitInfo,
+            pl1000SetDo,
+            pl1000SetPulseWidth,
+            pl1000Run,
+            pl1000Stop,
+            pl1000MaxValue,
+            pl1000SetInterval,
+            pl1000GetValues,
+            pl1000PingUnit,
+        ]
+    )
+}
+
 /// A loaded PicoLog 1000 Series driver
 ///
 /// - It dereferences to [`PL1000DriverInternal`], which has the methods.
@@ -301,17 +321,17 @@ impl PL1000Driver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
-        Ok(PL1000Driver(Arc::new(PL1000DriverInternal {
-            bindings: crate::Kept::new(unsafe { PL1000Loader::new(path.as_ref())? }),
-        })))
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
+        let bindings = crate::Kept::new(unsafe { PL1000Loader::new(path.as_ref())? });
+        required(&bindings)?;
+        Ok(PL1000Driver(Arc::new(PL1000DriverInternal { bindings })))
     }
 
     /// Loads the library that `resolution` finds
     ///
-    /// - Returns Err when the library does not load.
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, DriverLoadError> {
         PL1000Driver::new(resolution.get_path(Driver::PL1000))
     }
 }

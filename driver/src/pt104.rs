@@ -8,7 +8,7 @@
 //!   [`PT104DataType::scale`] gives its unit.
 //! - The driver has no list call, so you open each unit to find it.
 
-use crate::LibraryResolution;
+use crate::{DriverLoadError, LibraryResolution};
 use pico_common::{
     Driver, FromPicoStr, LoggerReading, MainsRejectionFreq, PT104Channel, PT104DataType, PT104Info,
     PT104Wires, PicoError, PicoInfo, PicoResult, PicoStatus,
@@ -89,7 +89,7 @@ impl PT104DriverInternal {
 
     /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
-    /// - A unit matches when its batch and serial string contains `serial`.
+    /// - A unit matches when its batch and serial string is `serial`, without white space at the ends.
     /// - To find a serial, it must open other units.
     ///   It closes them again before it returns.
     /// - Returns Err with `NOT_FOUND` when no unit matches.
@@ -103,7 +103,9 @@ impl PT104DriverInternal {
                     None => break Ok(handle),
                     Some(serial) => {
                         match self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL)) {
-                            Ok(info_serial) if info_serial.contains(serial) => break Ok(handle),
+                            Ok(info_serial) if crate::serial_matches(&info_serial, serial) => {
+                                break Ok(handle)
+                            }
                             Ok(_) => handles_to_close.push(handle),
                             Err(error) => {
                                 handles_to_close.push(handle);
@@ -238,6 +240,21 @@ impl PT104DriverInternal {
     }
 }
 
+/// Checks that the library has each function that this wrapper calls
+fn required(b: &PT104Loader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            UsbPt104OpenUnit,
+            UsbPt104CloseUnit,
+            UsbPt104GetUnitInfo,
+            UsbPt104SetChannel,
+            UsbPt104SetMains,
+            UsbPt104GetValue,
+        ]
+    )
+}
+
 /// A loaded USB PT-104 driver
 ///
 /// - It dereferences to [`PT104DriverInternal`], which has the methods.
@@ -249,17 +266,17 @@ impl PT104Driver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
-        Ok(PT104Driver(Arc::new(PT104DriverInternal {
-            bindings: crate::Kept::new(unsafe { PT104Loader::new(path.as_ref())? }),
-        })))
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
+        let bindings = crate::Kept::new(unsafe { PT104Loader::new(path.as_ref())? });
+        required(&bindings)?;
+        Ok(PT104Driver(Arc::new(PT104DriverInternal { bindings })))
     }
 
     /// Loads the library that `resolution` finds
     ///
-    /// - Returns Err when the library does not load.
-    pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn load(resolution: &LibraryResolution) -> Result<Self, DriverLoadError> {
         PT104Driver::new(resolution.get_path(Driver::PT104))
     }
 }

@@ -15,6 +15,7 @@ use super::{
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
+use crate::DriverLoadError;
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use pico_common::{
@@ -153,6 +154,33 @@ fn refuse_downsample(downsample: Option<Downsample>) -> PicoResult<()> {
     }
 }
 
+/// Checks that the library has each function that this wrapper calls
+///
+/// - Leaves out the signal generator calls, as they run only after `LegacyCalls::model` finds a generator.
+/// - Leaves out the advanced trigger calls, as `advanced_calls` checks them first.
+fn required(b: &PS2000Loader) -> Result<(), DriverLoadError> {
+    crate::required_functions!(
+        b,
+        [
+            ps2000_open_unit,
+            ps2000_get_unit_info,
+            ps2000_close_unit,
+            ps2000_set_channel,
+            ps2000_get_timebase,
+            ps2000_set_trigger,
+            ps2000_run_block,
+            ps2000_run_streaming_ns,
+            ps2000_ready,
+            ps2000_stop,
+            ps2000_get_values,
+            ps2000_set_ets,
+            ps2000_get_streaming_last_values,
+            ps2000PingUnit,
+            ps2000_apply_fix,
+        ]
+    )
+}
+
 /// The wrapper of the `ps2000` driver, for the PicoScope 2000 Series units that use it
 ///
 /// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
@@ -173,13 +201,14 @@ impl PS2000Driver {
     /// Loads the library file at `path`
     ///
     /// - The library stays loaded until the process ends.
-    /// - Returns Err when the library does not load.
-    pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
+    /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
+    pub fn new<P>(path: P) -> Result<Self, DriverLoadError>
     where
         P: AsRef<::std::ffi::OsStr>,
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS2000Loader::new(path)? });
+        required(&bindings)?;
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {
             bindings,
@@ -194,6 +223,95 @@ impl PS2000Driver {
             handle => Ok(handle),
         }
     }
+}
+
+/// The unit calls of [`enumerate`] and [`open`], so tests can fake them
+trait Units {
+    fn open_next(&self) -> Result<i16, PicoStatus>;
+    fn info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String>;
+    fn close_unit(&self, handle: i16);
+}
+
+impl Units for PS2000Driver {
+    fn open_next(&self) -> Result<i16, PicoStatus> {
+        self.open_unit_base()
+    }
+
+    fn info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String> {
+        self.get_unit_info(handle, info_type)
+    }
+
+    fn close_unit(&self, handle: i16) {
+        let _ = self.close(handle);
+    }
+}
+
+/// Opens every unit, reads its serial and variant, and closes it again
+///
+/// - Returns Err when a unit does not open or give its info.
+///   It closes every unit that it opened before it returns.
+fn enumerate(units: &impl Units) -> PicoResult<Vec<EnumerationResult>> {
+    let mut output = Vec::new();
+    // We keep track of handles to close when we're finished
+    let mut handles_to_close = Vec::new();
+    let read = |handle| -> PicoResult<EnumerationResult> {
+        let serial = units.info(handle, PicoInfo::BATCH_AND_SERIAL)?;
+        let variant = units.info(handle, PicoInfo::VARIANT_INFO)?;
+        Ok(EnumerationResult { variant, serial })
+    };
+
+    let result = loop {
+        match units.open_next() {
+            Ok(handle) => {
+                handles_to_close.push(handle);
+                match read(handle) {
+                    Ok(unit) => output.push(unit),
+                    Err(e) => break Err(e),
+                }
+            }
+            Err(PicoStatus::NOT_FOUND) => break Ok(output),
+            Err(e) => break Err(PicoError::from_status(e, "open_unit")),
+        }
+    };
+
+    for each in handles_to_close {
+        units.close_unit(each);
+    }
+
+    result
+}
+
+/// Opens units until one has `serial`, or opens the next unit with `None`
+///
+/// - A unit matches when its serial is `serial`, without white space at the ends.
+/// - Returns Err when a unit does not open or give its serial.
+///   It closes every unit that it opened before it returns.
+fn open(units: &impl Units, serial: Option<&str>) -> PicoResult<i16> {
+    // We keep track of handles to close when we're finished
+    let mut handles_to_close = Vec::new();
+
+    let result = loop {
+        match units.open_next() {
+            Ok(handle) => match serial {
+                None => break Ok(handle),
+                Some(serial) => match units.info(handle, PicoInfo::BATCH_AND_SERIAL) {
+                    Ok(found) if crate::serial_matches(&found, serial) => break Ok(handle),
+                    Ok(_) => handles_to_close.push(handle),
+                    Err(e) => {
+                        handles_to_close.push(handle);
+                        break Err(e);
+                    }
+                },
+            },
+            Err(e) => break Err(PicoError::from_status(e, "open_unit")),
+        }
+    };
+
+    for each in handles_to_close {
+        units.close_unit(each);
+    }
+
+    result
 }
 
 impl OscilloscopeDriverInternal for PS2000Driver {
@@ -220,35 +338,7 @@ impl OscilloscopeDriverInternal for PS2000Driver {
     // and getting their serial numbers.
     #[tracing::instrument(level = "trace", skip(self))]
     fn enumerate_units(&self) -> PicoResult<Vec<EnumerationResult>> {
-        let mut output = Vec::new();
-        // We keep track of handles to close when we're finished
-        let mut handles_to_close = Vec::new();
-
-        loop {
-            match self.open_unit_base() {
-                Ok(handle) => {
-                    handles_to_close.push(handle);
-
-                    let serial = self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?;
-                    let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-                    output.push(EnumerationResult { variant, serial });
-                }
-                Err(PicoStatus::NOT_FOUND) => break,
-                Err(e) => {
-                    for each in handles_to_close {
-                        let _ = self.close(each);
-                    }
-
-                    return Err(PicoError::from_status(e, "open_unit"));
-                }
-            }
-        }
-
-        for each in handles_to_close {
-            let _ = self.close(each);
-        }
-
-        Ok(output)
+        enumerate(self)
     }
 
     // The ps2000 driver cannot open devices by serial number like the other
@@ -256,35 +346,7 @@ impl OscilloscopeDriverInternal for PS2000Driver {
     // we find the correct one.
     #[tracing::instrument(level = "trace", skip(self))]
     fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
-        // We keep track of handles to close when we're finished
-        let mut handles_to_close = Vec::new();
-
-        loop {
-            match self.open_unit_base() {
-                Ok(handle) => {
-                    if let Some(serial) = serial {
-                        if serial == self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)? {
-                            for each in handles_to_close {
-                                let _ = self.close(each);
-                            }
-
-                            return Ok(handle);
-                        } else {
-                            handles_to_close.push(handle);
-                        }
-                    } else {
-                        return Ok(handle);
-                    }
-                }
-                Err(e) => {
-                    for each in handles_to_close {
-                        let _ = self.close(each);
-                    }
-
-                    return Err(PicoError::from_status(e, "open_unit"));
-                }
-            }
-        }
+        open(self, serial)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -396,6 +458,65 @@ impl Drop for PS2000Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Units with these serials, where `None` fails `get_unit_info`
+    struct FakeUnits {
+        serials: Vec<Option<&'static str>>,
+        opened: Mutex<usize>,
+        closed: Mutex<Vec<i16>>,
+    }
+
+    impl FakeUnits {
+        fn new(serials: Vec<Option<&'static str>>) -> Self {
+            FakeUnits {
+                serials,
+                opened: Mutex::new(0),
+                closed: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl Units for FakeUnits {
+        fn open_next(&self) -> Result<i16, PicoStatus> {
+            let mut opened = self.opened.lock();
+            if *opened == self.serials.len() {
+                return Err(PicoStatus::NOT_FOUND);
+            }
+            *opened += 1;
+            Ok(*opened as i16)
+        }
+
+        fn info(&self, handle: i16, _: PicoInfo) -> PicoResult<String> {
+            self.serials[handle as usize - 1]
+                .map(str::to_string)
+                .ok_or_else(|| PicoError::from_status(PicoStatus::NOT_RESPONDING, "info"))
+        }
+
+        fn close_unit(&self, handle: i16) {
+            self.closed.lock().push(handle);
+        }
+    }
+
+    #[test]
+    fn enumerate_closes_every_unit_when_info_fails() {
+        let units = FakeUnits::new(vec![Some("AB1/1"), None, Some("AB1/3")]);
+        assert!(enumerate(&units).is_err());
+        assert_eq!(*units.closed.lock(), [1, 2]);
+    }
+
+    #[test]
+    fn open_closes_every_unit_when_info_fails() {
+        let units = FakeUnits::new(vec![Some("AB1/1"), None, Some("AB1/3")]);
+        assert!(open(&units, Some("AB1/3")).is_err());
+        assert_eq!(*units.closed.lock(), [1, 2]);
+    }
+
+    #[test]
+    fn open_keeps_only_the_unit_with_the_serial() {
+        let units = FakeUnits::new(vec![Some("AB1/1"), Some("AB1/3 ")]);
+        assert_eq!(open(&units, Some("AB1/3")).unwrap(), 2);
+        assert_eq!(*units.closed.lock(), [1]);
+    }
 
     #[test]
     fn one_poll_joins_the_flags_of_its_callbacks() {
