@@ -444,12 +444,12 @@ impl OscilloscopeDriver {
     ///
     /// let driver = OscilloscopeDriver::load(ScopeDriver::PS2000A, &LibraryResolution::Default)?;
     /// println!("{driver:?}");
-    /// # Ok::<(), libloading::Error>(())
+    /// # Ok::<(), pico_driver::DriverLoadError>(())
     /// ```
     pub fn load(
         driver: ScopeDriver,
         resolution: &LibraryResolution,
-    ) -> Result<Self, ::libloading::Error> {
+    ) -> Result<Self, DriverLoadError> {
         let path = resolution.get_path(driver.into());
 
         Ok(match driver {
