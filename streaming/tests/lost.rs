@@ -284,6 +284,49 @@ fn starts_that_keep_failing_count_the_unit_as_lost() {
     runner.close();
 }
 
+/// The count of failed starts is for one handle: a reopen, or a close
+/// and an open, starts it again from 0. Each new handle gets its own
+/// 3 tries before the unit counts as lost.
+#[test]
+fn each_new_handle_gets_its_own_count_of_failed_starts() {
+    let unit = Unit::stuck_on(1);
+    let (runner, seen) = runner_of(&unit);
+    runner.close();
+    wait_until("closed", Duration::from_secs(1), || {
+        runner.get_info().is_none()
+    });
+    let fail_starts = |handle: Handle| {
+        *unit.stuck.lock().unwrap() = Some(handle);
+        for _ in 1..LOST_AFTER_STARTS {
+            let error = runner.start(()).unwrap_err();
+            assert_eq!(error.status, PicoStatus::BUSY);
+            assert_eq!(runner.get_info(), Some(handle));
+        }
+    };
+
+    fail_starts(1);
+    runner.reopen().unwrap();
+    fail_starts(2);
+    runner.close();
+    wait_until("closed", Duration::from_secs(1), || {
+        runner.get_info().is_none()
+    });
+    fail_starts(3);
+    assert!(seen.notices.lock().unwrap().is_empty());
+
+    runner.start(()).unwrap();
+    assert_eq!(runner.get_info(), Some(4));
+    let notices = seen.notices.lock().unwrap().clone();
+    assert!(
+        matches!(
+            notices[..],
+            [DeviceNotice::StartsFailed { starts, .. }] if starts == LOST_AFTER_STARTS
+        ),
+        "{notices:?}"
+    );
+    runner.close();
+}
+
 /// A start the driver refuses for its settings does not count the
 /// unit as lost, however often a caller asks: the runner keeps the
 /// handle, stops trying on its own, and tells why each time. A start

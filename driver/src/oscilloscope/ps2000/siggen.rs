@@ -78,9 +78,10 @@ impl LegacyCalls for PS2000Driver {
         Ok(MODEL)
     }
 
-    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoStatus {
+    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps2000_set_sig_gen_built_in)?;
         let c = &args.common;
-        status(unsafe {
+        Ok(status(unsafe {
             self.bindings.ps2000_set_sig_gen_built_in(
                 handle,
                 c.offset_uv,
@@ -93,10 +94,16 @@ impl LegacyCalls for PS2000Driver {
                 c.sweep_type,
                 0,
             )
-        })
+        }))
     }
 
-    fn arbitrary(&self, handle: i16, args: &Arbitrary, samples: &mut [i16]) -> PicoStatus {
+    fn arbitrary(
+        &self,
+        handle: i16,
+        args: &Arbitrary,
+        samples: &mut [i16],
+    ) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps2000_set_sig_gen_arbitrary)?;
         let phases = [
             args.start_phase,
             args.stop_phase,
@@ -104,11 +111,11 @@ impl LegacyCalls for PS2000Driver {
             args.dwell_count,
         ];
         if let Some(status) = phase_status(&phases) {
-            return status;
+            return Ok(status);
         }
         let c = &args.common;
         let mut bytes = to_bytes(samples);
-        status(unsafe {
+        Ok(status(unsafe {
             self.bindings.ps2000_set_sig_gen_arbitrary(
                 handle,
                 c.offset_uv,
@@ -122,7 +129,7 @@ impl LegacyCalls for PS2000Driver {
                 c.sweep_type,
                 0,
             )
-        })
+        }))
     }
 
     fn frequency_to_phase(&self, _handle: i16, hz: f64, len: u32) -> PicoResult<u64> {
@@ -138,8 +145,8 @@ impl LegacyCalls for PS2000Driver {
         })
     }
 
-    fn software_control(&self, _handle: i16, _state: bool) -> PicoStatus {
-        PicoStatus::NOT_SUPPORTED_BY_THIS_DEVICE
+    fn software_control(&self, _handle: i16, _state: bool) -> PicoResult<PicoStatus> {
+        Ok(PicoStatus::NOT_SUPPORTED_BY_THIS_DEVICE)
     }
 }
 
@@ -148,6 +155,24 @@ legacy_sig_gen_driver!(PS2000Driver);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn a_missing_function_fails_the_call() {
+        use pico_sys_dynamic::ps2000::PS2000Loader;
+        let bindings = unsafe { PS2000Loader::new(crate::tests::NO_FUNCTIONS) }.unwrap();
+        let driver = PS2000Driver {
+            _dependencies: Vec::new(),
+            bindings: crate::Kept::new(bindings),
+        };
+        crate::oscilloscope::siggen::legacy::tests::lacks_each(
+            &driver,
+            &[
+                "ps2000_set_sig_gen_built_in",
+                "ps2000_set_sig_gen_arbitrary",
+            ],
+        );
+    }
 
     #[test]
     fn wave_types_follow_this_header() {

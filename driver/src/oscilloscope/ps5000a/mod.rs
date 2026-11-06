@@ -11,7 +11,7 @@ mod streaming;
 mod trigger;
 
 use super::{
-    average_only, bandwidth_code, channel_range, check_channel_limit,
+    average_only, bandwidth_code, channel_ranges, check_channel_limit,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result, rate_limits,
     trampoline::split_closure,
@@ -56,12 +56,12 @@ fn supply_channels(channels: Option<u8>) -> Vec<PicoChannel> {
     }
 }
 
-/// Checks that the library has each function that this wrapper calls
+/// Each function that the library must have to load, and whether it has it
 ///
-/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator, and each checks its function first.
 /// - Leaves out the V2 trigger calls, as `v2_calls` checks them first.
 /// - Leaves out `ps5000aGetMinimumTimebaseStateless`, as `get_rate_limits` checks it first.
-fn required(b: &PS5000ALoader) -> Result<(), DriverLoadError> {
+fn required(b: &PS5000ALoader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -141,7 +141,7 @@ impl PS5000ADriver {
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS5000ALoader::new(path)? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps5000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS5000ADriver {
@@ -322,11 +322,10 @@ impl OscilloscopeDriverInternal for PS5000ADriver {
         });
 
         match status {
-            PicoStatus::OK => ranges[0..len as usize]
-                .to_vec()
-                .iter()
-                .map(|v| channel_range(*v))
-                .collect(),
+            PicoStatus::OK => Ok(channel_ranges(
+                channel,
+                ranges[0..len as usize].iter().copied(),
+            )),
             x => Err(PicoError::from_status(x, "get_channel_ranges")),
         }
     }

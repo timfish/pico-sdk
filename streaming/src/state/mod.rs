@@ -39,10 +39,11 @@ const RETRY_MAX: Duration = Duration::from_secs(10);
 /// that follows.
 const LOST_SETTLE: Duration = Duration::from_millis(200);
 
-/// The number of failed starts in a row after which the runner counts the unit as lost
+/// The number of failed starts in a row on one handle after which the runner counts the unit as lost
 ///
 /// - It counts only starts that fail with a status that neither [`unit_lost`] nor [`settings_refused`] names.
 /// - A retry on the same handle gave the same answer, so only a close and an open again can change it.
+/// - Each open of the unit, such as by [`StreamingRunner::reopen`], sets the count back to 0.
 pub const LOST_AFTER_STARTS: usize = 3;
 
 /// Whether `status` says that the driver lost the unit, or left it in a state that no call clears
@@ -353,7 +354,7 @@ pub enum DeviceNotice {
         /// The error of the failed start
         error: PicoError,
     },
-    /// [`LOST_AFTER_STARTS`] starts in a row failed with a status that neither [`unit_lost`] nor [`settings_refused`] names
+    /// [`LOST_AFTER_STARTS`] starts in a row on one handle failed with a status that neither [`unit_lost`] nor [`settings_refused`] names
     ///
     /// - The runner counts the unit as lost: it closed the unit, and opens it again as for [`DeviceNotice::UnitLost`].
     /// - The stream does not run while the starts fail, so show the error to the user.
@@ -536,7 +537,8 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     state: Arc<RwLock<StreamingState<Config, Info, Stream>>>,
     /// Held across each step's driver calls, so steps run one at a time.
     steps: Arc<Steps>,
-    /// Starts in a row that failed with a status not counted as lost.
+    /// Starts in a row on this handle that failed with a status not
+    /// counted as lost.
     failed_starts: Arc<AtomicUsize>,
     /// While above 0, the background thread takes no step: a caller
     /// drives the device through [`StreamingRunner::with_open`].
@@ -671,7 +673,10 @@ where
             }
             Err(error) => return Err(error),
         };
-        if matches!(next, Current::Streaming(..)) && !matches!(current, Current::Streaming(..)) {
+        let opened = matches!(current, Current::Closed) && !matches!(next, Current::Closed);
+        let started =
+            matches!(next, Current::Streaming(..)) && !matches!(current, Current::Streaming(..));
+        if opened || started {
             self.failed_starts.store(0, Ordering::SeqCst);
         }
         if current != next {

@@ -240,8 +240,8 @@ impl PT104DriverInternal {
     }
 }
 
-/// Checks that the library has each function that this wrapper calls
-fn required(b: &PT104Loader) -> Result<(), DriverLoadError> {
+/// Each function that the library must have to load, and whether it has it
+fn required(b: &PT104Loader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -269,7 +269,7 @@ impl PT104Driver {
     /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
         let bindings = crate::Kept::new(unsafe { PT104Loader::new(path.as_ref())? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         Ok(PT104Driver(Arc::new(PT104DriverInternal { bindings })))
     }
 

@@ -290,16 +290,16 @@ fn interval_from_block(us_for_block: u32, ideal_samples: u32) -> u32 {
     ((us_for_block as u64 + ideal_samples as u64 / 2) / ideal_samples as u64) as u32
 }
 
-/// Checks that the library has each function that this wrapper calls
-fn required(b: &PL1000Loader) -> Result<(), DriverLoadError> {
+/// Each function that the library must have to load, and whether it has it
+///
+/// - Leaves out the functions of the outputs, as `set_output` checks them first.
+fn required(b: &PL1000Loader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
             pl1000OpenUnit,
             pl1000CloseUnit,
             pl1000GetUnitInfo,
-            pl1000SetDo,
-            pl1000SetPulseWidth,
             pl1000Run,
             pl1000Stop,
             pl1000MaxValue,
@@ -324,7 +324,7 @@ impl PL1000Driver {
     /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
         let bindings = crate::Kept::new(unsafe { PL1000Loader::new(path.as_ref())? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         Ok(PL1000Driver(Arc::new(PL1000DriverInternal { bindings })))
     }
 

@@ -135,20 +135,28 @@ pub(crate) struct AwgLimits {
 }
 
 /// One family's legacy calls, each a thin wrapper of the binding.
+///
+/// - Each call that wraps a binding returns Err with `NOT_USED` when the library lacks its function.
+/// - The calls that give a [`PicoStatus`] give the status of the driver in Ok.
 pub(crate) trait LegacyCalls {
     fn model(&self, handle: i16) -> PicoResult<LegacyModel>;
-    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoStatus;
-    fn arbitrary(&self, handle: i16, args: &Arbitrary, samples: &mut [i16]) -> PicoStatus;
+    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoResult<PicoStatus>;
+    fn arbitrary(
+        &self,
+        handle: i16,
+        args: &Arbitrary,
+        samples: &mut [i16],
+    ) -> PicoResult<PicoStatus>;
     fn frequency_to_phase(&self, handle: i16, hz: f64, len: u32) -> PicoResult<u64>;
     fn awg_limits(&self, handle: i16) -> PicoResult<AwgLimits>;
-    fn software_control(&self, handle: i16, state: bool) -> PicoStatus;
+    fn software_control(&self, handle: i16, state: bool) -> PicoResult<PicoStatus>;
 
     /// No family but ps4000 has an off call; a DC output of 0 V stands
     /// in for it.
-    fn off(&self, handle: i16) -> PicoStatus {
+    fn off(&self, handle: i16) -> PicoResult<PicoStatus> {
         let model = match self.model(handle) {
             Ok(model) => model,
-            Err(e) => return e.status,
+            Err(e) => return Ok(e.status),
         };
         let hz = model.min_frequency_hz.max(1.0);
         self.built_in(
@@ -302,7 +310,7 @@ pub(crate) fn apply<C: LegacyCalls + ?Sized>(
     config: Option<&SigGenConfig>,
 ) -> PicoResult<Option<SigGenConfig>> {
     let Some(config) = config else {
-        calls.off(handle).to_result((), "sig_gen_off")?;
+        calls.off(handle)?.to_result((), "sig_gen_off")?;
         return Ok(None);
     };
     let model = calls.model(handle)?;
@@ -347,13 +355,13 @@ pub(crate) fn apply<C: LegacyCalls + ?Sized>(
             let span = (f64::from(limits.min_value), f64::from(limits.max_value));
             let mut scaled = super::scale_samples(samples, span);
             calls
-                .arbitrary(handle, &args, &mut scaled)
+                .arbitrary(handle, &args, &mut scaled)?
                 .to_result((), "set_sig_gen_arbitrary")?;
         }
         _ => {
             let args = built_in(config, &model)?;
             calls
-                .built_in(handle, &args)
+                .built_in(handle, &args)?
                 .to_result((), "set_sig_gen_built_in")?;
         }
     }
@@ -379,7 +387,7 @@ pub(crate) fn software_trigger<C: LegacyCalls + ?Sized>(
 ) -> PicoResult<()> {
     calls.model(handle)?;
     calls
-        .software_control(handle, state)
+        .software_control(handle, state)?
         .to_result((), "sig_gen_software_control")
 }
 
@@ -410,9 +418,10 @@ macro_rules! legacy_calls_u32 {
                 &self,
                 handle: i16,
                 args: &$crate::oscilloscope::siggen::legacy::BuiltIn,
-            ) -> pico_common::PicoStatus {
+            ) -> pico_common::PicoResult<pico_common::PicoStatus> {
+                $crate::optional_function!(self.bindings, $built_in)?;
                 let c = &args.common;
-                pico_common::PicoStatus::from(unsafe {
+                Ok(pico_common::PicoStatus::from(unsafe {
                     self.bindings.$built_in(
                         handle,
                         c.offset_uv,
@@ -430,7 +439,7 @@ macro_rules! legacy_calls_u32 {
                         c.trigger_source,
                         0,
                     )
-                })
+                }))
             }
 
             fn arbitrary(
@@ -438,7 +447,8 @@ macro_rules! legacy_calls_u32 {
                 handle: i16,
                 args: &$crate::oscilloscope::siggen::legacy::Arbitrary,
                 samples: &mut [i16],
-            ) -> pico_common::PicoStatus {
+            ) -> pico_common::PicoResult<pico_common::PicoStatus> {
+                $crate::optional_function!(self.bindings, $arbitrary)?;
                 let phases = [
                     args.start_phase,
                     args.stop_phase,
@@ -446,10 +456,10 @@ macro_rules! legacy_calls_u32 {
                     args.dwell_count,
                 ];
                 if let Some(status) = $crate::oscilloscope::siggen::legacy::phase_status(&phases) {
-                    return status;
+                    return Ok(status);
                 }
                 let c = &args.common;
-                pico_common::PicoStatus::from(unsafe {
+                Ok(pico_common::PicoStatus::from(unsafe {
                     self.bindings.$arbitrary(
                         handle,
                         c.offset_uv,
@@ -469,7 +479,7 @@ macro_rules! legacy_calls_u32 {
                         c.trigger_source,
                         0,
                     )
-                })
+                }))
             }
 
             fn frequency_to_phase(
@@ -478,6 +488,7 @@ macro_rules! legacy_calls_u32 {
                 hz: f64,
                 len: u32,
             ) -> pico_common::PicoResult<u64> {
+                $crate::optional_function!(self.bindings, $to_phase)?;
                 let mut phase = 0u32;
                 pico_common::PicoStatus::from(unsafe {
                     self.bindings.$to_phase(handle, hz, 0, len, &mut phase)
@@ -489,6 +500,7 @@ macro_rules! legacy_calls_u32 {
                 &self,
                 handle: i16,
             ) -> pico_common::PicoResult<$crate::oscilloscope::siggen::legacy::AwgLimits> {
+                $crate::optional_function!(self.bindings, $min_max)?;
                 let (mut min_value, mut max_value, mut min_len, mut max_len) = (0, 0, 0, 0);
                 pico_common::PicoStatus::from(unsafe {
                     self.bindings.$min_max(
@@ -510,10 +522,15 @@ macro_rules! legacy_calls_u32 {
                 )
             }
 
-            fn software_control(&self, handle: i16, state: bool) -> pico_common::PicoStatus {
-                pico_common::PicoStatus::from(unsafe {
+            fn software_control(
+                &self,
+                handle: i16,
+                state: bool,
+            ) -> pico_common::PicoResult<pico_common::PicoStatus> {
+                $crate::optional_function!(self.bindings, $soft)?;
+                Ok(pico_common::PicoStatus::from(unsafe {
                     self.bindings.$soft(handle, i16::from(state))
-                })
+                }))
             }
         }
     };
@@ -573,6 +590,34 @@ pub(crate) mod tests {
         trigger_sources: LEGACY_TRIGGERS,
     };
 
+    /// Asserts that each call of `calls` gives the name of its function
+    ///
+    /// - `names` are the functions of `built_in`, `arbitrary`, `frequency_to_phase`, `awg_limits` and `software_control`, in that order; a family can give fewer.
+    /// - The library of `calls` must lack each of `names`.
+    pub(crate) fn lacks_each<C: LegacyCalls>(calls: &C, names: &[&str]) {
+        use crate::tests::lacks;
+        let common = common(&sine(), &MODEL).unwrap();
+        let arbitrary = Arbitrary {
+            common,
+            start_phase: 1,
+            stop_phase: 1,
+            phase_increment: 0,
+            dwell_count: 3,
+        };
+        let results = [
+            calls
+                .built_in(1, &built_in(&sine(), &MODEL).unwrap())
+                .map(drop),
+            calls.arbitrary(1, &arbitrary, &mut [0; 4]).map(drop),
+            calls.frequency_to_phase(1, 1000.0, 4).map(drop),
+            calls.awg_limits(1).map(drop),
+            calls.software_control(1, true).map(drop),
+        ];
+        for (result, name) in results.into_iter().zip(names) {
+            lacks(result, name);
+        }
+    }
+
     #[derive(Debug, Clone, PartialEq)]
     pub(crate) enum Call {
         BuiltIn(BuiltIn),
@@ -601,16 +646,21 @@ pub(crate) mod tests {
         fn model(&self, _handle: i16) -> PicoResult<LegacyModel> {
             Ok(self.model)
         }
-        fn built_in(&self, _handle: i16, args: &BuiltIn) -> PicoStatus {
+        fn built_in(&self, _handle: i16, args: &BuiltIn) -> PicoResult<PicoStatus> {
             self.calls.lock().unwrap().push(Call::BuiltIn(*args));
-            PicoStatus::OK
+            Ok(PicoStatus::OK)
         }
-        fn arbitrary(&self, _handle: i16, args: &Arbitrary, samples: &mut [i16]) -> PicoStatus {
+        fn arbitrary(
+            &self,
+            _handle: i16,
+            args: &Arbitrary,
+            samples: &mut [i16],
+        ) -> PicoResult<PicoStatus> {
             self.calls
                 .lock()
                 .unwrap()
                 .push(Call::Arbitrary(*args, samples.to_vec()));
-            PicoStatus::OK
+            Ok(PicoStatus::OK)
         }
         // 2^32 / 20 MHz per hertz of a 1-sample waveform, as the guide's
         // formula with an AWG buffer of one sample.
@@ -625,9 +675,9 @@ pub(crate) mod tests {
                 max_len: 8192,
             })
         }
-        fn software_control(&self, _handle: i16, state: bool) -> PicoStatus {
+        fn software_control(&self, _handle: i16, state: bool) -> PicoResult<PicoStatus> {
             self.calls.lock().unwrap().push(Call::Soft(state));
-            PicoStatus::OK
+            Ok(PicoStatus::OK)
         }
     }
 

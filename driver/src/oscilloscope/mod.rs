@@ -295,6 +295,8 @@ pub trait OscilloscopeDriverInternal:
     /// One information string of the unit
     fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String>;
     /// The ranges that `channel` takes
+    ///
+    /// - Leaves out each range code that [`PicoRange`] does not name.
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>>;
     /// The resolutions the unit has, each with its maximum ADC value
     ///
@@ -608,6 +610,25 @@ pub(crate) fn channel_range(code: i32) -> PicoResult<PicoRange> {
     })
 }
 
+/// The ranges for the range codes that the driver lists for a channel
+///
+/// - Skips each code that [`PicoRange`] does not name, and logs a warning with the channel and the code.
+pub(crate) fn channel_ranges(
+    channel: PicoChannel,
+    codes: impl IntoIterator<Item = i32>,
+) -> Vec<PicoRange> {
+    codes
+        .into_iter()
+        .filter_map(|code| {
+            let range = PicoRange::try_from(code).ok();
+            if range.is_none() {
+                tracing::warn!(?channel, code, "skipping unknown range code");
+            }
+            range
+        })
+        .collect()
+}
+
 /// Checks that `resolution` allows `enabled` channels
 ///
 /// - `limits` comes from [`OscilloscopeDriverInternal::get_resolution_channel_limits`].
@@ -667,6 +688,14 @@ mod tests {
         let error = channel_range(999).unwrap_err();
         assert_eq!(error.status, PicoStatus::INVALID_VOLTAGE_RANGE);
         assert!(error.to_string().contains("999"));
+    }
+
+    #[test]
+    fn channel_ranges_skips_unknown_codes() {
+        assert_eq!(
+            channel_ranges(PicoChannel::A, [2, 20, 3]),
+            vec![PicoRange::X1_PROBE_50MV, PicoRange::X1_PROBE_100MV]
+        );
     }
 
     #[test]

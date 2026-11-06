@@ -68,6 +68,7 @@ impl HRDLDriverInternal {
     ///   To use a pin during a stream, set it `On` or `Off` before the stream.
     /// - Returns the value that it set.
     /// - Returns Err when `id` is not an output, or `value` does not suit the output.
+    /// - Returns Err with `NOT_USED` when the library lacks `HRDLSetDigitalIOChannel`.
     #[tracing::instrument(level = "debug", skip(self, info), err(level = "warn", Display))]
     pub fn set_output(
         &self,
@@ -78,6 +79,7 @@ impl HRDLDriverInternal {
         let handle = *info.handle;
         let specs = outputs(info);
         find_output(&specs, id)?.check(value)?;
+        crate::optional_function!(self.bindings, HRDLSetDigitalIOChannel)?;
         let pin: u8 = id[3..].parse().expect("listed outputs are dio1 to dio4");
         let mut units = self.digital_io.lock();
         let pins = units
@@ -107,6 +109,21 @@ mod tests {
             hardware_version: String::new(),
             variant: variant.to_string(),
         }
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn a_missing_function_fails_the_call() {
+        use pico_sys_dynamic::picohrdl::HRDLLoader;
+        let bindings = unsafe { HRDLLoader::new(crate::tests::NO_FUNCTIONS) }.unwrap();
+        let driver = HRDLDriverInternal {
+            bindings: crate::Kept::new(bindings),
+            digital_io: Default::default(),
+        };
+        crate::tests::lacks(
+            driver.set_output(&info("24"), "dio1", &OutputValue::On),
+            "HRDLSetDigitalIOChannel",
+        );
     }
 
     #[test]

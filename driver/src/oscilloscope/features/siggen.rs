@@ -5,6 +5,7 @@ use pico_common::{PicoError, PicoResult, SigGenConfig, SigGenInfo};
 /// - A change does not stop a stream.
 /// - While the scope streams, the ps2000a and psospa drivers return `BUSY` for most changes (ps2000a guide §3.52).
 ///   A change of frequency only, or off on psospa, goes through.
+/// - Each call returns Err with `NOT_USED` when the library lacks a function that it needs.
 pub trait SigGenDriver {
     /// The shapes and limits of the signal generator of the unit
     fn sig_gen_info(&self, _handle: i16) -> PicoResult<SigGenInfo> {

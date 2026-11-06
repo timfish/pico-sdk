@@ -154,11 +154,11 @@ fn refuse_downsample(downsample: Option<Downsample>) -> PicoResult<()> {
     }
 }
 
-/// Checks that the library has each function that this wrapper calls
+/// Each function that the library must have to load, and whether it has it
 ///
-/// - Leaves out the signal generator calls, as they run only after `LegacyCalls::model` finds a generator.
+/// - Leaves out the signal generator calls, as they run only after `LegacyCalls::model` finds a generator, and each checks its function first.
 /// - Leaves out the advanced trigger calls, as `advanced_calls` checks them first.
-fn required(b: &PS2000Loader) -> Result<(), DriverLoadError> {
+fn required(b: &PS2000Loader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -208,7 +208,7 @@ impl PS2000Driver {
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS2000Loader::new(path)? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         unsafe { bindings.ps2000_apply_fix(0x1ced9168, 0x11e6) };
         Ok(PS2000Driver {
             bindings,
