@@ -56,6 +56,68 @@ pub enum Driver {
     DrDAQ,
 }
 
+/// An oscilloscope driver library
+///
+/// - Each variant is also a [`Driver`], and [`Driver::from`] gives it.
+/// - It prints as the base name of the driver library, as [`Driver`] does.
+///
+/// ```
+/// use pico_common::{Driver, ScopeDriver};
+///
+/// let driver = Driver::from(ScopeDriver::PS2000A);
+/// assert_eq!(driver, Driver::PS2000A);
+/// assert_eq!(driver.as_scope(), Some(ScopeDriver::PS2000A));
+/// assert_eq!(Driver::TC08.as_scope(), None);
+/// ```
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "lowercase")
+)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Sequence)]
+pub enum ScopeDriver {
+    /// PicoScope 2000 series
+    PS2000,
+    /// PicoScope 2000A series
+    PS2000A,
+    /// PicoScope 3000A series
+    PS3000A,
+    /// PicoScope 4000 series
+    PS4000,
+    /// PicoScope 4000A series
+    PS4000A,
+    /// PicoScope 5000A series
+    PS5000A,
+    /// PicoScope 6000 series
+    PS6000,
+    /// PicoScope 6000A series
+    PS6000A,
+    /// PicoScope 3000E and 5000E series (psospa)
+    PSOSPA,
+}
+
+impl From<ScopeDriver> for Driver {
+    fn from(driver: ScopeDriver) -> Self {
+        match driver {
+            ScopeDriver::PS2000 => Driver::PS2000,
+            ScopeDriver::PS2000A => Driver::PS2000A,
+            ScopeDriver::PS3000A => Driver::PS3000A,
+            ScopeDriver::PS4000 => Driver::PS4000,
+            ScopeDriver::PS4000A => Driver::PS4000A,
+            ScopeDriver::PS5000A => Driver::PS5000A,
+            ScopeDriver::PS6000 => Driver::PS6000,
+            ScopeDriver::PS6000A => Driver::PS6000A,
+            ScopeDriver::PSOSPA => Driver::PSOSPA,
+        }
+    }
+}
+
+impl fmt::Display for ScopeDriver {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Driver::from(*self).fmt(f)
+    }
+}
+
 impl FromStr for Driver {
     type Err = ParseError;
 
@@ -137,22 +199,27 @@ impl Driver {
     ///
     /// - Use it to find the oscilloscopes in a list of all families.
     pub fn is_scope(self) -> bool {
+        self.as_scope().is_some()
+    }
+
+    /// The oscilloscope driver, or `None` for a data logger
+    pub fn as_scope(self) -> Option<ScopeDriver> {
         match self {
-            Driver::PS2000
-            | Driver::PS2000A
-            | Driver::PS3000A
-            | Driver::PS4000
-            | Driver::PS4000A
-            | Driver::PS5000A
-            | Driver::PS6000
-            | Driver::PS6000A
-            | Driver::PSOSPA => true,
+            Driver::PS2000 => Some(ScopeDriver::PS2000),
+            Driver::PS2000A => Some(ScopeDriver::PS2000A),
+            Driver::PS3000A => Some(ScopeDriver::PS3000A),
+            Driver::PS4000 => Some(ScopeDriver::PS4000),
+            Driver::PS4000A => Some(ScopeDriver::PS4000A),
+            Driver::PS5000A => Some(ScopeDriver::PS5000A),
+            Driver::PS6000 => Some(ScopeDriver::PS6000),
+            Driver::PS6000A => Some(ScopeDriver::PS6000A),
+            Driver::PSOSPA => Some(ScopeDriver::PSOSPA),
             Driver::PL1000
             | Driver::PLCM3
             | Driver::PT104
             | Driver::TC08
             | Driver::PicoHRDL
-            | Driver::DrDAQ => false,
+            | Driver::DrDAQ => None,
         }
     }
 
@@ -236,6 +303,18 @@ impl PicoLibrary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scope_driver_round_trip() {
+        for scope in enum_iterator::all::<ScopeDriver>() {
+            let driver = Driver::from(scope);
+            assert!(driver.is_scope());
+            assert_eq!(driver.as_scope(), Some(scope));
+            assert_eq!(scope.to_string(), driver.to_string());
+        }
+        let scopes = enum_iterator::all::<Driver>().filter(|d| d.is_scope());
+        assert_eq!(scopes.count(), enum_iterator::cardinality::<ScopeDriver>());
+    }
 
     /// Every device driver must survive `Display` -> `FromStr`, since driver names are written
     /// to config files and command lines and read back.

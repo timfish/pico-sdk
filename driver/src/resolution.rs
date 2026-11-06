@@ -56,7 +56,7 @@ impl LibraryResolution {
 
 /// Loads the library of a driver and gives the driver of its family
 ///
-/// - Use the driver type of a family, such as [`TC08Driver::load`], when you know the family.
+/// - Use the driver type of a family when you know the family, such as [`TC08Driver::load`] or [`OscilloscopeDriver::load`](oscilloscope::OscilloscopeDriver::load).
 /// - It does not check the driver version.
 ///   Call [`OscilloscopeDriverInternal::check_version`](crate::oscilloscope::OscilloscopeDriverInternal::check_version) on an oscilloscope driver to do that.
 pub trait DriverLoad {
@@ -79,44 +79,30 @@ pub trait DriverLoad {
 
 impl DriverLoad for Driver {
     fn load(&self, resolution: &LibraryResolution) -> Result<PicoDriver, DriverLoadError> {
-        use oscilloscope::OscilloscopeDriver as Scope;
+        if let Some(scope) = self.as_scope() {
+            return Ok(PicoDriver::Oscilloscope(
+                oscilloscope::OscilloscopeDriver::load(scope, resolution)?,
+            ));
+        }
 
         let path = resolution.get_path(*self);
 
         Ok(match self {
-            Driver::PS2000 => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS2000Driver::new(path)?))
-            }
-            Driver::PS2000A => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS2000ADriver::new(path)?))
-            }
-            Driver::PS3000A => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS3000ADriver::new(path)?))
-            }
-            Driver::PS4000 => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS4000Driver::new(path)?))
-            }
-            Driver::PS4000A => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS4000ADriver::new(path)?))
-            }
-            Driver::PS5000A => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS5000ADriver::new(path)?))
-            }
-            Driver::PS6000 => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS6000Driver::new(path)?))
-            }
-            Driver::PS6000A => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PS6000ADriver::new(path)?))
-            }
-            Driver::PSOSPA => {
-                PicoDriver::Oscilloscope(Scope::new(oscilloscope::PSOSPADriver::new(path)?))
-            }
             Driver::TC08 => PicoDriver::TC08(TC08Driver::new(path)?),
             Driver::PT104 => PicoDriver::PT104(PT104Driver::new(path)?),
             Driver::PicoHRDL => PicoDriver::PicoHRDL(HRDLDriver::new(path)?),
             Driver::PLCM3 => PicoDriver::PLCM3(PLCM3Driver::new(path)?),
             Driver::DrDAQ => PicoDriver::DrDAQ(DrDAQDriver::new(path)?),
             Driver::PL1000 => PicoDriver::PL1000(PL1000Driver::new(path)?),
+            Driver::PS2000
+            | Driver::PS2000A
+            | Driver::PS3000A
+            | Driver::PS4000
+            | Driver::PS4000A
+            | Driver::PS5000A
+            | Driver::PS6000
+            | Driver::PS6000A
+            | Driver::PSOSPA => unreachable!("as_scope() covers the oscilloscope drivers"),
         })
     }
 }

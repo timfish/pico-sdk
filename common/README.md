@@ -55,6 +55,7 @@ assert_eq!(thermocouple, TCType::K);
 
 Drivers:
 - [`Driver`](https://docs.rs/pico-common/latest/pico_common/driver/enum.Driver.html): each driver library, its USB product ids and its file name.
+- [`ScopeDriver`](https://docs.rs/pico-common/latest/pico_common/driver/enum.ScopeDriver.html): the oscilloscope drivers only, for a typed load.
 - [`PicoLibrary`](https://docs.rs/pico-common/latest/pico_common/driver/enum.PicoLibrary.html): a driver library, or the `picoipp` library that some drivers load.
 
 Oscilloscope settings:

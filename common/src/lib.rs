@@ -56,6 +56,7 @@
 //!
 //! Drivers:
 //! - [`Driver`]: each driver library, its USB product ids and its file name.
+//! - [`ScopeDriver`]: the oscilloscope drivers only, for a typed load.
 //! - [`PicoLibrary`]: a driver library, or the `picoipp` library that some drivers load.
 //!
 //! Oscilloscope settings:
