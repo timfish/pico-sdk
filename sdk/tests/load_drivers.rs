@@ -1,5 +1,4 @@
 use pico_sdk::{
-    common::Driver,
     download::{available_drivers, cache_resolution, download_drivers_to_cache},
     driver::{DriverLoad, PicoDriver},
 };
@@ -15,11 +14,6 @@ fn download_and_load_drivers() {
     let resolution = cache_resolution();
 
     for driver in available_drivers() {
-        // PicoIPP is a shared library ps4000/ps6000 load internally, not a driver we load directly
-        if driver == Driver::PicoIPP {
-            continue;
-        }
-
         if driver.load(&resolution).is_err() {
             download_drivers_to_cache(&[driver]).unwrap();
         }

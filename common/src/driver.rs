@@ -7,7 +7,6 @@ use std::{fmt, str::FromStr};
 /// - It prints as the base name of the driver library, such as `ps2000a` or `usbtc08`.
 /// - It parses from that name and from the forms people write, such as `PS 2000A`, `2000a` or `TC-08`.
 ///   Parsing ignores letter case, spaces, `-`, `USB` and `PS`.
-/// - [`Driver::PicoIPP`] does not parse, as it is not a device driver.
 ///
 /// ```
 /// use pico_common::Driver;
@@ -55,8 +54,6 @@ pub enum Driver {
     PicoHRDL,
     /// USB DrDAQ educational data logger
     DrDAQ,
-    /// Not a device driver: a shared library that ps4000 and ps6000 load when they run
-    PicoIPP,
 }
 
 /// An oscilloscope driver library
@@ -222,8 +219,7 @@ impl Driver {
             | Driver::PT104
             | Driver::TC08
             | Driver::PicoHRDL
-            | Driver::DrDAQ
-            | Driver::PicoIPP => None,
+            | Driver::DrDAQ => None,
         }
     }
 
@@ -242,24 +238,64 @@ impl Driver {
     /// }
     /// ```
     pub fn get_binary_name(self) -> String {
+        PicoLibrary::Driver(self).get_binary_name()
+    }
+
+    /// The Pico shared libraries that this driver loads when it runs
+    ///
+    /// - Only ps4000 and ps6000 have one: [`PicoLibrary::PicoIPP`].
+    ///   They load `picoipp` by its name only, thus it must be in the same directory as them.
+    /// - The other drivers need no other Pico library.
+    pub fn dependencies(self) -> &'static [PicoLibrary] {
+        match self {
+            Driver::PS4000 | Driver::PS6000 => &[PicoLibrary::PicoIPP],
+            _ => &[],
+        }
+    }
+}
+
+/// A Pico library file: a driver, or a library that a driver loads
+///
+/// - It prints as the base name of the library, such as `ps2000a` or `picoipp`.
+///
+/// ```
+/// use pico_common::{Driver, PicoLibrary};
+///
+/// assert_eq!(PicoLibrary::from(Driver::PS4000).to_string(), "ps4000");
+/// assert_eq!(Driver::PS4000.dependencies(), &[PicoLibrary::PicoIPP]);
+/// ```
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Sequence)]
+pub enum PicoLibrary {
+    /// The library of a driver
+    Driver(Driver),
+    /// A shared library that ps4000 and ps6000 load when they run
+    PicoIPP,
+}
+
+impl From<Driver> for PicoLibrary {
+    fn from(driver: Driver) -> Self {
+        PicoLibrary::Driver(driver)
+    }
+}
+
+impl fmt::Display for PicoLibrary {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PicoLibrary::Driver(driver) => driver.fmt(f),
+            PicoLibrary::PicoIPP => f.write_str("picoipp"),
+        }
+    }
+}
+
+impl PicoLibrary {
+    /// The file name of the library on this operating system
+    pub fn get_binary_name(self) -> String {
         if cfg!(target_os = "windows") {
             format!("{}.dll", self)
         } else if cfg!(target_os = "macos") {
             format!("lib{}.dylib", self)
         } else {
             format!("lib{}.so", self)
-        }
-    }
-
-    /// The Pico shared libraries that this driver loads when it runs
-    ///
-    /// - Only ps4000 and ps6000 have one.
-    ///   They load `picoipp` by its name only, thus it must be in the same directory as them.
-    /// - The other drivers need no other Pico library.
-    pub fn dependencies(self) -> &'static [Driver] {
-        match self {
-            Driver::PS4000 | Driver::PS6000 => &[Driver::PicoIPP],
-            _ => &[],
         }
     }
 }
@@ -285,11 +321,6 @@ mod tests {
     #[test]
     fn display_from_str_round_trip() {
         for driver in enum_iterator::all::<Driver>() {
-            // `PicoIPP` is a dependency rather than a device driver, so it has no `FromStr` arm
-            if driver == Driver::PicoIPP {
-                continue;
-            }
-
             assert_eq!(
                 Driver::from_str(&driver.to_string()),
                 Ok(driver),

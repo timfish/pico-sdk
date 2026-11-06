@@ -2,7 +2,7 @@ use crate::LibraryResolution;
 use lazy_static::lazy_static;
 use libloading::{Error, Library};
 use parking_lot::Mutex;
-use pico_common::Driver;
+use pico_common::{Driver, PicoLibrary};
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -44,7 +44,7 @@ pub fn load_dependencies<P: AsRef<Path>>(driver: Driver, path: P) -> LoadedDepen
     output
 }
 
-fn load_dependency(path: &Path, dependency: Driver) -> Option<Arc<LoadedDependency>> {
+fn load_dependency(path: &Path, dependency: PicoLibrary) -> Option<Arc<LoadedDependency>> {
     let mut cache = DEPENDENCY_CACHE.lock();
 
     if let Some(loaded) = cache.get(path) {
@@ -53,8 +53,10 @@ fn load_dependency(path: &Path, dependency: Driver) -> Option<Arc<LoadedDependen
 
     let loaded = Arc::new(
         match dependency {
-            Driver::PicoIPP => load_ipp(path),
-            _ => panic!("This method should only be used to load dependencies"),
+            PicoLibrary::PicoIPP => load_ipp(path),
+            PicoLibrary::Driver(_) => {
+                panic!("This method should only be used to load dependencies")
+            }
         }
         .ok()?,
     );
