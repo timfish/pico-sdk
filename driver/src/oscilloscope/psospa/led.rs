@@ -68,6 +68,7 @@ pub(super) fn has_channel_leds(driver: &PSOSPADriver, handle: i16) -> bool {
 impl LedDriver for PSOSPADriver {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn set_led_colours(&self, handle: i16, colours: &[(PicoLed, LedColour)]) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, psospaSetLedColours)?;
         let Some(len) = led_list_len(colours, "set_led_colours")? else {
             return Ok(());
         };
@@ -81,6 +82,7 @@ impl LedDriver for PSOSPADriver {
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn set_led_states(&self, handle: i16, states: &[(PicoLed, LedState)]) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, psospaSetLedStates)?;
         let Some(len) = led_list_len(states, "set_led_states")? else {
             return Ok(());
         };
@@ -94,6 +96,7 @@ impl LedDriver for PSOSPADriver {
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn set_led_brightness(&self, handle: i16, brightness: u8) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, psospaSetLedBrightness)?;
         PicoStatus::from(unsafe { self.bindings.psospaSetLedBrightness(handle, brightness) })
             .to_result((), "set_led_brightness")
     }

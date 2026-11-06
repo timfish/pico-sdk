@@ -204,8 +204,8 @@ fn parse_usb_serials(details: &str) -> Vec<String> {
         .collect()
 }
 
-/// Checks that the library has each function that this wrapper calls
-fn required(b: &PLCM3Loader) -> Result<(), DriverLoadError> {
+/// Each function that the library must have to load, and whether it has it
+fn required(b: &PLCM3Loader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -234,7 +234,7 @@ impl PLCM3Driver {
     /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
         let bindings = crate::Kept::new(unsafe { PLCM3Loader::new(path.as_ref())? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         Ok(PLCM3Driver(Arc::new(PLCM3DriverInternal { bindings })))
     }
 

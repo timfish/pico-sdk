@@ -16,18 +16,21 @@ pub trait ChannelExtrasDriver {
     /// The channels whose overvoltage protection tripped
     ///
     /// - Only 50 Ω inputs have this protection.
+    /// - Returns Err with `NOT_USED` when the library lacks this function.
     fn overvoltage_tripped(&self, _handle: i16) -> PicoResult<Vec<PicoChannel>> {
         Err(PicoError::not_supported("overvoltage_tripped"))
     }
     /// Resets the overvoltage protection of all channels
     ///
     /// - Returns the channels that tripped again at once.
+    /// - Returns Err with `NOT_USED` when the library lacks this function.
     fn reset_overvoltage(&self, _handle: i16) -> PicoResult<Vec<PicoChannel>> {
         Err(PicoError::not_supported("reset_overvoltage"))
     }
     /// One information string of the accessory, such as a probe, on `channel`
     ///
     /// - `info` takes the same types as [`get_unit_info`](crate::oscilloscope::OscilloscopeDriverInternal::get_unit_info).
+    /// - Returns Err with `NOT_USED` when the library lacks this function.
     fn accessory_info(
         &self,
         _handle: i16,

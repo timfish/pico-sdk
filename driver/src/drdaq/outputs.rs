@@ -5,6 +5,7 @@
 //! Pico's `usbdrdaqCon` example give 0 to 65535 µs.
 
 use super::DrDAQDriverInternal;
+use crate::optional_function;
 use pico_common::{
     find_output, sig_gen_dc, OutputKind, OutputSpec, OutputValue, PicoError, PicoResult,
     PicoStatus, SigGenConfig, SigGenInfo, SigGenShape, SigGenShapeKind,
@@ -12,7 +13,8 @@ use pico_common::{
 use pico_sys_dynamic::drdaq::{
     enUsbDrDaqWave_USB_DRDAQ_DC, enUsbDrDaqWave_USB_DRDAQ_RAMP_DOWN,
     enUsbDrDaqWave_USB_DRDAQ_RAMP_UP, enUsbDrDaqWave_USB_DRDAQ_SINE,
-    enUsbDrDaqWave_USB_DRDAQ_SQUARE, enUsbDrDaqWave_USB_DRDAQ_TRIANGLE, USB_DRDAQ_WAVE,
+    enUsbDrDaqWave_USB_DRDAQ_SQUARE, enUsbDrDaqWave_USB_DRDAQ_TRIANGLE, DrDAQLoader,
+    USB_DRDAQ_WAVE,
 };
 
 /// Points an arbitrary waveform takes, from its `int16_t` size.
@@ -105,6 +107,19 @@ enum Call {
     StopSigGen,
     EnableRgb(bool),
     Rgb(u16, u16, u16),
+}
+
+/// Checks that the library has the function of `call`
+fn check_call(b: &DrDAQLoader, call: &Call) -> PicoResult<()> {
+    match call {
+        Call::Do { .. } => optional_function!(b, UsbDrDaqSetDO),
+        Call::Pwm { .. } => optional_function!(b, UsbDrDaqSetPWM),
+        Call::SigGenBuiltIn { .. } => optional_function!(b, UsbDrDaqSetSigGenBuiltIn),
+        Call::SigGenArbitrary { .. } => optional_function!(b, UsbDrDaqSetSigGenArbitrary),
+        Call::StopSigGen => optional_function!(b, UsbDrDaqStopSigGen),
+        Call::EnableRgb(_) => optional_function!(b, UsbDrDaqEnableRGBLED),
+        Call::Rgb(..) => optional_function!(b, UsbDrDaqSetRGBLED),
+    }
 }
 
 fn refuse(context: &str) -> PicoError {
@@ -227,6 +242,7 @@ impl DrDAQDriverInternal {
     /// - `id` is one of the outputs from [`outputs`](crate::drdaq::outputs()).
     /// - Returns the value that it set.
     /// - Returns Err when `id` is not an output, or `value` does not suit the output.
+    /// - Returns Err with `NOT_USED` when the library lacks a function of the output, before it makes a call.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     pub fn set_output(
         &self,
@@ -235,6 +251,9 @@ impl DrDAQDriverInternal {
         value: &OutputValue,
     ) -> PicoResult<OutputValue> {
         let (calls, set) = calls(id, value)?;
+        for call in &calls {
+            check_call(&self.bindings, call)?;
+        }
         for call in calls {
             let status = unsafe {
                 match call {
@@ -283,6 +302,32 @@ impl DrDAQDriverInternal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn outputs_fail_at_the_call_not_the_load() {
+        use crate::tests::{lacks, not_required, NO_FUNCTIONS};
+        let bindings = unsafe { DrDAQLoader::new(NO_FUNCTIONS) }.unwrap();
+        not_required(
+            &super::super::required(&bindings),
+            &[
+                "UsbDrDaqSetDO",
+                "UsbDrDaqSetPWM",
+                "UsbDrDaqSetSigGenBuiltIn",
+                "UsbDrDaqSetSigGenArbitrary",
+                "UsbDrDaqStopSigGen",
+                "UsbDrDaqEnableRGBLED",
+                "UsbDrDaqSetRGBLED",
+            ],
+        );
+        let driver = DrDAQDriverInternal {
+            bindings: crate::Kept::new(bindings),
+        };
+        let set = |id, value| driver.set_output(1, id, &value);
+        lacks(set("gpio1", OutputValue::On), "UsbDrDaqSetDO");
+        lacks(set("led", OutputValue::On), "UsbDrDaqEnableRGBLED");
+        lacks(set("awg", OutputValue::SigGen(None)), "UsbDrDaqStopSigGen");
+    }
 
     #[test]
     fn gpio_numbers_are_the_header_codes() {

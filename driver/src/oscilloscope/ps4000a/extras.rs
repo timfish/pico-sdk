@@ -27,6 +27,7 @@ impl ChannelExtrasDriver for PS4000ADriver {
         channel: PicoChannel,
         info: PicoInfo,
     ) -> PicoResult<String> {
+        crate::optional_function!(self.bindings, ps4000aGetAccessoryInfo)?;
         accessory_string("accessory_info", |buffer, len, required| unsafe {
             self.bindings.ps4000aGetAccessoryInfo(
                 handle,

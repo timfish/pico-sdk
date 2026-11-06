@@ -54,6 +54,7 @@ impl ChannelExtrasDriver for PS6000ADriver {
     // ps6000apg-9 §3.39; not the 6428E-D.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn overvoltage_tripped(&self, handle: i16) -> PicoResult<Vec<PicoChannel>> {
+        crate::optional_function!(self.bindings, ps6000aReportAllChannelsOvervoltageTripStatus)?;
         self.overvoltage_flags(handle, "overvoltage_tripped", |flags, n| unsafe {
             self.bindings
                 .ps6000aReportAllChannelsOvervoltageTripStatus(handle, flags, n)
@@ -63,6 +64,10 @@ impl ChannelExtrasDriver for PS6000ADriver {
     // ps6000apg-9 §3.38.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn reset_overvoltage(&self, handle: i16) -> PicoResult<Vec<PicoChannel>> {
+        crate::optional_function!(
+            self.bindings,
+            ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus
+        )?;
         self.overvoltage_flags(handle, "reset_overvoltage", |flags, n| unsafe {
             self.bindings
                 .ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus(handle, flags, n)
@@ -77,6 +82,7 @@ impl ChannelExtrasDriver for PS6000ADriver {
         channel: PicoChannel,
         info: PicoInfo,
     ) -> PicoResult<String> {
+        crate::optional_function!(self.bindings, ps6000aGetAccessoryInfo)?;
         accessory_string("accessory_info", |buffer, len, required| unsafe {
             self.bindings.ps6000aGetAccessoryInfo(
                 handle,

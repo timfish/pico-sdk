@@ -39,9 +39,10 @@ impl LegacyCalls for PS4000ADriver {
         Ok(of(caps.arbitrary))
     }
 
-    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoStatus {
+    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps4000aSetSigGenBuiltInV2)?;
         let c = &args.common;
-        PicoStatus::from(unsafe {
+        Ok(PicoStatus::from(unsafe {
             self.bindings.ps4000aSetSigGenBuiltInV2(
                 handle,
                 c.offset_uv,
@@ -59,12 +60,18 @@ impl LegacyCalls for PS4000ADriver {
                 c.trigger_source,
                 0,
             )
-        })
+        }))
     }
 
-    fn arbitrary(&self, handle: i16, args: &Arbitrary, samples: &mut [i16]) -> PicoStatus {
+    fn arbitrary(
+        &self,
+        handle: i16,
+        args: &Arbitrary,
+        samples: &mut [i16],
+    ) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps4000aSetSigGenArbitraryV2)?;
         let c = &args.common;
-        PicoStatus::from(unsafe {
+        Ok(PicoStatus::from(unsafe {
             self.bindings.ps4000aSetSigGenArbitraryV2(
                 handle,
                 c.offset_uv,
@@ -84,10 +91,11 @@ impl LegacyCalls for PS4000ADriver {
                 c.trigger_source,
                 0,
             )
-        })
+        }))
     }
 
     fn frequency_to_phase(&self, handle: i16, hz: f64, len: u32) -> PicoResult<u64> {
+        crate::optional_function!(self.bindings, ps4000aSigGenFrequencyToPhaseV2)?;
         let mut phase = 0u64;
         PicoStatus::from(unsafe {
             self.bindings
@@ -97,6 +105,7 @@ impl LegacyCalls for PS4000ADriver {
     }
 
     fn awg_limits(&self, handle: i16) -> PicoResult<AwgLimits> {
+        crate::optional_function!(self.bindings, ps4000aSigGenArbitraryMinMaxValues)?;
         let (mut min_value, mut max_value, mut min_len, mut max_len) = (0, 0, 0, 0);
         PicoStatus::from(unsafe {
             self.bindings.ps4000aSigGenArbitraryMinMaxValues(
@@ -118,11 +127,12 @@ impl LegacyCalls for PS4000ADriver {
         )
     }
 
-    fn software_control(&self, handle: i16, state: bool) -> PicoStatus {
-        PicoStatus::from(unsafe {
+    fn software_control(&self, handle: i16, state: bool) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps4000aSigGenSoftwareControl)?;
+        Ok(PicoStatus::from(unsafe {
             self.bindings
                 .ps4000aSigGenSoftwareControl(handle, i16::from(state))
-        })
+        }))
     }
 }
 
@@ -131,6 +141,40 @@ legacy_sig_gen_driver!(PS4000ADriver);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn a_missing_function_fails_the_call() {
+        use crate::oscilloscope::ChannelExtrasDriver;
+        use crate::tests::{lacks, not_required, NO_FUNCTIONS};
+        use pico_common::{PicoChannel, PicoInfo};
+        use pico_sys_dynamic::ps4000a::PS4000ALoader;
+
+        let bindings = unsafe { PS4000ALoader::new(NO_FUNCTIONS) }.unwrap();
+        not_required(
+            &super::super::required(&bindings),
+            &["ps4000aGetAccessoryInfo"],
+        );
+        let driver = PS4000ADriver {
+            _dependencies: Vec::new(),
+            bindings: crate::Kept::new(bindings),
+            power: Default::default(),
+        };
+        lacks(
+            driver.accessory_info(1, PicoChannel::A, PicoInfo::VARIANT_INFO),
+            "ps4000aGetAccessoryInfo",
+        );
+        crate::oscilloscope::siggen::legacy::tests::lacks_each(
+            &driver,
+            &[
+                "ps4000aSetSigGenBuiltInV2",
+                "ps4000aSetSigGenArbitraryV2",
+                "ps4000aSigGenFrequencyToPhaseV2",
+                "ps4000aSigGenArbitraryMinMaxValues",
+                "ps4000aSigGenSoftwareControl",
+            ],
+        );
+    }
 
     #[test]
     fn limits_come_from_the_header() {

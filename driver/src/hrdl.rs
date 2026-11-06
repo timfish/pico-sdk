@@ -380,10 +380,10 @@ fn open_error_status(code: i32) -> PicoStatus {
     }
 }
 
-/// Checks that the library has each function that this wrapper calls
+/// Each function that the library must have to load, and whether it has it
 ///
-/// - Leaves out `HRDLSetDigitalIOChannel`, as only an ADC-24 has the pins that it sets.
-fn required(b: &HRDLLoader) -> Result<(), DriverLoadError> {
+/// - Leaves out `HRDLSetDigitalIOChannel`, as only an ADC-24 has the pins that it sets, and `set_output` checks it first.
+fn required(b: &HRDLLoader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -417,7 +417,7 @@ impl HRDLDriver {
     /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
         let bindings = crate::Kept::new(unsafe { HRDLLoader::new(path.as_ref())? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         Ok(HRDLDriver(Arc::new(HRDLDriverInternal {
             bindings,
             digital_io: Mutex::new(HashMap::new()),

@@ -56,18 +56,17 @@ fn variant_resolutions(variant: &str) -> &'static [PicoResolution] {
     }
 }
 
-/// Checks that the library has each function that this wrapper calls
+/// Each function that the library must have to load, and whether it has it
 ///
 /// - Leaves out `ps6000aGetMinimumTimebaseStateless` and `ps6000aSetTriggerHoldoffCounterBySamples`, as the wrapper checks them before each call.
-fn required(b: &PS6000ALoader) -> Result<(), DriverLoadError> {
+/// - Leaves out the functions of the accessory info, AUX I/O and overvoltage calls, and the signal generator limits, pause and restart, as each of these calls checks its function first.
+fn required(b: &PS6000ALoader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
             ps6000aOpenUnit,
             ps6000aGetUnitInfo,
-            ps6000aGetAccessoryInfo,
             ps6000aCloseUnit,
-            ps6000aSetAuxIoMode,
             ps6000aMemorySegments,
             ps6000aSetChannelOn,
             ps6000aSetChannelOff,
@@ -83,10 +82,6 @@ fn required(b: &PS6000ALoader) -> Result<(), DriverLoadError> {
             ps6000aSigGenFrequencySweep,
             ps6000aSigGenSoftwareTriggerControl,
             ps6000aSigGenApply,
-            ps6000aSigGenLimits,
-            ps6000aSigGenFrequencyLimits,
-            ps6000aSigGenPause,
-            ps6000aSigGenRestart,
             ps6000aSetSimpleTrigger,
             ps6000aSetTriggerChannelProperties,
             ps6000aSetTriggerChannelConditions,
@@ -118,8 +113,6 @@ fn required(b: &PS6000ALoader) -> Result<(), DriverLoadError> {
             ps6000aSetDeviceResolution,
             ps6000aGetDeviceResolution,
             ps6000aGetAdcLimits,
-            ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus,
-            ps6000aReportAllChannelsOvervoltageTripStatus,
         ]
     )
 }
@@ -155,7 +148,7 @@ impl PS6000ADriver {
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS6000ALoader::new(path)? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         Ok(PS6000ADriver {
             bindings,
             _dependencies: dependencies,
@@ -456,5 +449,58 @@ mod tests {
         );
         assert!(check_channel_limit(&limits, PicoResolution::DR_10BIT, 4).is_ok());
         assert!(check_channel_limit(&limits, PicoResolution::DR_8BIT, 8).is_ok());
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn on_demand_functions_fail_at_the_call_not_the_load() {
+        use crate::oscilloscope::{
+            siggen::properties::PropertyCalls, AuxIoDriver, ChannelExtrasDriver, SigGenDriver,
+        };
+        use crate::tests::{lacks, not_required, NO_FUNCTIONS};
+        use pico_common::AuxIoMode;
+
+        let bindings = unsafe { PS6000ALoader::new(NO_FUNCTIONS) }.unwrap();
+        not_required(
+            &required(&bindings),
+            &[
+                "ps6000aGetAccessoryInfo",
+                "ps6000aSetAuxIoMode",
+                "ps6000aSigGenLimits",
+                "ps6000aSigGenFrequencyLimits",
+                "ps6000aSigGenPause",
+                "ps6000aSigGenRestart",
+                "ps6000aReportAllChannelsOvervoltageTripStatus",
+                "ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus",
+            ],
+        );
+
+        let d = PS6000ADriver {
+            _dependencies: Vec::new(),
+            bindings: crate::Kept::new(bindings),
+            streams: Default::default(),
+            ports: Default::default(),
+        };
+        let info = PicoInfo::VARIANT_INFO;
+        lacks(
+            d.accessory_info(1, PicoChannel::A, info),
+            "ps6000aGetAccessoryInfo",
+        );
+        lacks(
+            d.set_aux_io_mode(1, AuxIoMode::Input),
+            "ps6000aSetAuxIoMode",
+        );
+        lacks(d.sig_gen_info(1), "ps6000aSigGenLimits");
+        lacks(d.frequency_limits(1, 0, 0), "ps6000aSigGenFrequencyLimits");
+        lacks(d.sig_gen_pause(1), "ps6000aSigGenPause");
+        lacks(d.sig_gen_restart(1), "ps6000aSigGenRestart");
+        lacks(
+            d.overvoltage_tripped(1),
+            "ps6000aReportAllChannelsOvervoltageTripStatus",
+        );
+        lacks(
+            d.reset_overvoltage(1),
+            "ps6000aResetChannelsAndReportAllChannelsOvervoltageTripStatus",
+        );
     }
 }

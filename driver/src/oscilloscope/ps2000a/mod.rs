@@ -27,10 +27,10 @@ use pico_sys_dynamic::ps2000a::{
     PS2000ALoader,
 };
 
-/// Checks that the library has each function that this wrapper calls
+/// Each function that the library must have to load, and whether it has it
 ///
-/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
-fn required(b: &PS2000ALoader) -> Result<(), DriverLoadError> {
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator, and each checks its function first.
+fn required(b: &PS2000ALoader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -107,7 +107,7 @@ impl PS2000ADriver {
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS2000ALoader::new(path)? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps2000aApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS2000ADriver {

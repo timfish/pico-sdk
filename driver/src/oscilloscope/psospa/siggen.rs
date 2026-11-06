@@ -59,6 +59,7 @@ impl PropertyCalls for PSOSPADriver {
     }
 
     fn limits(&self, handle: i16, param: u32) -> PicoResult<(f64, f64, f64)> {
+        crate::optional_function!(self.bindings, psospaSigGenLimits)?;
         let (mut least, mut most, mut step) = (0.0, 0.0, 0.0);
         PicoStatus::from(unsafe {
             self.bindings
@@ -113,6 +114,7 @@ impl PropertyCalls for PSOSPADriver {
 
     // §3.63: an arbitrary waveform needs its length; other shapes none.
     fn frequency_limits(&self, handle: i16, wave: u32, samples: u64) -> PicoResult<(f64, f64)> {
+        crate::optional_function!(self.bindings, psospaSigGenFrequencyLimits)?;
         let mut samples = samples;
         let samples_ptr = if samples == 0 {
             std::ptr::null_mut()
@@ -160,11 +162,13 @@ impl SigGenDriver for PSOSPADriver {
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn sig_gen_pause(&self, handle: i16) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, psospaSigGenPause)?;
         self.pause(handle).to_result((), "sig_gen_pause")
     }
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn sig_gen_restart(&self, handle: i16) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, psospaSigGenRestart)?;
         self.restart(handle).to_result((), "sig_gen_restart")
     }
 }

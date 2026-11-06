@@ -259,8 +259,8 @@ impl TC08DriverInternal {
     }
 }
 
-/// Checks that the library has each function that this wrapper calls
-fn required(b: &TC08Loader) -> Result<(), DriverLoadError> {
+/// Each function that the library must have to load, and whether it has it
+fn required(b: &TC08Loader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -292,7 +292,7 @@ impl TC08Driver {
     /// - Returns Err when the library does not load, or lacks a function that this wrapper calls.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DriverLoadError> {
         let bindings = crate::Kept::new(unsafe { TC08Loader::new(path.as_ref())? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         Ok(TC08Driver(Arc::new(TC08DriverInternal { bindings })))
     }
 
