@@ -3,154 +3,197 @@
 [![Crates.io](https://img.shields.io/crates/v/pico-sdk)](https://crates.io/crates/pico-sdk)
 [![docs.rs](https://docs.rs/pico-sdk/badge.svg)](https://docs.rs/pico-sdk/)
 
-## Unofficial Rust bindings and wrappers for Pico Technology oscilloscope drivers
+<!-- cargo-rdme start -->
 
-This is a meta-crate re-exporting functionality from a number of sub-crates. These
-crates expose common, high-performance, high-level APIs that hide the differences between the
-numerous Pico drivers.
+Talks to Pico Technology oscilloscopes and data loggers from Rust.
 
-### Sub Crates
+This crate gathers the pico-sdk crates in one place.
+It finds the attached devices, loads only the drivers they need, and downloads a missing driver.
+It opens a device of any family, takes block captures from a scope, and streams samples with no gaps from scopes and data loggers.
+The API is the same for each Pico driver, and the crate finds the channels and ranges of each device for you.
+The [`prelude`](https://docs.rs/pico-sdk/latest/pico_sdk/prelude/) holds the types that most programs need.
 
- - ### `pico-common` [![Crates.io](https://img.shields.io/crates/v/pico-common)](https://crates.io/crates/pico-common)
-    Common enums, structs and traits.
- - ### `pico-sys-dynamic` [![Crates.io](https://img.shields.io/crates/v/pico-sys-dynamic)](https://crates.io/crates/pico-sys-dynamic)
-    Dynamically loaded unsafe bindings for every Pico oscilloscope driver. **This crate contains unsafe code.**
- - ### `pico-driver` [![Crates.io](https://img.shields.io/crates/v/pico-driver)](https://crates.io/crates/pico-driver)
-    Common, safe wrappers implementing the `PicoDriver` trait. **This crate contains unsafe code.**
- - ### `pico-download` [![Crates.io](https://img.shields.io/crates/v/pico-download)](https://crates.io/crates/pico-download)
-    Download missing drivers on any platform.
- - ### `pico-device` [![Crates.io](https://img.shields.io/crates/v/pico-device)](https://crates.io/crates/pico-device)
-    Device abstraction over `PicoDriver` trait. Detects available channels and valid ranges.
- - ### `pico-enumeration` [![Crates.io](https://img.shields.io/crates/v/pico-enumeration)](https://crates.io/crates/pico-enumeration)
-    Cross driver device enumeration. Detects devices via USB Vendor ID and only loads the required drivers.
- - ### `pico-streaming` [![Crates.io](https://img.shields.io/crates/v/pico-streaming)](https://crates.io/crates/pico-streaming)
-    Implements continuous gap-less streaming on top of `PicoDevice`.
+## Quick start
 
-## Prerequisites
-None. `pico-enumeration` lists USB devices with [`nusb`](https://crates.io/crates/nusb), which needs no system
-library (on Linux it reads sysfs, so `libudev-dev` is not needed).
+List the attached devices, and download the drivers that are missing:
 
-## USB link
-Each device that enumeration returns carries its USB link, `PicoDevice::usb()` (or the `usb` field of a family's device):
-the speed the host negotiated (`UsbSpeed`: Low, Full, High, Super, SuperPlus) and the USB version the device declares.
-A USB 3 scope on a USB 2 port shows `usb_version` 3.0 with speed `High`, so an application can show the link and warn about it.
-
-```no_run
-use pico_sdk::prelude::*;
-
-for device in DeviceEnumerator::new().enumerate().into_iter().flatten() {
-    match device.usb() {
-        Some(link) => println!("{}: {}", device.get_serial(), link),
-        None => println!("{}: USB link unknown", device.get_serial()),
-    }
-}
-```
-
-The enumerator matches each unit to a USB device by serial: some models list a USB serial-number string equal to the driver's serial (a PicoScope 5464E lists `13474/0004`), others list none (a PicoScope 2208A).
-A USB TC-08 lists none either, and its descriptor changes when its driver opens it: `bcdUSB` 0x0200 and no strings before, 0x0100 with a product and maker string after, so `usb_version` depends on whether the driver has opened the unit.
-A unit with no match takes the link of the driver's USB devices that have no serial string, when all of them share one link; else the link is `None` (two 2000 series scopes at different speeds both get `None`).
-A unit opened by serial without enumeration has `None`; `DeviceEnumerator::usb_link(driver, serial)` looks it up without loading a driver.
-It returns a `MatchedUsbLink`: the `link` and `by`, a `UsbMatch` that says how it matched (`Serial` or `NoSerialDevices`), so an application can log it.
-The speed is `None` where the operating system does not report it.
-
-`EnumerationError` and its variants are `#[non_exhaustive]`, so new fields do not break callers: match a variant with `..`, and build one with its constructor (`EnumerationError::driver_error(driver, error)`, `kernel_driver_error`, `driver_load_error`, `version_error`), adding a link with `with_usb(link)`.
-
-## Tests
-Some tests open and stream from devices and these fail if devices are not available, for example when run in CI.
-To run these tests, ensure that ignored tests are run too:
-
-`cargo test -- --ignored`
-
-## Examples
-
-There are a number of examples which demonstrate how the wrappers can be used
-
-`cargo run --example streaming_cli`
-
-Displays an interactive command line interface that allows selection of device, channel configuration
-and sample rate. Once capturing, the streaming rate is displayed along with channel values.
-
-`cargo run --example enumerate`
-
-Attempts to enumerate devices and downloads drivers which were not found in the cache location.
-
-`cargo run --example open <driver> <serial>`
-
-Loads the specified driver and attempts open the optionally specified device serial.
-
-
-## Usage Examples
-Opening and configuring a specific ps2000 device as a `PicoDevice`:
-```rust
-use std::sync::Arc;
-use pico_sdk::prelude::*;
-
-let driver = Driver::PS2000.try_load()?;
-let device = PicoDevice::try_open(&driver, Some("ABC/123"))?;
-```
-
-Enumerate all required Pico oscilloscope drivers, configure the first device that's returned and stream
-gap-less data from it:
-```rust
-use std::sync::Arc;
-use pico_sdk::prelude::*;
-
-let enumerator = DeviceEnumerator::new();
-// Enumerate, ignore all failures and get the first device
-let enum_device = enumerator
-                .enumerate()
-                .into_iter()
-                .flatten()
-                .next()
-                .expect("No device found");
-
-let device = enum_device.open()?;
-
-// Get a streaming device
-let stream_device = device.into_streaming_device();
-
-// Enable and configure 2 channels
-stream_device.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
-stream_device.enable_channel(PicoChannel::B, PicoRange::X1_PROBE_1V, PicoCoupling::AC);
-
-struct StdoutHandler;
-
-impl NewDataHandler for StdoutHandler {
-    fn handle_event(&self, event: &StreamingEvent) {
-        println!("Sample count: {}", event.length);
-    }
-}
-
-// When handler goes out of scope, the subscription is dropped
-let handler = Arc::new(StdoutHandler);
-
-// Subscribe to streaming events
-stream_device.new_data.subscribe(handler.clone());
-
-// Start streaming with 1k sample rate
-stream_device.start(1_000)?;
-```
-
-Enumerate all required Pico oscilloscope drivers. If a device is found but no matching
-driver is available, attempt to download missing drivers and try enumerating again:
 ```rust
 use pico_sdk::prelude::*;
 
 let enumerator = DeviceEnumerator::with_resolution(cache_resolution());
 
-loop {
-    let results = enumerator.enumerate();
+let mut results = enumerator.enumerate();
+let missing = results.missing_drivers();
+if !missing.is_empty() {
+    download_drivers_to_cache(&missing)?;
+    results = enumerator.enumerate();
+}
 
-    println!("{:#?}", results);
-
-    let missing_drivers = results.missing_drivers();
-
-    if !missing_drivers.is_empty() {
-        download_drivers_to_cache(&missing_drivers)?;
-    } else {
-        break;
-    }
+let (devices, errors) = results.devices_and_errors();
+for device in &devices {
+    let model = device.get_variant().unwrap_or("data logger");
+    println!("{model} {}", device.get_serial());
+}
+for error in &errors {
+    println!("error: {error}");
 }
 ```
+
+## How the parts fit
+
+```text
+ pico_download        downloads the driver libraries to a cache
+        │
+        ▼
+ pico_sys_dynamic     unsafe bindings, loaded from a path when the program runs
+        │
+        ▼
+ pico_driver          safe calls, the same for each driver of a family
+        │
+        ▼
+ pico_enumeration ──► pico_device        finds the devices, then opens one
+                           │
+                           ▼
+                      pico_streaming     streams samples, or takes block captures
+
+ pico_common          the shared types, used by all the crates above
+```
+
+## Crates
+
+Each module of this crate re-exports one crate.
+
+- [`common`](https://docs.rs/pico-sdk/latest/pico_sdk/common/) ([`pico_common`](https://docs.rs/pico_common/latest/pico_common/)): drivers, channels, ranges, settings, status codes and errors.
+- [`sys`](https://docs.rs/pico-sdk/latest/pico_sdk/sys/) ([`pico_sys_dynamic`](https://docs.rs/pico_sys_dynamic/latest/pico_sys_dynamic/)): unsafe bindings to each Pico C driver library.
+- [`driver`](https://docs.rs/pico-sdk/latest/pico_sdk/driver/) ([`pico_driver`](https://docs.rs/pico_driver/latest/pico_driver/)): loads a driver library, and wraps its calls in a safe API.
+- [`download`](https://docs.rs/pico-sdk/latest/pico_sdk/download/) ([`pico_download`](https://docs.rs/pico_download/latest/pico_download/)): downloads the drivers for this platform to a cache.
+- [`device`](https://docs.rs/pico-sdk/latest/pico_sdk/device/) ([`pico_device`](https://docs.rs/pico_device/latest/pico_device/)): opens a device, and reads its channels, ranges and capabilities.
+- [`enumeration`](https://docs.rs/pico-sdk/latest/pico_sdk/enumeration/) ([`pico_enumeration`](https://docs.rs/pico_enumeration/latest/pico_enumeration/)): finds the attached devices of all families, with their USB links.
+- [`streaming`](https://docs.rs/pico-sdk/latest/pico_sdk/streaming/) ([`pico_streaming`](https://docs.rs/pico_streaming/latest/pico_streaming/)): streams with no gaps on a background thread, and takes block captures.
+
+`pico_sys_dynamic` and `pico_driver` contain unsafe code.
+The other crates forbid it.
+
+## Examples
+
+### Open a scope and take a block
+
+```rust
+use pico_sdk::prelude::*;
+use std::time::Duration;
+
+let mut scope = DeviceEnumerator::new()
+    .enumerate_oscilloscopes()
+    .into_iter()
+    .flatten()
+    .next()
+    .expect("no scope found");
+
+// The enumerator returns a closed scope.
+scope.ensure_open()?;
+
+let mut config = OscilloscopeConfig::default();
+config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+
+// 10 000 samples at 1 MS/s, with no trigger
+let settings = BlockSettings::new(1e6, 10_000);
+let mut block = BlockRunner::new(scope, &config, settings)?;
+let capture = block.capture(Duration::from_secs(1))?;
+
+let data = block.read(0, 0, capture.samples, None)?;
+for (channel, values) in &data.channels {
+    println!("{channel}: {} samples", values.values.len());
+}
+```
+
+### Stream from a scope and print the samples
+
+```rust
+use pico_sdk::prelude::*;
+use std::{sync::Arc, thread, time::Duration};
+
+struct Printer;
+
+impl EventHandler<OscilloscopeStreamEvent> for Printer {
+    fn new_data(&self, event: Arc<OscilloscopeStreamEvent>) {
+        for (channel, block) in &event.channels {
+            let volts = block.scale_samples();
+            println!("{channel}: {} samples, first {:?} V", event.length, volts.first());
+        }
+    }
+}
+
+let mut scope = DeviceEnumerator::new()
+    .enumerate_oscilloscopes()
+    .into_iter()
+    .flatten()
+    .next()
+    .expect("no scope found");
+scope.ensure_open()?;
+let stream = scope.into_streaming_device();
+
+// The runner keeps a weak reference, so keep `printer` while you stream.
+let printer: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = Arc::new(Printer);
+stream.events.subscribe(&printer);
+
+let mut config = OscilloscopeConfig::default();
+config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+config.set_sample_rate(1_000);
+stream.start(config)?;
+
+thread::sleep(Duration::from_secs(5));
+stream.stop();
+```
+
+### Read a TC-08
+
+```rust
+use pico_sdk::prelude::*;
+use std::{sync::Arc, thread, time::Duration};
+
+struct Printer;
+
+impl EventHandler<TC08StreamingEvent> for Printer {
+    fn new_data(&self, event: Arc<TC08StreamingEvent>) {
+        println!("{event:?}");
+    }
+}
+
+let driver = Driver::TC08.load(&cache_resolution())?;
+let PicoDevice::TC08(tc08) = driver.open_device(None)? else {
+    unreachable!("the TC-08 driver opens only TC-08 devices");
+};
+let stream = tc08.into_streaming_device();
+
+let printer: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(Printer);
+stream.events.subscribe(&printer);
+
+let mut config = TC08Config { interval_ms: 1_000, ..Default::default() };
+config.enable_channel(TC08Channel::CHANNEL_1, TCType::K);
+stream.start(config)?;
+
+thread::sleep(Duration::from_secs(10));
+stream.stop();
+```
+
+More examples are in the `examples` directory of the repository.
+For example, `cargo run --example streaming_cli` streams from a device that you pick, and `cargo run --example tc08` logs a TC-08.
+
+## Prerequisites
+
+The crates need no system library to build.
+The Pico driver libraries load when the program runs, from a path that [`LibraryResolution`](https://docs.rs/pico_driver/latest/pico_driver/resolution/enum.LibraryResolution.html) gives.
+[`pico_download`](https://docs.rs/pico_download/latest/pico_download/) can fetch them for you.
+
+## Tests
+
+The tests that need a device or a download are `#[ignore]`.
+Run them with `cargo test -- --ignored`.
+
+## Cargo features
+
+- `serde`: turns on the `serde` feature of [`pico_common`](https://docs.rs/pico_common/latest/pico_common/), [`pico_device`](https://docs.rs/pico_device/latest/pico_device/), [`pico_driver`](https://docs.rs/pico_driver/latest/pico_driver/), [`pico_enumeration`](https://docs.rs/pico_enumeration/latest/pico_enumeration/) and [`pico_streaming`](https://docs.rs/pico_streaming/latest/pico_streaming/).
+
+<!-- cargo-rdme end -->
 
 License: MIT

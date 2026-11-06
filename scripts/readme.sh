@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Writes the README.md of each crate from the `//!` docs in its lib.rs.
+# The root README.md comes from the docs of the pico-sdk crate.
 # Only READMEs with cargo-rdme markers change.
 # With --check, it changes nothing and fails when a README is out of date.
 set -euo pipefail
@@ -16,3 +17,6 @@ for readme in */README.md; do
   echo "$readme"
   (cd "$(dirname "$readme")" && cargo rdme $args)
 done
+
+echo README.md
+(cd sdk && cargo rdme $args --readme-path ../README.md)
