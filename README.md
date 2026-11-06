@@ -159,10 +159,7 @@ impl EventHandler<TC08StreamingEvent> for Printer {
     }
 }
 
-let driver = Driver::TC08.load(&cache_resolution())?;
-let PicoDevice::TC08(tc08) = driver.open_device(None)? else {
-    unreachable!("the TC-08 driver opens only TC-08 devices");
-};
+let tc08 = TC08Driver::load(&cache_resolution())?.open_device(None)?;
 let stream = tc08.into_streaming_device();
 
 let printer: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(Printer);

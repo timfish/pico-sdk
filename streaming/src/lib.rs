@@ -14,9 +14,9 @@
 //! # Quick start
 //!
 //! ```no_run
-//! use pico_common::{Driver, PicoChannel, PicoCoupling, PicoRange};
+//! use pico_common::{PicoChannel, PicoCoupling, PicoRange, ScopeDriver};
 //! use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
-//! use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+//! use pico_driver::{oscilloscope::OscilloscopeDriver, LibraryResolution};
 //! use pico_streaming::{EventHandler, IntoStreamingDevice, OscilloscopeStreamEvent};
 //! use std::{sync::Arc, thread, time::Duration};
 //!
@@ -32,10 +32,7 @@
 //! }
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let PicoDriver::Oscilloscope(driver) = Driver::PS2000A.load(&LibraryResolution::Default)?
-//!     else {
-//!         unreachable!("PS2000A is an oscilloscope driver");
-//!     };
+//!     let driver = OscilloscopeDriver::load(ScopeDriver::PS2000A, &LibraryResolution::Default)?;
 //!     let scope = driver.open_device(None)?.into_streaming_device();
 //!
 //!     // The runner keeps a weak reference, so keep `printer` while you stream.

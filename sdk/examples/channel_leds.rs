@@ -51,13 +51,8 @@ fn main() {
     let serial = env::args().nth(1).unwrap_or_else(|| "13474/0004".into());
 
     // Only the psospa driver, so no other scope is touched.
-    let driver = match Driver::PSOSPA
-        .load(&cache_resolution())
-        .expect("load psospa")
-    {
-        PicoDriver::Oscilloscope(driver) => driver,
-        _ => unreachable!("psospa is a scope driver"),
-    };
+    let driver =
+        OscilloscopeDriver::load(ScopeDriver::PSOSPA, &cache_resolution()).expect("load psospa");
     let device = driver.open_device(Some(&serial)).expect("open");
     let info = device.info.clone().expect("open device has info");
     println!(
