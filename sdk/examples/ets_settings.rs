@@ -25,10 +25,10 @@ fn main() {
     let family = env::args().nth(1).unwrap_or_else(|| "ps2000a".into());
     let serial = env::args().nth(2).unwrap_or_else(|| "CW356/055".into());
     let family = Driver::from_str(&family).expect("a driver name such as ps2000a");
-    let driver = match family.load(&cache_resolution()).expect("load the driver") {
-        PicoDriver::Oscilloscope(driver) => driver,
-        _ => panic!("{family:?} is not a scope driver"),
-    };
+    let family = family
+        .as_scope()
+        .unwrap_or_else(|| panic!("{family} is not a scope driver"));
+    let driver = OscilloscopeDriver::load(family, &cache_resolution()).expect("load the driver");
     let device = driver.open_device(Some(&serial)).expect("open");
     let info = device.info.clone().expect("open device has info");
     let handle = *info.handle;

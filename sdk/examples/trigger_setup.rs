@@ -207,18 +207,17 @@ fn main() {
     // A `--` copied from the cargo command line is not an argument.
     let mut args = env::args().skip(1).filter(|a| a != "--");
     let name = args.next().unwrap_or_else(|| "psospa".into());
-    let driver_type = Driver::from_str(&name).unwrap_or_else(|_| {
-        eprintln!("{name:?} is not a driver type; give one such as 2000a or psospa");
-        std::process::exit(2)
-    });
+    let driver_type = Driver::from_str(&name)
+        .ok()
+        .and_then(Driver::as_scope)
+        .unwrap_or_else(|| {
+            eprintln!("{name:?} is not a scope driver type; give one such as 2000a or psospa");
+            std::process::exit(2)
+        });
     let serial = args.next();
 
-    let PicoDriver::Oscilloscope(driver) = driver_type
-        .load(&cache_resolution())
-        .unwrap_or_else(|e| panic!("could not load the {driver_type} driver: {e}"))
-    else {
-        panic!("{driver_type} is not a scope driver");
-    };
+    let driver = OscilloscopeDriver::load(driver_type, &cache_resolution())
+        .unwrap_or_else(|e| panic!("could not load the {driver_type} driver: {e}"));
     let device = driver
         .open_device(serial.as_deref())
         .unwrap_or_else(|e| panic!("could not open a {driver_type} unit: {e}"));

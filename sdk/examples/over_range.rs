@@ -117,14 +117,13 @@ fn main() {
     let mut args = env::args().skip(1).filter(|a| !a.starts_with("--"));
     let driver_type = Driver::from_str(&args.next().expect("driver type, such as ps2000a"))
         .expect("a driver type such as ps2000a or psospa");
+    let driver_type = driver_type
+        .as_scope()
+        .unwrap_or_else(|| panic!("{driver_type} is not a scope driver"));
     let serial = args.next();
 
-    let PicoDriver::Oscilloscope(driver) = driver_type
-        .load(&cache_resolution())
-        .unwrap_or_else(|e| panic!("could not load the {driver_type} driver: {e}"))
-    else {
-        panic!("{driver_type} is not a scope driver");
-    };
+    let driver = OscilloscopeDriver::load(driver_type, &cache_resolution())
+        .unwrap_or_else(|e| panic!("could not load the {driver_type} driver: {e}"));
     let device = driver.open_device(serial.as_deref()).expect("open");
     let info = device.info.clone().expect("an open device has info");
     println!("scope {} {}", device.variant, device.serial);

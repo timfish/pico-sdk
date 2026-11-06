@@ -32,12 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Could not download the TC-08 driver ({error}), trying the installed one");
     }
 
-    let driver = Driver::TC08.load(&cache_resolution())?;
-
-    let device = match driver.open_device(None)? {
-        PicoDevice::TC08(device) => device,
-        other => unreachable!("the TC-08 driver returned {:?}", other.get_serial()),
-    };
+    let device = TC08Driver::load(&cache_resolution())?.open_device(None)?;
 
     println!("Opened TC-08 {}", device.serial);
 
