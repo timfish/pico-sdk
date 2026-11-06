@@ -2,159 +2,305 @@ use enum_iterator::Sequence;
 use num_derive::*;
 use std::fmt;
 
-/// Pico channel ranges
+/// The input range of an oscilloscope channel
+///
+/// - The value of each variant is the range value of the driver.
+/// - The `X1_PROBE` ranges are for a ×1 probe and the `X10_PROBE` ranges are for a ×10 probe.
+///   The other ranges are for PicoConnect and BNC+ probes.
+/// - It prints as text such as `±100 mV` or `±100 mV (x10)`, and [`PicoRange::parse`] reads that text.
+///
+/// ```
+/// use pico_common::PicoRange;
+///
+/// let range = PicoRange::parse("±200 mV", None).unwrap();
+/// assert_eq!(range, PicoRange::X1_PROBE_200MV);
+/// assert_eq!(range.get_max_scaled_value(), 0.2);
+/// assert_eq!(range.get_units().short, "V");
+/// ```
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(
     Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, PartialOrd, Ord, Sequence,
 )]
 pub enum PicoRange {
+    /// ±5 mV
     X1_PROBE_5MV = -1,
+    /// ±10 mV
     X1_PROBE_10MV = 0,
+    /// ±20 mV
     X1_PROBE_20MV = 1,
+    /// ±50 mV
     X1_PROBE_50MV = 2,
+    /// ±100 mV
     X1_PROBE_100MV = 3,
+    /// ±200 mV
     X1_PROBE_200MV = 4,
+    /// ±500 mV
     X1_PROBE_500MV = 5,
+    /// ±1 V
     X1_PROBE_1V = 6,
+    /// ±2 V
     X1_PROBE_2V = 7,
+    /// ±5 V
     X1_PROBE_5V = 8,
+    /// ±10 V
     X1_PROBE_10V = 9,
+    /// ±20 V
     X1_PROBE_20V = 10,
+    /// ±50 V
     X1_PROBE_50V = 11,
+    /// ±100 V
     X1_PROBE_100V = 12,
+    /// ±200 V
     X1_PROBE_200V = 13,
 
+    /// ±50 mV with a ×10 probe
     X10_PROBE_50MV = 31,
+    /// ±100 mV with a ×10 probe
     X10_PROBE_100MV = 32,
+    /// ±200 mV with a ×10 probe
     X10_PROBE_200MV = 33,
+    /// ±500 mV with a ×10 probe
     X10_PROBE_500MV = 34,
+    /// ±1 V with a ×10 probe
     X10_PROBE_1V = 35,
+    /// ±2 V with a ×10 probe
     X10_PROBE_2V = 36,
+    /// ±5 V with a ×10 probe
     X10_PROBE_5V = 37,
+    /// ±10 V with a ×10 probe
     X10_PROBE_10V = 38,
+    /// ±20 V with a ×10 probe
     X10_PROBE_20V = 39,
+    /// ±50 V with a ×10 probe
     X10_PROBE_50V = 40,
+    /// ±100 V with a ×10 probe
     X10_PROBE_100V = 41,
+    /// ±200 V with a ×10 probe
     X10_PROBE_200V = 42,
+    /// ±500 V with a ×10 probe
     X10_PROBE_500V = 43,
 
+    /// PicoScope 4000A resistance range, 315 kΩ
     PS4000A_RESISTANCE_315K = 512,
+    /// PicoScope 4000A resistance range, 1.1 MΩ
     PS4000A_RESISTANCE_1100K = 513,
+    /// PicoScope 4000A resistance range, 10 MΩ
     PS4000A_RESISTANCE_10M = 514,
+    /// The `PS4000A_RESISTANCE_ADCV` flag of the ps4000a driver
     PS4000A_RESISTANCE_ADCV_FLAG = 268_435_456,
 
+    /// PicoConnect probe off
     CONNECT_PROBE_OFF = 1024,
+    /// 200 A/2 kA current clamp: ±1 A
     CURRENT_CLAMP_200A_2kA_1A = 4000,
+    /// 200 A/2 kA current clamp: ±2 A
     CURRENT_CLAMP_200A_2kA_2A = 4001,
+    /// 200 A/2 kA current clamp: ±5 A
     CURRENT_CLAMP_200A_2kA_5A = 4002,
+    /// 200 A/2 kA current clamp: ±10 A
     CURRENT_CLAMP_200A_2kA_10A = 4003,
+    /// 200 A/2 kA current clamp: ±20 A
     CURRENT_CLAMP_200A_2kA_20A = 4004,
+    /// 200 A/2 kA current clamp: ±50 A
     CURRENT_CLAMP_200A_2kA_50A = 4005,
+    /// 200 A/2 kA current clamp: ±100 A
     CURRENT_CLAMP_200A_2kA_100A = 4006,
+    /// 200 A/2 kA current clamp: ±200 A
     CURRENT_CLAMP_200A_2kA_200A = 4007,
+    /// 200 A/2 kA current clamp: ±500 A
     CURRENT_CLAMP_200A_2kA_500A = 4008,
+    /// 200 A/2 kA current clamp: ±1000 A
     CURRENT_CLAMP_200A_2kA_1000A = 4009,
+    /// 200 A/2 kA current clamp: ±2000 A
     CURRENT_CLAMP_200A_2kA_2000A = 4010,
+    /// 40 A current clamp: ±100 mA
     CURRENT_CLAMP_40A_100mA = 5000,
+    /// 40 A current clamp: ±200 mA
     CURRENT_CLAMP_40A_200mA = 5001,
+    /// 40 A current clamp: ±500 mA
     CURRENT_CLAMP_40A_500mA = 5002,
+    /// 40 A current clamp: ±1 A
     CURRENT_CLAMP_40A_1A = 5003,
+    /// 40 A current clamp: ±2 A
     CURRENT_CLAMP_40A_2A = 5004,
+    /// 40 A current clamp: ±5 A
     CURRENT_CLAMP_40A_5A = 5005,
+    /// 40 A current clamp: ±10 A
     CURRENT_CLAMP_40A_10A = 5006,
+    /// 40 A current clamp: ±20 A
     CURRENT_CLAMP_40A_20A = 5007,
+    /// 40 A current clamp: ±40 A
     CURRENT_CLAMP_40A_40A = 5008,
 
+    /// 1 kV CAT III probe: ±2.5 V
     _1KV_2_5V = 6003,
+    /// 1 kV CAT III probe: ±5 V
     _1KV_5V = 6004,
+    /// 1 kV CAT III probe: ±12.5 V
     _1KV_12_5V = 6005,
+    /// 1 kV CAT III probe: ±25 V
     _1KV_25V = 6006,
+    /// 1 kV CAT III probe: ±50 V
     _1KV_50V = 6007,
+    /// 1 kV CAT III probe: ±125 V
     _1KV_125V = 6008,
+    /// 1 kV CAT III probe: ±250 V
     _1KV_250V = 6009,
+    /// 1 kV CAT III probe: ±500 V
     _1KV_500V = 6010,
+    /// 1 kV CAT III probe: ±1 kV
     _1KV_1000V = 6011,
 
+    /// 2000 A RMS current clamp: ±10 A
     CURRENT_CLAMP_2000ARMS_10A = 6500,
+    /// 2000 A RMS current clamp: ±20 A
     CURRENT_CLAMP_2000ARMS_20A = 6501,
+    /// 2000 A RMS current clamp: ±50 A
     CURRENT_CLAMP_2000ARMS_50A = 6502,
+    /// 2000 A RMS current clamp: ±100 A
     CURRENT_CLAMP_2000ARMS_100A = 6503,
+    /// 2000 A RMS current clamp: ±200 A
     CURRENT_CLAMP_2000ARMS_200A = 6504,
+    /// 2000 A RMS current clamp: ±500 A
     CURRENT_CLAMP_2000ARMS_500A = 6505,
+    /// 2000 A RMS current clamp: ±1000 A
     CURRENT_CLAMP_2000ARMS_1000A = 6506,
+    /// 2000 A RMS current clamp: ±2000 A
     CURRENT_CLAMP_2000ARMS_2000A = 6507,
+    /// 2000 A RMS current clamp: ±5000 A
     CURRENT_CLAMP_2000ARMS_5000A = 6508,
 
+    /// Resistance lead: -5 Ω to 20 Ω
     RESISTANCE_LEAD_NEG5_TO_20OHM = 7000,
+    /// Resistance lead: -50 Ω to 200 Ω
     RESISTANCE_LEAD_NEG50_TO_200OHM = 7001,
+    /// Resistance lead: -500 Ω to 2 kΩ
     RESISTANCE_LEAD_NEG500_TO_2KOHM = 7002,
+    /// Resistance lead: -5 kΩ to 20 kΩ
     RESISTANCE_LEAD_NEG5K_TO_20KOHM = 7003,
+    /// Resistance lead: -50 kΩ to 200 kΩ
     RESISTANCE_LEAD_NEG50K_TO_LEAD_200KOHM = 7004,
+    /// Resistance lead: -500 kΩ to 2 MΩ
     RESISTANCE_LEAD_NEG500K_TO_LEAD_2MOHM = 7005,
+    /// Resistance lead: diode test
     RESISTANCE_LEAD_DIODE_TEST = 7006,
 
+    /// HT pickup: -3 kV to 5 kV
     HT_NEG3_TO_5KV = 8950,
+    /// HT pickup: -3 kV to 10 kV
     HT_NEG3_TO_10KV = 8951,
+    /// HT pickup: -5 kV to 20 kV
     HT_NEG5_TO_20KV = 8952,
+    /// HT pickup: -5 kV to 50 kV
     HT_NEG5_TO_50KV = 8953,
+    /// HT pickup: -5 kV to 100 kV
     HT_NEG5_TO_100KV = 8954,
+    /// HT pickup: -3 kV to 5 kV, inverted
     HT_NEG3_TO_5KV_INVERTED = 8955,
+    /// HT pickup: -3 kV to 10 kV, inverted
     HT_NEG3_TO_10KV_INVERTED = 8956,
+    /// HT pickup: -5 kV to 20 kV, inverted
     HT_NEG5_TO_20KV_INVERTED = 8957,
+    /// HT pickup: -5 kV to 50 kV, inverted
     HT_NEG5_TO_50KV_INVERTED = 8958,
+    /// HT pickup: -5 kV to 100 kV, inverted
     HT_NEG5_TO_100KV_INVERTED = 8959,
 
+    /// Temperature probe: -50 °C to 150 °C
     TEMPERATURE_NEG50_TO_150DEGC = 9000,
+    /// Temperature probe: -4 °C to 125 °C
     TEMPERATURE_NEG4_TO_125DEGC = 9001,
 
+    /// Pressure sensor: -100 kPa to 150 kPa
     PRESSURE_SENSOR_NEG100000_TO_150000_PASCALS = 9100,
+    /// Pressure sensor: -100 kPa to 400 kPa
     PRESSURE_SENSOR_NEG100000_TO_400000_PASCALS = 9101,
+    /// Pressure sensor: -200 kPa to 800 kPa
     PRESSURE_SENSOR_NEG200000_TO_800000_PASCALS = 9102,
+    /// Pressure sensor: -400 kPa to 1600 kPa
     PRESSURE_SENSOR_NEG400000_TO_1600000_PASCALS = 9103,
+    /// Pressure sensor: -400 kPa to 3400 kPa
     PRESSURE_SENSOR_NEG400000_TO_3400000_PASCALS = 9104,
+    /// Pressure sensor: -150 kPa to 1350 kPa
     PRESSURE_SENSOR_NEG150000_TO_1350000_PASCALS = 9105,
 
+    /// 100 A current clamp: ±2.5 A
     CURRENT_CLAMP_100A_2_5A = 10000,
+    /// 100 A current clamp: ±5 A
     CURRENT_CLAMP_100A_5A = 10001,
+    /// 100 A current clamp: ±10 A
     CURRENT_CLAMP_100A_10A = 10002,
+    /// 100 A current clamp: ±25 A
     CURRENT_CLAMP_100A_25A = 10003,
+    /// 100 A current clamp: ±50 A
     CURRENT_CLAMP_100A_50A = 10004,
+    /// 100 A current clamp: ±100 A
     CURRENT_CLAMP_100A_100A = 10005,
 
+    /// 60 A current clamp: ±2 A
     CURRENT_CLAMP_60A_2A = 10500,
+    /// 60 A current clamp: ±5 A
     CURRENT_CLAMP_60A_5A = 10501,
+    /// 60 A current clamp: ±10 A
     CURRENT_CLAMP_60A_10A = 10502,
+    /// 60 A current clamp: ±20 A
     CURRENT_CLAMP_60A_20A = 10503,
+    /// 60 A current clamp: ±50 A
     CURRENT_CLAMP_60A_50A = 10504,
+    /// 60 A current clamp: ±60 A
     CURRENT_CLAMP_60A_60A = 10505,
 
+    /// Optical sensor: 10 V
     OPTICAL_SENSOR_10V = 10550,
 
+    /// 60 A current clamp, version 2: ±500 mA
     CURRENT_CLAMP_60A_V2_0_5A = 10600,
+    /// 60 A current clamp, version 2: ±1 A
     CURRENT_CLAMP_60A_V2_1A = 10601,
+    /// 60 A current clamp, version 2: ±2 A
     CURRENT_CLAMP_60A_V2_2A = 10602,
+    /// 60 A current clamp, version 2: ±5 A
     CURRENT_CLAMP_60A_V2_5A = 10603,
+    /// 60 A current clamp, version 2: ±10 A
     CURRENT_CLAMP_60A_V2_10A = 10604,
+    /// 60 A current clamp, version 2: ±20 A
     CURRENT_CLAMP_60A_V2_20A = 10605,
+    /// 60 A current clamp, version 2: ±50 A
     CURRENT_CLAMP_60A_V2_50A = 10606,
+    /// 60 A current clamp, version 2: ±60 A
     CURRENT_CLAMP_60A_V2_60A = 10607,
 
+    /// High-voltage differential probe: ±5 V
     HIGH_VOLTAGE_DIFFERENTIAL_5V = 10650,
+    /// High-voltage differential probe: ±10 V
     HIGH_VOLTAGE_DIFFERENTIAL_10V = 10651,
+    /// High-voltage differential probe: ±20 V
     HIGH_VOLTAGE_DIFFERENTIAL_20V = 10652,
+    /// High-voltage differential probe: ±50 V
     HIGH_VOLTAGE_DIFFERENTIAL_50V = 10653,
+    /// High-voltage differential probe: ±100 V
     HIGH_VOLTAGE_DIFFERENTIAL_100V = 10654,
+    /// High-voltage differential probe: ±200 V
     HIGH_VOLTAGE_DIFFERENTIAL_200V = 10655,
+    /// High-voltage differential probe: ±500 V
     HIGH_VOLTAGE_DIFFERENTIAL_500V = 10656,
+    /// High-voltage differential probe: ±1 kV
     HIGH_VOLTAGE_DIFFERENTIAL_1000V = 10657,
+    /// High-voltage differential probe: ±1.4 kV
     HIGH_VOLTAGE_DIFFERENTIAL_1400V = 10658,
 
+    /// ×10 active probe: ±100 mV
     X10_ACTIVE_PROBE_100MV = 10700,
+    /// ×10 active probe: ±200 mV
     X10_ACTIVE_PROBE_200MV = 10701,
+    /// ×10 active probe: ±500 mV
     X10_ACTIVE_PROBE_500MV = 10702,
+    /// ×10 active probe: ±1 V
     X10_ACTIVE_PROBE_1V = 10703,
+    /// ×10 active probe: ±2 V
     X10_ACTIVE_PROBE_2V = 10704,
+    /// ×10 active probe: ±5 V
     X10_ACTIVE_PROBE_5V = 10705,
 }
 
@@ -172,17 +318,19 @@ fn strip_probe_suffix(input: &str) -> &str {
 }
 
 impl PicoRange {
-    /// The range of a driver's range value, or `None` for a value this
-    /// crate does not name. Never panics, unlike `From<i32>`.
+    /// The range for a driver range value
+    ///
+    /// - Returns `None` for a value that this crate does not name.
+    ///   `From<i32>` panics for such a value.
     pub fn from_code(code: i32) -> Option<Self> {
         num_traits::FromPrimitive::from_i32(code)
     }
 
-    /// The full scale of a range read as `±full_scale` in its unit
-    /// ([`PicoRange::get_units`]): the ADC's maximum code reads
-    /// `+full_scale`. `None` for a range with no such scale known here,
-    /// such as an offset or one-sided range (temperature, pressure,
-    /// resistance, ignition pickups), or one this crate cannot scale.
+    /// The full scale of a range that reads `±full_scale` in its unit ([`PicoRange::get_units`])
+    ///
+    /// - The maximum ADC code reads `+full_scale`.
+    /// - Returns `None` for a range with no such scale that this crate knows.
+    ///   This includes ranges with an offset or with one side only (temperature, pressure, resistance, HT pickups).
     pub fn full_scale(self) -> Option<f64> {
         use PicoRange::*;
         match self {
@@ -221,6 +369,13 @@ impl PicoRange {
         }
     }
 
+    /// Finds the range whose text matches `input`
+    ///
+    /// - It ignores spaces, `±` and letter case.
+    /// - It looks only in `valid_ranges`, or in all ranges when that is `None`.
+    /// - It prefers a match that includes the probe suffix, such as `(x10)`.
+    ///   When there is no such match, it matches without the suffix.
+    /// - Returns `None` when no range matches.
     pub fn parse(input: &str, valid_ranges: Option<&[Self]>) -> Option<Self> {
         let input = normalize(input);
         let all_ranges = enum_iterator::all::<PicoRange>().collect::<Vec<Self>>();
@@ -241,6 +396,10 @@ impl PicoRange {
             .copied()
     }
 
+    /// The ×1 or ×10 probe range with a span of `nano_volts`
+    ///
+    /// - `probe` is the probe attenuation: 1 or 10.
+    /// - Returns `None` for any other probe, or for a span that has no range.
     pub fn from_probe_and_nano_volts(probe: u32, nano_volts: i64) -> Option<Self> {
         match (probe, nano_volts) {
             (1, 5_000_000) => Some(PicoRange::X1_PROBE_5MV),
@@ -275,8 +434,10 @@ impl PicoRange {
         }
     }
 
-    /// The span of an x1 or x10 range in nanovolts, or `None` for a
-    /// range of another probe. Never panics, unlike `to_nano_volts`.
+    /// The span of a ×1 or ×10 probe range, in nanovolts
+    ///
+    /// - Returns `None` for a range of another probe.
+    ///   [`PicoRange::to_nano_volts`] panics for such a range.
     pub fn nano_volts(self) -> Option<i64> {
         use PicoRange::*;
         match self {
@@ -292,6 +453,10 @@ impl PicoRange {
         }
     }
 
+    /// The span of a ×1 or ×10 probe range, in nanovolts
+    ///
+    /// - Panics for a range of another probe.
+    ///   Use [`PicoRange::nano_volts`] to get `None` instead.
     pub fn to_nano_volts(&self) -> i64 {
         match self {
             PicoRange::X1_PROBE_5MV => 5_000_000,
@@ -326,6 +491,9 @@ impl PicoRange {
         }
     }
 
+    /// The probe attenuation of the range: 1 or 10
+    ///
+    /// - Panics for a range that is not a ×1 or ×10 probe range.
     pub fn to_probe_range(&self) -> u32 {
         match self {
             PicoRange::X1_PROBE_5MV
@@ -490,6 +658,10 @@ impl From<PicoRange> for i16 {
 }
 
 impl From<i32> for PicoRange {
+    /// The range for a driver range value
+    ///
+    /// - Panics for a value that this crate does not name.
+    ///   Use [`PicoRange::from_code`] to get `None` instead.
     fn from(value: i32) -> Self {
         num_traits::FromPrimitive::from_i32(value)
             .unwrap_or_else(|| panic!("Invalid PicoRange range '{}'", value))
@@ -497,19 +669,25 @@ impl From<i32> for PicoRange {
 }
 
 impl From<u32> for PicoRange {
+    /// The range for a driver range value
+    ///
+    /// - Panics for a value that this crate does not name.
     fn from(value: u32) -> Self {
         num_traits::FromPrimitive::from_u32(value)
             .unwrap_or_else(|| panic!("Invalid PicoRange range '{}'", value))
     }
 }
 
-/// A simple struct containing the long and short unit strings
+/// The long and short names of a unit, such as `Volts` and `V`
 pub struct UnitStrings {
+    /// The long name, such as `Volts`
     pub long: String,
+    /// The short name, such as `V`
     pub short: String,
 }
 
 impl UnitStrings {
+    /// Makes the names from two strings
     pub fn new(long: &str, short: &str) -> Self {
         UnitStrings {
             long: long.to_string(),
@@ -519,7 +697,9 @@ impl UnitStrings {
 }
 
 impl PicoRange {
-    /// Get the expected units for this channel range
+    /// The unit that the range reads in
+    ///
+    /// - Returns volts for a range that has no other unit.
     pub fn get_units(self) -> UnitStrings {
         match self {
             PicoRange::PS4000A_RESISTANCE_315K
@@ -595,7 +775,11 @@ impl PicoRange {
         }
     }
 
-    /// Get the maximum scaled value for this range
+    /// The value at the top of the range, in its unit ([`PicoRange::get_units`])
+    ///
+    /// - The inverted HT pickup ranges give a negative value.
+    /// - Panics for a range with no known scale, such as the pressure ranges.
+    ///   Use [`PicoRange::full_scale`] to get `None` instead.
     pub fn get_max_scaled_value(self) -> f64 {
         match self {
             PicoRange::X1_PROBE_5MV => 0.005,

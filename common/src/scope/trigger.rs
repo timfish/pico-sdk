@@ -1,49 +1,63 @@
-//! One trigger description for every scope family. Each family's driver
-//! turns it into its own model: per-channel states in one conditions
-//! struct (ps2000 to ps6000), or lists of conditions (ps4000a, ps5000a's
-//! V2 calls, ps6000a, psospa). Guides: ps2000a §2.5, §3.56–3.61; ps5000a
-//! §3.4, §4.66–4.74; ps6000a §2.5, §3.54–3.64; psospa topic: triggering.
+//! One trigger description for all scope families.
+//! The driver of each family turns it into its own model.
+//! The model is one trigger state for each channel in one conditions struct (ps2000 to ps6000), or lists of conditions (ps4000a, the V2 calls of ps5000a, ps6000a, psospa).
+//! Guides: ps2000a §2.5, §3.56–3.61; ps5000a §3.4, §4.66–4.74; ps6000a §2.5, §3.54–3.64; psospa topic: triggering.
 
 use crate::{PicoChannel, PicoError, PicoResult, PicoStatus, TriggerCapabilities};
 use std::time::Duration;
 
+/// A source of a trigger
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TriggerSource {
+    /// An analog channel
     Channel(PicoChannel),
-    /// The EXT input of models that have one.
+    /// The EXT input, on models that have one
     External,
-    /// The AUX trigger input.
+    /// The AUX trigger input
     Aux,
-    /// The output of the pulse width qualifier.
+    /// The output of the pulse width qualifier
     PulseWidthQualifier,
-    /// The digital trigger on the MSO ports, as set by `digital`.
+    /// The digital trigger on the MSO ports, as the `digital` field of [`TriggerConfig::Advanced`] sets it
     Digital,
 }
 
-/// What a source must do to be true. The level directions use the upper
-/// threshold; `RisingOrFalling` uses the lower one for rising edges when
-/// there is one. The rest are window directions and use both.
+/// What a source must do to be true
+///
+/// - The level directions use the upper threshold.
+///   `RisingOrFalling` uses the lower threshold for rising edges, when there is one.
+/// - The other directions are window directions, and use both thresholds.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThresholdDirection {
+    /// Above the threshold
     Above,
+    /// Below the threshold
     Below,
+    /// A rising edge
     Rising,
+    /// A falling edge
     Falling,
+    /// A rising or a falling edge
     RisingOrFalling,
+    /// Inside the window
     Inside,
+    /// Outside the window
     Outside,
+    /// Into the window
     Enter,
+    /// Out of the window
     Exit,
+    /// Into or out of the window
     EnterOrExit,
-    /// Into the window from below, and back, without crossing it.
+    /// Into the window from below, and back, without crossing it
     PositiveRunt,
-    /// Into the window from above, and back, without crossing it.
+    /// Into the window from above, and back, without crossing it
     NegativeRunt,
 }
 
 impl ThresholdDirection {
+    /// Whether the direction is a level or a window direction
     pub fn mode(self) -> ThresholdMode {
         use ThresholdDirection::*;
         match self {
@@ -52,6 +66,7 @@ impl ThresholdDirection {
         }
     }
 
+    /// Whether the direction is a runt direction
     pub fn is_runt(self) -> bool {
         matches!(
             self,
@@ -59,7 +74,9 @@ impl ThresholdDirection {
         )
     }
 
-    /// The header code, the same in every family's header.
+    /// The code of the direction in the driver headers
+    ///
+    /// - The code is the same in the header of each family.
     pub fn code(self) -> u32 {
         use ThresholdDirection::*;
         match self {
@@ -74,14 +91,18 @@ impl ThresholdDirection {
     }
 }
 
+/// Whether a trigger uses one threshold or a window of two
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThresholdMode {
+    /// One threshold
     Level,
+    /// A window of two thresholds
     Window,
 }
 
 impl ThresholdMode {
+    /// The code of the mode in the driver headers
     pub fn code(self) -> u32 {
         match self {
             ThresholdMode::Level => 0,
@@ -90,30 +111,37 @@ impl ThresholdMode {
     }
 }
 
-/// A threshold in ADC counts, with the hysteresis that rearms it, also
-/// in ADC counts.
+/// A threshold in ADC counts, with the hysteresis that arms it again, also in ADC counts
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Threshold {
+    /// The threshold, in ADC counts
     pub adc: i16,
+    /// The hysteresis, in ADC counts
     pub hysteresis: u16,
 }
 
 impl Threshold {
+    /// Makes a threshold
     pub fn new(adc: i16, hysteresis: u16) -> Threshold {
         Threshold { adc, hysteresis }
     }
 }
 
+/// The state that a source must have in a trigger condition
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TriggerState {
+    /// The source can have any state
     DontCare,
+    /// The source must be true
     True,
+    /// The source must be false
     False,
 }
 
 impl TriggerState {
+    /// The code of the state in the driver headers
     pub fn code(self) -> u32 {
         match self {
             TriggerState::DontCare => 0,
@@ -123,18 +151,26 @@ impl TriggerState {
     }
 }
 
+/// What a digital input must do in a trigger
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DigitalDirection {
+    /// The input can do anything
     DontCare,
+    /// The input is low
     Low,
+    /// The input is high
     High,
+    /// A rising edge
     Rising,
+    /// A falling edge
     Falling,
+    /// A rising or a falling edge
     RisingOrFalling,
 }
 
 impl DigitalDirection {
+    /// The code of the direction in the driver headers
     pub fn code(self) -> u32 {
         match self {
             DigitalDirection::DontCare => 0,
@@ -147,35 +183,46 @@ impl DigitalDirection {
     }
 }
 
-/// A digital input of the MSO ports and what it must do: bit 0 to 7 on
-/// port 0, 8 to 15 on port 1.
+/// A digital input of the MSO ports, and what it must do
+///
+/// - Bits 0 to 7 are on port 0, and bits 8 to 15 are on port 1.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DigitalBit {
+    /// The input number, 0 to 15
     pub bit: u8,
+    /// What the input must do
     pub direction: DigitalDirection,
 }
 
 impl DigitalBit {
+    /// Makes a digital bit
     pub fn new(bit: u8, direction: DigitalDirection) -> DigitalBit {
         DigitalBit { bit, direction }
     }
 
+    /// The port of the input: 0 or 1
     pub fn port(self) -> u8 {
         self.bit / 8
     }
 }
 
+/// The pulse widths that a pulse width qualifier accepts
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PulseWidthType {
+    /// Shorter than `lower`
     LessThan,
+    /// Longer than `lower`
     GreaterThan,
+    /// From `lower` to `upper`
     InRange,
+    /// Not from `lower` to `upper`
     OutOfRange,
 }
 
 impl PulseWidthType {
+    /// The code of the type in the driver headers
     pub fn code(self) -> u32 {
         match self {
             PulseWidthType::LessThan => 1,
@@ -186,20 +233,22 @@ impl PulseWidthType {
     }
 }
 
-/// One source's thresholds and direction.
+/// The thresholds and direction of one source
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChannelTrigger {
-    /// A channel, `External` or `Aux`.
+    /// The source: a channel, `External` or `Aux`
     pub source: TriggerSource,
+    /// What the source must do
     pub direction: ThresholdDirection,
+    /// The upper threshold, or the only threshold of a level direction
     pub upper: Threshold,
-    /// The lower edge of a window. A level direction leaves it `None`.
+    /// The lower threshold of a window, or `None` for a level direction
     pub lower: Option<Threshold>,
 }
 
 impl ChannelTrigger {
-    /// An edge or level on one threshold.
+    /// Makes an edge or level trigger on one threshold
     pub fn level(
         source: TriggerSource,
         direction: ThresholdDirection,
@@ -214,7 +263,7 @@ impl ChannelTrigger {
         }
     }
 
-    /// A window, or a runt with its two thresholds.
+    /// Makes a window or runt trigger with two thresholds
     pub fn window(
         source: TriggerSource,
         direction: ThresholdDirection,
@@ -229,29 +278,39 @@ impl ChannelTrigger {
         }
     }
 
-    /// The lower threshold the driver takes: the window's, else the
-    /// upper one.
+    /// The lower threshold to give the driver
+    ///
+    /// - It is the lower threshold of a window, or else the upper threshold.
     pub fn lower_or_upper(&self) -> Threshold {
         self.lower.unwrap_or(self.upper)
     }
 }
 
-/// An OR of AND terms: each inner list must all hold.
+/// Trigger conditions: an OR of AND terms
+///
+/// - Each inner list is one term, and all of its states must be true.
+/// - The trigger fires when one or more terms are true.
 pub type TriggerConditions = Vec<Vec<(TriggerSource, TriggerState)>>;
 
-/// A pulse width qualifier: it is true for a pulse of the given width
-/// on the sources its conditions name, in the given direction.
+/// A pulse width qualifier
+///
+/// - It is true for a pulse of the given width, in the given direction, on the sources that its conditions name.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PulseWidthQualifier {
+    /// The sources that the qualifier uses
     pub conditions: TriggerConditions,
+    /// The direction of the pulse
     pub direction: ThresholdDirection,
-    /// In sample intervals.
+    /// The lower pulse width, in sample intervals
     pub lower: u32,
-    /// In sample intervals; used by the range types.
+    /// The upper pulse width, in sample intervals
+    ///
+    /// - Only [`PulseWidthType::InRange`] and [`PulseWidthType::OutOfRange`] use it.
     pub upper: u32,
+    /// The pulse widths that the qualifier accepts
     pub kind: PulseWidthType,
-    /// Digital inputs the qualifier times, on MSO models.
+    /// The digital inputs that the qualifier times, on MSO models
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Vec::is_empty")
@@ -259,56 +318,83 @@ pub struct PulseWidthQualifier {
     pub digital: Vec<DigitalBit>,
 }
 
-/// One trigger description for every family. A family refuses terms it
-/// lacks with `PicoStatus::NOT_SUPPORTED_BY_THIS_DEVICE` or a status that
-/// names the term; [`TriggerConfig::check`] gives the same refusals from
-/// the capabilities alone.
+/// One trigger description for all families
+///
+/// - A family refuses a term that it does not have, with [`PicoStatus::NOT_SUPPORTED_BY_THIS_DEVICE`] or a status that names the term.
+/// - [`TriggerConfig::check`] gives the same errors from the capabilities only, before any driver call.
+///
+/// ```
+/// use pico_common::{PicoChannel, ThresholdDirection, TriggerConfig};
+///
+/// let trigger = TriggerConfig::edge(PicoChannel::A, 1_000, ThresholdDirection::Rising);
+/// assert_eq!(trigger.enables(), (true, false));
+/// assert_eq!(trigger.delay(), 0);
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum TriggerConfig {
+    /// No trigger
     #[default]
     None,
-    /// An edge or level on one source, the call every family has.
+    /// An edge or level on one source, with the call that each family has
     Simple {
-        /// A channel, `External` or `Aux`.
+        /// The source: a channel, `External` or `Aux`
         source: TriggerSource,
+        /// The threshold, in ADC counts
         threshold_adc: i16,
-        /// `Above`, `Below`, `Rising`, `Falling` or `RisingOrFalling`.
+        /// The direction: `Above`, `Below`, `Rising`, `Falling` or `RisingOrFalling`
         direction: ThresholdDirection,
-        /// In sample intervals.
+        /// The delay after the trigger event, in sample intervals
         delay: u64,
-        /// `None` waits for ever.
+        /// The time after which the scope triggers with no event, or `None` to wait with no end
         auto_trigger: Option<Duration>,
     },
+    /// Triggers on more than one source, joined by conditions
     Advanced {
+        /// The thresholds and direction of each source
         channels: Vec<ChannelTrigger>,
+        /// The conditions that join the sources
         conditions: TriggerConditions,
+        /// The digital inputs of the trigger, on MSO models
         digital: Vec<DigitalBit>,
+        /// A pulse width qualifier
         pulse_width: Option<PulseWidthQualifier>,
-        /// In sample intervals.
+        /// The delay after the trigger event, in sample intervals
         delay: u64,
-        /// In samples, on families with a holdoff counter.
+        /// The holdoff, in samples, on families with a holdoff counter
         holdoff: Option<u64>,
+        /// The time after which the scope triggers with no event, or `None` to wait with no end
         auto_trigger: Option<Duration>,
     },
 }
 
-/// A kind of trigger term, for refusals and for asking what a family has.
+/// A kind of trigger term, for errors and for the question of what a family has
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TriggerKind {
+    /// Simple trigger
     Simple,
+    /// Advanced trigger
     Advanced,
+    /// Window trigger
     Window,
+    /// Runt trigger
     Runt,
+    /// Pulse width qualifier
     PulseWidth,
+    /// Digital trigger
     Digital,
+    /// Trigger delay
     Delay,
+    /// Trigger holdoff
     Holdoff,
+    /// EXT trigger input
     External,
+    /// AUX trigger input
     Aux,
 }
 
 impl TriggerKind {
+    /// The name of the kind, such as `"window trigger"`
     pub fn name(self) -> &'static str {
         match self {
             TriggerKind::Simple => "simple trigger",
@@ -326,6 +412,7 @@ impl TriggerKind {
 }
 
 impl TriggerCapabilities {
+    /// Whether the scope has this kind of trigger term
     pub fn has(&self, kind: TriggerKind) -> bool {
         match kind {
             TriggerKind::Simple => self.simple,
@@ -355,8 +442,7 @@ fn source_kind(source: TriggerSource) -> Option<TriggerKind> {
 }
 
 impl TriggerConfig {
-    /// A rising or falling edge on a channel, with no delay, waiting for
-    /// ever.
+    /// Makes a simple trigger on a channel, with no delay and no auto trigger
     pub fn edge(channel: PicoChannel, threshold_adc: i16, direction: ThresholdDirection) -> Self {
         TriggerConfig::Simple {
             source: TriggerSource::Channel(channel),
@@ -367,7 +453,7 @@ impl TriggerConfig {
         }
     }
 
-    /// An advanced trigger that fires when any of `channels` does.
+    /// Makes an advanced trigger that fires when one or more of `channels` fires
     pub fn any_of(channels: Vec<ChannelTrigger>) -> Self {
         let conditions = channels
             .iter()
@@ -384,8 +470,7 @@ impl TriggerConfig {
         }
     }
 
-    /// An advanced trigger that fires when all of `channels` hold at
-    /// once.
+    /// Makes an advanced trigger that fires when all of `channels` are true at the same time
     pub fn all_of(channels: Vec<ChannelTrigger>) -> Self {
         let conditions = vec![channels
             .iter()
@@ -402,12 +487,12 @@ impl TriggerConfig {
         }
     }
 
+    /// Whether there is no trigger
     pub fn is_none(&self) -> bool {
         matches!(self, TriggerConfig::None)
     }
 
-    /// Whether the config turns on the trigger and the pulse width
-    /// qualifier.
+    /// Whether the config turns on the trigger, and whether it turns on the pulse width qualifier
     pub fn enables(&self) -> (bool, bool) {
         match self {
             TriggerConfig::None => (false, false),
@@ -420,9 +505,9 @@ impl TriggerConfig {
         }
     }
 
-    /// The digital inputs the trigger and its pulse width qualifier
-    /// name, with the ports they are on (bit 0 to 7 port 0, 8 to 15
-    /// port 1).
+    /// The digital inputs that the trigger and its pulse width qualifier use
+    ///
+    /// - Bits 0 to 7 are on port 0, and bits 8 to 15 are on port 1.
     pub fn digital_bits(&self) -> Vec<DigitalBit> {
         match self {
             TriggerConfig::Advanced {
@@ -438,7 +523,7 @@ impl TriggerConfig {
         }
     }
 
-    /// Every kind of term the config uses.
+    /// Each kind of term that the config uses, once
     pub fn kinds(&self) -> Vec<TriggerKind> {
         let mut kinds = Vec::new();
         match self {
@@ -496,8 +581,11 @@ impl TriggerConfig {
         kinds
     }
 
-    /// Refuses a config the capabilities do not allow, or one that does
-    /// not hold together, before any driver call.
+    /// Checks the config against the capabilities, before any driver call
+    ///
+    /// - Returns Err when the capabilities do not have a kind of term that the config uses.
+    /// - Returns Err when the parts of the config do not agree, such as a condition on a source with no trigger.
+    /// - The status of the error tells which check failed, such as [`PicoStatus::INVALID_TRIGGER_CHANNEL`].
     pub fn check(&self, caps: &TriggerCapabilities) -> PicoResult<()> {
         for kind in self.kinds() {
             if !caps.has(kind) {
@@ -627,6 +715,7 @@ impl TriggerConfig {
         }
     }
 
+    /// The auto trigger time, or `None` when there is none
     pub fn auto_trigger(&self) -> Option<Duration> {
         match self {
             TriggerConfig::None => None,
@@ -635,6 +724,7 @@ impl TriggerConfig {
         }
     }
 
+    /// The trigger delay, in sample intervals
     pub fn delay(&self) -> u64 {
         match self {
             TriggerConfig::None => 0,
@@ -643,8 +733,12 @@ impl TriggerConfig {
     }
 }
 
-/// An auto-trigger time in whole units of `unit`, rounded up so a short
-/// time never becomes 0, which waits for ever. Refused past `max`.
+/// An auto trigger time in whole units of `unit`
+///
+/// - It rounds up, so that a short time does not become 0, which waits with no end.
+/// - Returns `Ok(0)` for `None`.
+/// - Returns Err with [`PicoStatus::INVALID_PARAMETER`] when the count is more than `max`.
+/// - Panics when `unit` is zero.
 pub fn auto_trigger_units(auto: Option<Duration>, unit: Duration, max: u64) -> PicoResult<u64> {
     let Some(auto) = auto else {
         return Ok(0);
@@ -656,7 +750,7 @@ pub fn auto_trigger_units(auto: Option<Duration>, unit: Duration, max: u64) -> P
         .ok_or_else(|| refuse(PicoStatus::INVALID_PARAMETER, "auto-trigger time"))
 }
 
-/// The digital bits of each port that `bits` uses, port by port.
+/// Groups `bits` by port, in port order
 pub fn digital_by_port(bits: &[DigitalBit]) -> Vec<(u8, Vec<DigitalBit>)> {
     let mut ports: Vec<(u8, Vec<DigitalBit>)> = Vec::new();
     for bit in bits {

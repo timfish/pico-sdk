@@ -1,63 +1,85 @@
-//! Outputs of scopes and data loggers: digital lines, PWM, signal
-//! generators and lights. An output is a call on the open device, not
-//! stream config, so a change never stops a stream.
+//! The outputs of scopes and data loggers: digital lines, PWM, signal generators and lights.
+//! You set an output with a call on the open device, not in the stream config.
+//! Thus a change to an output does not stop a stream.
 
 use crate::{PicoError, PicoResult, PicoStatus, SigGenConfig, SigGenInfo, SigGenShape};
 
-/// What an output can be set to.
+/// The values that an output can take
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum OutputKind {
-    /// On or off.
+    /// On or off
     Digital {
-        /// It can also drive nothing ([`OutputValue::Released`]).
+        /// Whether it can also drive nothing ([`OutputValue::Released`])
         release: bool,
-        /// It can also go high while a capture is past its trigger
-        /// ([`OutputValue::TriggerOut`]).
+        /// Whether it can also go high while a capture is after its trigger ([`OutputValue::TriggerOut`])
         trigger_out: bool,
     },
-    /// A pulse train. It also takes `On` and `Off` as a steady level.
-    Pwm { period_us: (u32, u32) },
-    /// A steady level.
-    Analog { volts: (f64, f64) },
-    /// A signal generator. It also takes `Volts` as a steady level.
+    /// A pulse train
+    ///
+    /// - It also takes [`OutputValue::On`] and [`OutputValue::Off`] as a steady level.
+    Pwm {
+        /// The lowest and highest period, in microseconds
+        period_us: (u32, u32),
+    },
+    /// A steady level
+    Analog {
+        /// The lowest and highest level, in volts
+        volts: (f64, f64),
+    },
+    /// A signal generator
+    ///
+    /// - It also takes [`OutputValue::Volts`] as a steady level.
     SigGen(SigGenInfo),
-    /// A light. `Released` gives it back to the device.
+    /// A light
+    ///
+    /// - [`OutputValue::Released`] gives the control of the light back to the device.
     Indicator,
 }
 
-/// One output of a device, with the value it takes when made safe.
+/// One output of a device, with the value that makes it safe
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputSpec {
+    /// The id that [`Outputs::set_output`] takes
     pub id: String,
-    /// The name printed on the unit or in its guide.
+    /// The name on the unit or in its guide
     pub label: String,
+    /// The values that the output can take
     pub kind: OutputKind,
+    /// The value that makes the output safe
     pub safe: OutputValue,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
+/// A value to set an output to
 pub enum OutputValue {
+    /// Off, or low
     Off,
+    /// On, or high
     On,
-    /// Drives nothing: a pin set as an input, or a light the device
-    /// drives by itself.
+    /// Drives nothing: a pin set as an input, or a light that the device controls itself
     Released,
-    /// High while a capture is past its trigger.
+    /// High while a capture is after its trigger
     TriggerOut,
+    /// A pulse train
     Pwm {
+        /// The period, in microseconds
         period_us: u32,
+        /// The duty cycle, in percent
         duty_percent: f64,
     },
+    /// A steady level, in volts
     Volts(f64),
-    /// A signal generator's setting, or off.
+    /// A signal generator setting, or `None` for off
     SigGen(Option<SigGenConfig>),
+    /// A light colour: red, green and blue
     Rgb(u8, u8, u8),
 }
 
 impl OutputSpec {
+    /// Makes an output spec
     pub fn new(id: &str, label: &str, kind: OutputKind, safe: OutputValue) -> OutputSpec {
         OutputSpec {
             id: id.to_string(),
@@ -67,7 +89,25 @@ impl OutputSpec {
         }
     }
 
-    /// Refuses a value the output cannot take, or one out of its limits.
+    /// Checks that the output can take `value`
+    ///
+    /// - Returns Err with [`PicoStatus::INVALID_PARAMETER`] when the output cannot take the value, or the value is out of its limits.
+    ///
+    /// ```
+    /// use pico_common::{OutputKind, OutputSpec, OutputValue};
+    ///
+    /// let kind = OutputKind::Pwm {
+    ///     period_us: (100, 1800),
+    /// };
+    /// let pwm = OutputSpec::new("pwm", "PWM", kind, OutputValue::Off);
+    ///
+    /// let value = OutputValue::Pwm {
+    ///     period_us: 1000,
+    ///     duty_percent: 25.0,
+    /// };
+    /// assert!(pwm.check(&value).is_ok());
+    /// assert!(pwm.check(&OutputValue::Volts(1.0)).is_err());
+    /// ```
     pub fn check(&self, value: &OutputValue) -> PicoResult<()> {
         use OutputKind as K;
         use OutputValue as V;
@@ -107,7 +147,7 @@ fn sig_gen_fits(info: &SigGenInfo, config: &SigGenConfig) -> bool {
     info.check(config).is_ok()
 }
 
-/// A signal generator setting for a steady level of `volts`.
+/// A signal generator setting for a steady level of `volts`
 pub fn sig_gen_dc(volts: f64) -> SigGenConfig {
     SigGenConfig {
         shape: SigGenShape::Dc,
@@ -122,22 +162,30 @@ pub fn sig_gen_dc(volts: f64) -> SigGenConfig {
     }
 }
 
-/// The spec of output `id` in `specs`.
+/// Finds the spec of output `id` in `specs`
+///
+/// - Returns Err with [`PicoStatus::INVALID_PARAMETER`] when there is no output `id`.
 pub fn find_output<'a>(specs: &'a [OutputSpec], id: &str) -> PicoResult<&'a OutputSpec> {
     specs.iter().find(|spec| spec.id == id).ok_or_else(|| {
         PicoError::from_status(PicoStatus::INVALID_PARAMETER, &format!("no output {id}"))
     })
 }
 
-/// The outputs of an open device. Each family lists what it has and
-/// takes values within its limits; a device with no outputs lists none.
+/// The outputs of an open device
+///
+/// - Each family lists the outputs that it has, and takes values in their limits.
+/// - A device with no outputs gives an empty list.
 pub trait Outputs {
+    /// Lists the outputs of the device
     fn outputs(&self) -> PicoResult<Vec<OutputSpec>>;
-    /// Sets output `id`. Returns the value the device took, which can
-    /// differ from `value` where the device rounds.
+    /// Sets output `id` to `value`
+    ///
+    /// - Returns the value that the device took.
+    ///   It can be different from `value` when the device rounds it.
     fn set_output(&self, id: &str, value: &OutputValue) -> PicoResult<OutputValue>;
-    /// Sets every output to its safe value. Tries each, and returns the
-    /// first error.
+    /// Sets each output to its safe value
+    ///
+    /// - It tries each output, then returns the first error.
     fn set_outputs_safe(&self) -> PicoResult<()> {
         let mut first = Ok(());
         for spec in self.outputs()? {

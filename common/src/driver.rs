@@ -2,7 +2,22 @@ use crate::ParseError;
 use enum_iterator::Sequence;
 use std::{fmt, str::FromStr};
 
-/// Supported Pico drivers
+/// A Pico driver library
+///
+/// - It prints as the base name of the driver library, such as `ps2000a` or `usbtc08`.
+/// - It parses from that name and from the forms people write, such as `PS 2000A`, `2000a` or `TC-08`.
+///   Parsing ignores letter case, spaces, `-`, `USB` and `PS`.
+/// - [`Driver::PicoIPP`] does not parse, as it is not a device driver.
+///
+/// ```
+/// use pico_common::Driver;
+///
+/// let driver: Driver = "ps 2000a".parse().unwrap();
+/// assert_eq!(driver, Driver::PS2000A);
+/// assert_eq!(driver.to_string(), "ps2000a");
+/// assert!(driver.is_scope());
+/// assert_eq!(Driver::from_pid(0x1000), Some(Driver::TC08));
+/// ```
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
@@ -10,16 +25,25 @@ use std::{fmt, str::FromStr};
 )]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash, Sequence)]
 pub enum Driver {
+    /// PicoScope 2000 series
     PS2000,
+    /// PicoScope 2000A series
     PS2000A,
+    /// PicoScope 3000A series
     PS3000A,
+    /// PicoScope 4000 series
     PS4000,
+    /// PicoScope 4000A series
     PS4000A,
+    /// PicoScope 5000A series
     PS5000A,
+    /// PicoScope 6000 series
     PS6000,
+    /// PicoScope 6000A series
     PS6000A,
+    /// PicoScope 3000E and 5000E series (psospa)
     PSOSPA,
-    /// PicoLog 1000 series data logger
+    /// PicoLog 1000 series data loggers
     PL1000,
     /// PicoLog CM3 current data logger
     PLCM3,
@@ -27,11 +51,11 @@ pub enum Driver {
     PT104,
     /// USB TC-08 thermocouple data logger
     TC08,
-    /// ADC-20/ADC-24 high-resolution data logger
+    /// ADC-20 and ADC-24 high-resolution data loggers
     PicoHRDL,
     /// USB DrDAQ educational data logger
     DrDAQ,
-    /// Not a device driver: a shared library that ps4000 and ps6000 load at runtime
+    /// Not a device driver: a shared library that ps4000 and ps6000 load when they run
     PicoIPP,
 }
 
@@ -85,7 +109,9 @@ impl fmt::Display for Driver {
 }
 
 impl Driver {
-    /// Returns the relevant `Driver` for the supplied USB PID
+    /// The driver for a USB product id
+    ///
+    /// - Returns `None`, and logs a warning, for a product id that this crate does not know.
     pub fn from_pid(pid: u16) -> Option<Driver> {
         match pid {
             0x1007 => Some(Driver::PS2000),
@@ -110,10 +136,9 @@ impl Driver {
         }
     }
 
-    /// Whether this driver is for an oscilloscope, as opposed to a data logger
+    /// Whether this driver is for an oscilloscope, not a data logger
     ///
-    /// Enumeration returns every instrument family in one list, so this is how a caller that
-    /// only cares about scopes narrows it down.
+    /// - Use it to find the oscilloscopes in a list of all families.
     pub fn is_scope(self) -> bool {
         match self {
             Driver::PS2000
@@ -135,8 +160,8 @@ impl Driver {
         }
     }
 
-    /// Returns the platform dependent name of the driver binary with file
-    /// extension
+    /// The file name of the driver library on this operating system
+    ///
     /// ```
     /// let driver = pico_common::Driver::PS2000A;
     /// let binary_name = driver.get_binary_name();
@@ -159,10 +184,11 @@ impl Driver {
         }
     }
 
-    /// The shared libraries this driver loads at runtime, beyond the system ones.
+    /// The Pico shared libraries that this driver loads when it runs
     ///
-    /// Only ps4000 and ps6000 have one - they load `picoipp` by bare name - so it needs to sit
-    /// alongside them in the cache. Every other driver is self-contained.
+    /// - Only ps4000 and ps6000 have one.
+    ///   They load `picoipp` by its name only, thus it must be in the same directory as them.
+    /// - The other drivers need no other Pico library.
     pub fn dependencies(self) -> &'static [Driver] {
         match self {
             Driver::PS4000 | Driver::PS6000 => &[Driver::PicoIPP],

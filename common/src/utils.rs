@@ -1,9 +1,12 @@
 use std::ffi::CString;
 
-/// Pico drivers require strings as *mut i8. This converts from Rust
-/// to Pico string format
+/// Converts a Rust string to the C string that a Pico driver takes
+///
+/// - The drivers take strings as `*mut i8`.
 pub trait ToPicoStr {
-    /// Converts Rust strings to Pico null terminated Vec<i8> format
+    /// Converts the string to a NUL-terminated `Vec<i8>`
+    ///
+    /// - Panics when the string has a NUL in it.
     fn into_pico_i8_string(self) -> Vec<i8>;
 }
 
@@ -18,15 +21,16 @@ impl ToPicoStr for &str {
     }
 }
 
-/// Pico drivers return strings as *i8. This converts from Pico to Rust string
-/// formats
+/// Converts the C string that a Pico driver returns to a Rust string
+///
+/// - The drivers return strings as `*i8`.
 pub trait FromPicoStr {
-    /// Reads a C string from the first `buf_len` bytes of the buffer.
+    /// Reads a C string from the first `buf_len` bytes of the buffer
     ///
-    /// The string ends at the first NUL, or at `buf_len` or the end of the
-    /// buffer when there is none, so a length that counts the NUL, misses it
-    /// or runs past the buffer gives the same string. Bytes that are not
-    /// UTF-8 become U+FFFD.
+    /// - The string ends at the first NUL.
+    ///   When there is no NUL, it ends at `buf_len` or at the end of the buffer.
+    ///   Thus a length that counts the NUL, does not count it, or goes past the buffer gives the same string.
+    /// - Bytes that are not UTF-8 become U+FFFD.
     #[allow(clippy::wrong_self_convention)]
     fn from_pico_i8_string(self, buf_len: usize) -> String;
 }

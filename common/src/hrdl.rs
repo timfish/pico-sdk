@@ -4,33 +4,51 @@ use std::{fmt, str::FromStr, sync::Arc};
 
 use crate::{PicoError, PicoResult, PicoStatus};
 
-/// ADC-20/ADC-24 (PicoHRDL) analog input channels
+/// An analog input channel of the ADC-20 and ADC-24 (PicoHRDL) data loggers
 ///
-/// The ADC-20 has 8 channels, the ADC-24 has 16; both share this channel numbering, so the same
-/// enum covers either variant. There is also a digital input channel (`HRDL_DIGITAL_CHANNELS`,
-/// value 0) but digital I/O is out of scope here, matching the other loggers' scope decisions.
-///
-/// `Ord` follows the driver's channel numbering so iterating an ordered collection keyed by this
-/// enum gives channels in numeric order.
+/// - The ADC-20 has 8 channels and the ADC-24 has 16.
+///   Both use the same channel numbers, thus this enum is for both.
+///   [`HRDLInfo::channels`] gives the channels that the model has.
+/// - The driver also has a digital input channel (`HRDL_DIGITAL_CHANNELS`, value 0).
+///   This crate does not support digital I/O on the loggers.
+/// - `Ord` follows the channel numbers of the driver.
+///   An ordered collection with this key gives the channels in number order.
+/// - It prints and parses as the channel number, such as `1`.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum HRDLChannel {
+    /// Channel 1
     CHANNEL_1 = 1,
+    /// Channel 2
     CHANNEL_2 = 2,
+    /// Channel 3
     CHANNEL_3 = 3,
+    /// Channel 4
     CHANNEL_4 = 4,
+    /// Channel 5
     CHANNEL_5 = 5,
+    /// Channel 6
     CHANNEL_6 = 6,
+    /// Channel 7
     CHANNEL_7 = 7,
+    /// Channel 8
     CHANNEL_8 = 8,
+    /// Channel 9
     CHANNEL_9 = 9,
+    /// Channel 10
     CHANNEL_10 = 10,
+    /// Channel 11
     CHANNEL_11 = 11,
+    /// Channel 12
     CHANNEL_12 = 12,
+    /// Channel 13
     CHANNEL_13 = 13,
+    /// Channel 14
     CHANNEL_14 = 14,
+    /// Channel 15
     CHANNEL_15 = 15,
+    /// Channel 16
     CHANNEL_16 = 16,
 }
 
@@ -74,22 +92,31 @@ impl FromStr for HRDLChannel {
     }
 }
 
-/// Input voltage range for a [`HRDLChannel`]
+/// The input voltage range of a [`HRDLChannel`]
+///
+/// - The ADC-20 has only ±2500 mV and ±1250 mV.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum HRDLRange {
+    /// ±2500 mV
     #[default]
     Range2500mV,
+    /// ±1250 mV
     Range1250mV,
+    /// ±625 mV
     Range625mV,
+    /// ±312.5 mV
     Range313mV,
+    /// ±156.25 mV
     Range156mV,
+    /// ±78.125 mV
     Range78mV,
+    /// ±39.0625 mV
     Range39mV,
 }
 
 impl From<HRDLRange> for i16 {
-    /// Maps to `HRDL_RANGE` constants from the FFI bindings.
+    /// The `HRDL_RANGE` value of the driver
     fn from(value: HRDLRange) -> Self {
         match value {
             HRDLRange::Range2500mV => 0,
@@ -106,14 +133,21 @@ impl From<HRDLRange> for i16 {
 impl HRDLRange {
     /// The input voltage at the full-scale count
     ///
-    /// ADC-20/ADC-24 Programmer's Guide (adc20.en r2, section 4.3 Scaling): Vmax = 2500 mV / 2^r
-    /// for range constant r, so ±312.5 mV for [`HRDLRange::Range313mV`] and so on (section 5.16,
-    /// voltage ranges).
+    /// - The ADC-20/ADC-24 Programmer's Guide (adc20.en r2, section 4.3 Scaling) gives Vmax = 2500 mV / 2^r for range constant r.
+    ///   Thus [`HRDLRange::Range313mV`] is ±312.5 mV (section 5.16, voltage ranges).
+    ///
+    /// ```
+    /// use pico_common::HRDLRange;
+    ///
+    /// assert_eq!(HRDLRange::Range313mV.volts(), 0.3125);
+    /// ```
     pub fn volts(self) -> f64 {
         2.5 / f64::from(1u16 << i16::from(self))
     }
 
-    /// Whether the ADC-20 has this range: only ±2500 mV and ±1250 mV (section 5.16)
+    /// Whether the ADC-20 has this range
+    ///
+    /// - The ADC-20 has only ±2500 mV and ±1250 mV (section 5.16).
     pub fn on_adc20(self) -> bool {
         matches!(self, HRDLRange::Range2500mV | HRDLRange::Range1250mV)
     }
@@ -152,23 +186,28 @@ impl FromStr for HRDLRange {
     }
 }
 
-/// Per-sample conversion time, set once for the unit (not per channel)
+/// The conversion time of each sample, for the whole unit
 ///
-/// Slower conversion times reject more noise but limit how many channels can be sampled within a
-/// given sample interval - `HRDLSetInterval` takes one of these for the whole unit.
+/// - `HRDLSetInterval` takes one value for the unit, not one for each channel.
+/// - A slower conversion removes more noise, but fewer channels fit in a sample interval.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum HRDLConversionTime {
+    /// 60 ms
     #[default]
     Time60ms,
+    /// 100 ms
     Time100ms,
+    /// 180 ms
     Time180ms,
+    /// 340 ms
     Time340ms,
+    /// 660 ms
     Time660ms,
 }
 
 impl From<HRDLConversionTime> for i16 {
-    /// Maps to `HRDL_CONVERSION_TIME` constants from the FFI bindings.
+    /// The `HRDL_CONVERSION_TIME` value of the driver
     fn from(value: HRDLConversionTime) -> Self {
         match value {
             HRDLConversionTime::Time60ms => 0,
@@ -181,7 +220,7 @@ impl From<HRDLConversionTime> for i16 {
 }
 
 impl HRDLConversionTime {
-    /// The conversion time of one channel in milliseconds (section 5.18, conversion times)
+    /// The conversion time of one channel, in milliseconds (section 5.18, conversion times)
     pub fn ms(self) -> i32 {
         match self {
             HRDLConversionTime::Time60ms => 60,
@@ -205,22 +244,26 @@ impl fmt::Display for HRDLConversionTime {
     }
 }
 
-/// What was discovered about a PicoHRDL unit once it was opened
+/// What the driver tells about an ADC-20 or ADC-24 unit after it opens
 ///
-/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
-/// unit handle), not configuration or a capability. Every other field is already trivially
-/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
-/// can do so from those fields directly without this type needing to derive serde itself.
+/// - It has no `Serialize` or `Deserialize`, as `handle` is the handle of an open unit.
+///   The other fields are strings, which you can serialize one by one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HRDLInfo {
+    /// The driver handle of the open unit
     pub handle: Arc<i16>,
+    /// The serial number
     pub serial: String,
+    /// The hardware version
     pub hardware_version: String,
+    /// The variant, such as `"20"` or `"24"`
     pub variant: String,
 }
 
 impl HRDLInfo {
-    /// Whether the unit is an ADC-20, from its variant; else an ADC-24
+    /// Whether the variant is an ADC-20
+    ///
+    /// - Any other variant counts as an ADC-24.
     pub fn is_adc20(&self) -> bool {
         self.variant
             .trim()
@@ -233,14 +276,15 @@ impl HRDLInfo {
         if self.is_adc20() { "ADC-20" } else { "ADC-24" }.to_string()
     }
 
-    /// The analog channels the variant has: 1 to 8 on the ADC-20 and 1 to 16 on the ADC-24
-    /// (section 5.16, `HRDLSetAnalogInChannel`)
+    /// The analog channels that the variant has
+    ///
+    /// - The ADC-20 has channels 1 to 8, and the ADC-24 has channels 1 to 16 (section 5.16, `HRDLSetAnalogInChannel`).
     pub fn channels(&self) -> Vec<HRDLChannel> {
         let count = if self.is_adc20() { 8 } else { 16 };
         enum_iterator::all::<HRDLChannel>().take(count).collect()
     }
 
-    /// The ranges the variant has (section 5.16)
+    /// The ranges that the variant has (section 5.16)
     pub fn ranges(&self) -> Vec<HRDLRange> {
         enum_iterator::all::<HRDLRange>()
             .filter(|range| !self.is_adc20() || range.on_adc20())
@@ -248,35 +292,46 @@ impl HRDLInfo {
     }
 }
 
-/// Error codes reported by `HRDLGetUnitInfo(handle, ..., HRDL_SETTINGS)`
+/// An error code that `HRDLGetUnitInfo(handle, ..., HRDL_SETTINGS)` returns
 ///
-/// Unlike the other loggers in this family, most HRDL driver calls only report a bare
-/// success/fail flag (0/1); the reason for a failure has to be fetched separately by reading the
-/// `HRDL_SETTINGS` info field back as a decimal string and parsing it as one of these. This
-/// mirrors `usb_tc08_get_last_error` conceptually, though the transport (a stringified info
-/// field, not a dedicated call) is unique to this driver.
+/// - Most PicoHRDL driver calls return only 0 or 1 for fail or pass.
+///   To find the cause of a failure, read the `HRDL_SETTINGS` info field as a decimal string, and parse it with [`HRDLError::from_code`].
+/// - It does the same job as `usb_tc08_get_last_error` on the TC-08, but through an info field.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum HRDLError {
+    /// The conversion time is out of range
     CONVERSION_TIME_OUT_OF_RANGE = 0,
+    /// The sample interval is out of range
     SAMPLE_INTERVAL_OUT_OF_RANGE = 1,
+    /// The conversion time is too slow for the sample interval
     CONVERSION_TIME_TOO_SLOW = 2,
+    /// The unit does not have the channel
     CHANNEL_NOT_AVAILABLE = 3,
+    /// The channel is not valid
     INVALID_CHANNEL = 4,
+    /// The voltage range is not valid
     INVALID_VOLTAGE_RANGE = 5,
+    /// A parameter is not valid
     INVALID_PARAMETER = 6,
+    /// A conversion is in progress
     CONVERSION_IN_PROGRESS = 7,
+    /// The communication with the unit failed
     COMMUNICATION_FAILED = 8,
+    /// No error
     OK = 9,
 }
 
 impl HRDLError {
-    /// Parses the decimal error code read back from the `HRDL_SETTINGS` info field
+    /// The error for a code from the `HRDL_SETTINGS` info field
+    ///
+    /// - Returns `None` for an unknown code.
     pub fn from_code(code: i32) -> Option<Self> {
         num_traits::FromPrimitive::from_i32(code)
     }
 
+    /// The [`PicoStatus`] nearest to this error
     pub fn to_status(self) -> PicoStatus {
         match self {
             HRDLError::CONVERSION_TIME_OUT_OF_RANGE => PicoStatus::INVALID_TIMEBASE,
@@ -292,7 +347,10 @@ impl HRDLError {
         }
     }
 
-    /// Converts a `HRDLError` to a `PicoResult<T>` with context
+    /// Converts the error to a [`PicoResult`]
+    ///
+    /// - Returns `Ok(ok_val)` for [`HRDLError::OK`].
+    /// - Returns `Err` with `context` for all other errors.
     pub fn to_result<T>(self, ok_val: T, context: &str) -> PicoResult<T> {
         match self.to_status() {
             PicoStatus::OK => Ok(ok_val),

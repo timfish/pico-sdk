@@ -4,25 +4,33 @@ use std::{fmt, str::FromStr, sync::Arc};
 
 use crate::ParseError;
 
-/// USB TC-08 channels
+/// A channel of the USB TC-08 thermocouple data logger
 ///
-/// Unlike oscilloscope channels, which are lettered, logger channels are numbered. Channel 0 is
-/// the cold junction rather than a thermocouple input.
-///
-/// `Ord` follows the driver's channel numbering, so iterating an ordered collection keyed by this
-/// gives cold junction first and then channels 1 to 8.
+/// - Logger channels have numbers, not letters as on an oscilloscope.
+/// - Channel 0 is the cold junction, not a thermocouple input.
+/// - `Ord` follows the channel numbers of the driver.
+///   An ordered collection with this key gives the cold junction first, then channels 1 to 8.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum TC08Channel {
+    /// Cold junction compensation sensor
     CHANNEL_CJC = 0,
+    /// Channel 1
     CHANNEL_1 = 1,
+    /// Channel 2
     CHANNEL_2 = 2,
+    /// Channel 3
     CHANNEL_3 = 3,
+    /// Channel 4
     CHANNEL_4 = 4,
+    /// Channel 5
     CHANNEL_5 = 5,
+    /// Channel 6
     CHANNEL_6 = 6,
+    /// Channel 7
     CHANNEL_7 = 7,
+    /// Channel 8
     CHANNEL_8 = 8,
 }
 
@@ -62,23 +70,31 @@ impl FromStr for TC08Channel {
     }
 }
 
-/// Thermocouple types supported by the TC-08
+/// A thermocouple type that the TC-08 can read
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum TCType {
+    /// Type B
     B,
+    /// Type E
     E,
+    /// Type J
     J,
+    /// Type K
     #[default]
     K,
+    /// Type N
     N,
+    /// Type R
     R,
+    /// Type S
     S,
+    /// Type T
     T,
 }
 
 impl From<TCType> for i8 {
-    /// The driver identifies thermocouple types by their letter
+    /// The letter of the type, as the driver takes it
     fn from(value: TCType) -> Self {
         match value {
             TCType::B => b'B' as i8,
@@ -120,12 +136,14 @@ impl FromStr for TCType {
     }
 }
 
-/// Mains frequency to reject when filtering samples
+/// The mains frequency that the filter removes from the samples
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum MainsRejectionFreq {
+    /// 50 Hz
     #[default]
     _50Hz,
+    /// 60 Hz
     _60Hz,
 }
 
@@ -152,17 +170,19 @@ impl FromStr for MainsRejectionFreq {
     }
 }
 
-/// What was discovered about a TC-08 once it was opened
+/// What the driver tells about a TC-08 unit after it opens
 ///
-/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
-/// unit handle), not configuration or a capability. Every other field is already trivially
-/// serializable (`String`/`i16`), so a consumer that wants to ship the capability data over the
-/// wire can do so from those fields directly without this type needing to derive serde itself.
+/// - It has no `Serialize` or `Deserialize`, as `handle` is the handle of an open unit.
+///   The other fields are plain values, which you can serialize one by one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TC08Info {
+    /// The driver handle of the open unit
     pub handle: Arc<i16>,
+    /// The serial number
     pub serial: String,
+    /// The hardware version
     pub hardware_version: i16,
+    /// The variant number
     pub variant: i16,
 }
 

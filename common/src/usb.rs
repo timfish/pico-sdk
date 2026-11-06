@@ -17,7 +17,7 @@ pub enum UsbSpeed {
 }
 
 impl UsbSpeed {
-    /// The nominal signalling rate in bits per second
+    /// The nominal signal rate, in bits per second
     pub fn bits_per_second(self) -> u64 {
         match self {
             UsbSpeed::Low => 1_500_000,
@@ -28,7 +28,7 @@ impl UsbSpeed {
         }
     }
 
-    /// The name people know the speed by, such as "USB 2.0 High Speed"
+    /// The usual name of the speed, such as "USB 2.0 High Speed"
     pub fn name(self) -> &'static str {
         match self {
             UsbSpeed::Low => "USB 1.1 Low Speed",
@@ -46,11 +46,22 @@ impl fmt::Display for UsbSpeed {
     }
 }
 
-/// How a device is attached to the host over USB
+/// How a device connects to the host over USB
 ///
-/// A device that supports USB 3 but sits on a USB 2 port or cable shows
-/// `usb_version` 3.0 with `speed` [`UsbSpeed::High`], so compare the two to
-/// find a link that holds a device back.
+/// - A USB 3 device on a USB 2 port or cable shows `usb_version` 3.0 with `speed` [`UsbSpeed::High`].
+///   Compare the two to find a link that makes a device slower.
+///
+/// ```
+/// use pico_common::{UsbLink, UsbSpeed};
+///
+/// let link = UsbLink {
+///     speed: Some(UsbSpeed::High),
+///     usb_version: 0x0300,
+///     product_id: 0x1218,
+/// };
+/// assert_eq!(link.usb_version_string(), "3.0");
+/// assert_eq!(link.to_string(), "USB 2.0 High Speed (device USB 3.0)");
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UsbLink {

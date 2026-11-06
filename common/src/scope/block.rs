@@ -1,19 +1,20 @@
 use crate::{OscilloscopeSampleConfig, PicoStatus, TimeUnits};
 
-/// A timebase the driver offers: its index, the sample interval and the
-/// most samples a capture at it can hold.
+/// A timebase of the driver: its index, the sample interval, and the maximum samples of a capture at it
 #[derive(Debug, Clone, Copy)]
 pub struct Timebase {
+    /// The timebase index of the driver
     pub index: u32,
+    /// The sample interval, in whole time units
     pub interval: OscilloscopeSampleConfig,
-    /// The interval in seconds, as the driver gave it. `interval` holds
-    /// it in whole units.
+    /// The sample interval in seconds, as the driver gave it
     pub interval_s: f64,
+    /// The maximum number of samples of a capture at this timebase
     pub max_samples: u64,
 }
 
 impl Timebase {
-    /// A timebase from the interval in ns the driver gave.
+    /// Makes a timebase from the interval in nanoseconds that the driver gave
     pub fn from_ns(index: u32, interval_ns: f64, max_samples: u64) -> Self {
         Timebase {
             index,
@@ -23,89 +24,105 @@ impl Timebase {
         }
     }
 
+    /// The sample rate, in samples per second
     pub fn samples_per_second(&self) -> f64 {
         1.0 / self.interval_s
     }
 }
 
-/// One block capture: samples before and after the trigger at a
-/// timebase, into a memory segment.
+/// The settings of one block capture: the samples before and after the trigger, the timebase and the memory segment
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockConfig {
+    /// The number of samples before the trigger
     pub pre_trigger: u64,
+    /// The number of samples after the trigger
     pub post_trigger: u64,
-    /// The timebase index, from `BlockDriver::timebase` or
-    /// `BlockDriver::nearest_timebase`.
+    /// The timebase index of the driver, as in [`Timebase::index`]
     pub timebase: u32,
-    /// The segment of a block capture. A rapid block capture starts at
-    /// segment 0 and fills as many as `RapidBlockDriver::set_captures`
-    /// set.
+    /// The memory segment of a block capture
+    ///
+    /// - A rapid block capture starts at segment 0, and fills one segment for each capture.
     pub segment: u64,
 }
 
 impl BlockConfig {
+    /// The number of samples in the capture: before and after the trigger
     pub fn samples(&self) -> u64 {
         self.pre_trigger + self.post_trigger
     }
 }
 
-/// Rapid block: `captures` blocks into `segments` memory segments.
+/// The settings of a rapid block capture: `captures` blocks into `segments` memory segments
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RapidBlockConfig {
+    /// The settings of each block
     pub block: BlockConfig,
+    /// The number of memory segments
     pub segments: u64,
+    /// The number of captures
     pub captures: u64,
 }
 
-/// Channels whose input went over range in a capture or a streamed
-/// block, one bit a channel from bit 0 for channel A.
+/// The channels whose input went over range in a capture or a streamed block
+///
+/// - It has one bit for each channel, from bit 0 for channel A.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Overflow(pub u16);
 
-/// The counter a segment's timestamp comes from. The families count
-/// from different points, so the two stay apart.
+/// The timestamp of a segment, and the counter that it comes from
+///
+/// - The families start to count at different points, thus there are two variants.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SegmentTimestamp {
-    /// Sample intervals since the trigger point of the segment before,
-    /// worked out from a 48-bit counter (ps5000a §4.18.2; ps3000a on the
-    /// 3207A/B). 0 for a segment whose counter was reset.
+    /// The sample intervals since the trigger point of the segment before, from a 48-bit counter
+    ///
+    /// - The ps5000a (§4.18.2) and the ps3000a on the 3207A/B use it.
+    /// - It is 0 for a segment whose counter started again.
     SincePrevious(u64),
-    /// The unit's 56-bit counter in sample intervals, from an arbitrary
-    /// start (ps6000a §3.18.2; psospa topic: pico_trigger_info).
-    /// Differences between segments give their spacing.
+    /// The 56-bit counter of the unit, in sample intervals, from a start that is not fixed
+    ///
+    /// - The ps6000a (§3.18.2) and the psospa (topic: pico_trigger_info) use it.
+    /// - The difference between two segments gives the time between them.
     SinceFirst(u64),
 }
 
-/// The 56-bit timestamp counter of ps6000a and psospa (ps6000a §3.18.2).
+/// The mask of the 56-bit timestamp counter of ps6000a and psospa (ps6000a §3.18.2)
 pub const SINCE_FIRST_MASK: u64 = (1 << 56) - 1;
-/// The 48-bit timestamp counter of ps5000a (§4.18.2).
+/// The mask of the 48-bit timestamp counter of ps5000a (§4.18.2)
 pub const SINCE_PREVIOUS_MASK: u64 = (1 << 48) - 1;
 
-/// Trigger timing of one segment. A family fills what it has and leaves
-/// the rest `None`.
+/// The trigger timing of one segment
+///
+/// - Each family fills the fields that it has, and leaves the others `None`.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct TriggerInfo {
+    /// The memory segment
     pub segment: u64,
+    /// The sample index of the trigger point
     pub trigger_index: Option<u64>,
-    /// Time from the trigger point to the trigger event, below one
-    /// sample interval.
+    /// The time from the trigger point to the trigger event in seconds, less than one sample interval
     pub offset_s: Option<f64>,
+    /// The timestamp of the segment
     pub timestamp: Option<SegmentTimestamp>,
+    /// The number of triggers that the unit missed before this segment
     pub missed_triggers: Option<u64>,
-    /// The counter started over at this segment, so its timestamp says
-    /// nothing of the segment before.
+    /// Whether the counter started again at this segment
+    ///
+    /// - When it did, the timestamp tells nothing about the segment before.
     pub timestamp_reset: bool,
 }
 
-/// Each segment's trigger time in seconds from the first segment's, by
-/// the unit's counter, for segments in capture order with an interval
-/// of `interval_s`. `None` where the counter has no answer: no counter,
-/// or a reset since the first segment.
+/// The trigger time of each segment, in seconds from the trigger of the first segment
+///
+/// - `infos` must be in capture order, and `interval_s` is the sample interval in seconds.
+/// - The time comes from the counter of the unit.
+/// - The time is `None` for a segment with no counter, or whose counter started again.
+///   It is also `None` for all the segments after that one.
 pub fn trigger_times(infos: &[TriggerInfo], interval_s: f64) -> Vec<Option<f64>> {
     let mut since_first = Some(0u64);
     let mut counter = None;
@@ -132,18 +149,22 @@ pub fn trigger_times(infos: &[TriggerInfo], interval_s: f64) -> Vec<Option<f64>>
         .collect()
 }
 
-/// A status a driver wrote into a struct, which can hold bit flags the
-/// status list does not name (ps6000a §3.18.1).
+/// The status for a raw value that a driver wrote into a struct
+///
+/// - The raw value can hold bit flags that [`PicoStatus`] does not name (ps6000a §3.18.1).
+/// - Returns [`PicoStatus::OPERATION_FAILED`] for a value that is not a known status.
 pub fn status_from_raw(raw: u32) -> PicoStatus {
     num_traits::FromPrimitive::from_u32(raw).unwrap_or(PicoStatus::OPERATION_FAILED)
 }
 
-/// Whether a raw trigger info status has the time stamp reset flag.
+/// Whether a raw trigger info status has the flag [`PicoStatus::DEVICE_TIME_STAMP_RESET`]
 pub fn timestamp_reset(raw: u32) -> bool {
     raw & PicoStatus::DEVICE_TIME_STAMP_RESET as u32 != 0
 }
 
-/// A trigger time offset from a family's time and unit code.
+/// A trigger time offset in seconds, from a time and a `PICO_TIME_UNITS` code
+///
+/// - Returns NaN for an unknown unit code.
 pub fn offset_seconds(time: i64, units: i32) -> f64 {
     let units: Option<TimeUnits> = num_traits::FromPrimitive::from_i32(units);
     time as f64 * units.map_or(f64::NAN, TimeUnits::get_multiplier)

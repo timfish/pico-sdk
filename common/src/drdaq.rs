@@ -4,11 +4,11 @@ use std::{fmt, str::FromStr, sync::Arc};
 
 use crate::ParseError;
 
-/// USB DrDAQ onboard sensor channels
+/// A channel of the USB DrDAQ data logger
 ///
-/// Unlike the other loggers in this family, DrDAQ's channels are not generic analog inputs - each
-/// one is a specific onboard (or external probe) sensor. `Ord` follows the driver's channel
-/// numbering.
+/// - Each channel is one sensor on the board, or one input for an external probe.
+///   The channels are not general analog inputs, as on the other loggers.
+/// - `Ord` follows the channel numbers of the driver.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
@@ -19,7 +19,7 @@ pub enum DrDAQChannel {
     CHANNEL_EXT2 = 2,
     /// External probe input 3
     CHANNEL_EXT3 = 3,
-    /// The onboard oscilloscope input
+    /// Onboard oscilloscope input
     CHANNEL_SCOPE = 4,
     /// Onboard pH probe input
     CHANNEL_PH = 5,
@@ -36,7 +36,7 @@ pub enum DrDAQChannel {
 }
 
 impl From<DrDAQChannel> for u32 {
-    /// `UsbDrDaqSetInterval`/`UsbDrDaqGetSingle` take the channel as `USB_DRDAQ_INPUTS`, a C `uint`
+    /// The `USB_DRDAQ_INPUTS` value, a C `uint`, that `UsbDrDaqSetInterval` and `UsbDrDaqGetSingle` take
     fn from(value: DrDAQChannel) -> Self {
         num_traits::ToPrimitive::to_u32(&value).expect("Non-valid channel")
     }
@@ -81,25 +81,39 @@ impl FromStr for DrDAQChannel {
     }
 }
 
-/// The valid engineering-unit range and display resolution for a [`DrDAQChannel`], as reported by
-/// `UsbDrDaqGetChannelInfo`
+/// The range and display resolution of a [`DrDAQChannel`], in its unit, as `UsbDrDaqGetChannelInfo` returns them
 ///
-/// This is device-reported capability data rather than a hard coded per-channel table, following
-/// the platform's "capabilities are runtime data, not schema" convention.
+/// - The device gives these values; this crate has no table of them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrDAQChannelInfo {
+    /// The minimum value, in the unit of the channel
     pub min: f32,
+    /// The maximum value, in the unit of the channel
     pub max: f32,
+    /// The number of decimal places to show
     pub decimal_places: i16,
-    /// What a value from `UsbDrDaqGetValues` or `UsbDrDaqGetValuesF` is divided by to give the
-    /// scaled value: a pH of 7.65 comes back as 765 with a divider of 100 (USB DrDAQ Programmer's
-    /// Guide, usbdrdaqpg.en r9, sections 2.6 and 3.3)
+    /// The number that divides a value from `UsbDrDaqGetValues` or `UsbDrDaqGetValuesF` to give the scaled value
+    ///
+    /// - A pH of 7.65 comes back as 765 with a divider of 100 (USB DrDAQ Programmer's Guide, usbdrdaqpg.en r9, sections 2.6 and 3.3).
     pub divider: i16,
 }
 
 impl DrDAQChannelInfo {
-    /// Scales a value read from the driver by the channel's divider; a divider of 0 or less is
-    /// taken as 1
+    /// Divides a value from the driver by the divider of the channel
+    ///
+    /// - A divider of 0 or less counts as 1.
+    ///
+    /// ```
+    /// use pico_common::DrDAQChannelInfo;
+    ///
+    /// let ph = DrDAQChannelInfo {
+    ///     min: 0.0,
+    ///     max: 14.0,
+    ///     decimal_places: 2,
+    ///     divider: 100,
+    /// };
+    /// assert_eq!(ph.scale(765.0), 7.65);
+    /// ```
     pub fn scale(&self, value: f32) -> f32 {
         if self.divider > 0 {
             value / self.divider as f32
@@ -109,17 +123,19 @@ impl DrDAQChannelInfo {
     }
 }
 
-/// What was discovered about a USB DrDAQ unit once it was opened
+/// What the driver tells about a USB DrDAQ unit after it opens
 ///
-/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
-/// unit handle), not configuration or a capability. Every other field is already trivially
-/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
-/// can do so from those fields directly without this type needing to derive serde itself.
+/// - It has no `Serialize` or `Deserialize`, as `handle` is the handle of an open unit.
+///   The other fields are strings, which you can serialize one by one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DrDAQInfo {
+    /// The driver handle of the open unit
     pub handle: Arc<i16>,
+    /// The serial number
     pub serial: String,
+    /// The model name
     pub variant: String,
+    /// The hardware version
     pub hardware_version: String,
 }
 

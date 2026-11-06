@@ -4,46 +4,61 @@ use std::{fmt, str::FromStr, sync::Arc};
 
 use crate::ParseError;
 
-/// PicoLog 1000 series analog input channels
+/// An analog input channel of the PicoLog 1000 series data loggers
 ///
-/// The 1000 series family spans several variants (PL1000, PL1010, PL1012, PL1216, ...) with
-/// different channel counts, but the driver exposes the same 16 channel numbers regardless of
-/// which are physically present on a given unit - `pl1000MaxValue` and the device's reported
-/// variant are how a caller narrows down what is actually usable.
-///
-/// `Ord` follows the driver's channel numbering so iterating an ordered collection keyed by this
-/// enum gives channels in numeric order.
+/// - The models of the series (PL1000, PL1010, PL1012, PL1216 and more) have different numbers of channels.
+///   The driver has the same 16 channel numbers on each model.
+///   [`PL1000Info::channels`] gives the channels that the model has.
+/// - `Ord` follows the channel numbers of the driver.
+///   An ordered collection with this key gives the channels in number order.
+/// - It prints and parses as the channel number, such as `1`.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum PL1000Channel {
+    /// Channel 1
     CHANNEL_1 = 1,
+    /// Channel 2
     CHANNEL_2 = 2,
+    /// Channel 3
     CHANNEL_3 = 3,
+    /// Channel 4
     CHANNEL_4 = 4,
+    /// Channel 5
     CHANNEL_5 = 5,
+    /// Channel 6
     CHANNEL_6 = 6,
+    /// Channel 7
     CHANNEL_7 = 7,
+    /// Channel 8
     CHANNEL_8 = 8,
+    /// Channel 9
     CHANNEL_9 = 9,
+    /// Channel 10
     CHANNEL_10 = 10,
+    /// Channel 11
     CHANNEL_11 = 11,
+    /// Channel 12
     CHANNEL_12 = 12,
+    /// Channel 13
     CHANNEL_13 = 13,
+    /// Channel 14
     CHANNEL_14 = 14,
+    /// Channel 15
     CHANNEL_15 = 15,
+    /// Channel 16
     CHANNEL_16 = 16,
 }
 
 impl From<PL1000Channel> for i16 {
-    /// `pl1000SetInterval` takes the channel list as a plain `*mut i16` array
+    /// The channel number as `pl1000SetInterval` takes it, in a `*mut i16` array
     fn from(value: PL1000Channel) -> Self {
         num_traits::ToPrimitive::to_i16(&value).expect("Non-valid channel")
     }
 }
 
 impl From<PL1000Channel> for u32 {
-    /// `pl1000GetSingle` takes the channel as `PL1000_INPUTS`, which is a C `uint`
+    /// The `PL1000_INPUTS` value, a C `uint`, that `pl1000GetSingle` takes
     fn from(value: PL1000Channel) -> Self {
         num_traits::ToPrimitive::to_u32(&value).expect("Non-valid channel")
     }
@@ -83,32 +98,33 @@ impl FromStr for PL1000Channel {
     }
 }
 
-/// What was discovered about a PicoLog 1000 series unit once it was opened
+/// What the driver tells about a PicoLog 1000 series unit after it opens
 ///
-/// `max_value` is the full-scale ADC reading reported by `pl1000MaxValue`. The 1000 series has no
-/// per-channel range setting: every channel reads 0 to [`PL1000_FULL_SCALE_VOLTS`], so
-/// [`PL1000Info::volts_per_count`] scales a reading to volts.
-///
-/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
-/// unit handle), not configuration or a capability. Every other field is already trivially
-/// serializable (`String`/`u16`), so a consumer that wants to ship the capability data over the
-/// wire can do so from those fields directly without this type needing to derive serde itself.
+/// - The 1000 series has no range setting.
+///   Each channel reads 0 to [`PL1000_FULL_SCALE_VOLTS`], and [`PL1000Info::volts_per_count`] scales a reading to volts.
+/// - It has no `Serialize` or `Deserialize`, as `handle` is the handle of an open unit.
+///   The other fields are plain values, which you can serialize one by one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PL1000Info {
+    /// The driver handle of the open unit
     pub handle: Arc<i16>,
+    /// The serial number
     pub serial: String,
+    /// The variant, such as `"1216"`
     pub variant: String,
+    /// The full-scale ADC reading, from `pl1000MaxValue`
     pub max_value: u16,
 }
 
 /// The input voltage at `max_value` for every PicoLog 1000 Series unit
 ///
-/// PicoLog 1000 Series Programmer's Guide (pl1000pg r7, section 3.2 Scaling): "To convert ADC
-/// readings to volts, multiply by 2.5 and divide by maxValue".
+/// - The PicoLog 1000 Series Programmer's Guide (pl1000pg r7, section 3.2 Scaling) says "To convert ADC readings to volts, multiply by 2.5 and divide by maxValue".
 pub const PL1000_FULL_SCALE_VOLTS: f64 = 2.5;
 
 impl PL1000Info {
-    /// The model name, for example `"PicoLog 1216"`
+    /// The model name, such as `"PicoLog 1216"`
+    ///
+    /// - Returns `"PicoLog 1000"` when the variant is empty.
     pub fn model(&self) -> String {
         let variant = self.variant.trim();
         if variant.starts_with(|c: char| c.is_ascii_digit()) {
@@ -126,15 +142,30 @@ impl PL1000Info {
     }
 
     /// The factor from an ADC count to volts
+    ///
+    /// - A `max_value` of 0 counts as 1.
+    ///
+    /// ```
+    /// use pico_common::PL1000Info;
+    /// use std::sync::Arc;
+    ///
+    /// let info = PL1000Info {
+    ///     handle: Arc::new(0),
+    ///     serial: "A0001/001".into(),
+    ///     variant: "1216".into(),
+    ///     max_value: 4095,
+    /// };
+    /// assert_eq!(4095.0 * info.volts_per_count(), 2.5);
+    /// ```
     pub fn volts_per_count(&self) -> f64 {
         PL1000_FULL_SCALE_VOLTS / self.max_value.max(1) as f64
     }
 
-    /// The channels the variant has
+    /// The channels that the variant has
     ///
-    /// PicoLog 1000 Series Programmer's Guide (pl1000pg r7, section 1, and `pl1000GetSingle`):
-    /// the PicoLog 1012 has channels 1 to 12 and the PicoLog 1216 channels 1 to 16. An unknown
-    /// variant lists all 16.
+    /// - The PicoLog 1012 has channels 1 to 12, and the PicoLog 1216 has channels 1 to 16.
+    ///   See the PicoLog 1000 Series Programmer's Guide (pl1000pg r7, section 1, and `pl1000GetSingle`).
+    /// - An unknown variant gives all 16.
     pub fn channels(&self) -> Vec<PL1000Channel> {
         let count = if self.variant.contains("1012") {
             12

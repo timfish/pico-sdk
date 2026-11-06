@@ -4,27 +4,39 @@ use num_traits::FromPrimitive;
 use std::ops::{BitOr, BitOrAssign};
 
 impl Overflow {
-    /// The bit field a family's callback or `GetValues` gives: bit 0 for
-    /// channel A. Every family's guide gives this layout.
+    /// Makes the flags from the bit field that a callback or `GetValues` gives
+    ///
+    /// - Bit 0 is channel A.
+    ///   The guide of each family gives this layout.
+    ///
+    /// ```
+    /// use pico_common::{Overflow, PicoChannel};
+    ///
+    /// let overflow = Overflow::from_bits(0b1010);
+    /// assert!(overflow.channel(PicoChannel::B));
+    /// let channels: Vec<_> = overflow.channels().collect();
+    /// assert_eq!(channels, [PicoChannel::B, PicoChannel::D]);
+    /// ```
     pub fn from_bits(bits: i16) -> Self {
         Overflow(bits as u16)
     }
 
-    /// Whether `channel` went over range.
+    /// Whether `channel` went over range
     pub fn channel(&self, channel: PicoChannel) -> bool {
         self.0 & (1 << channel as u16) != 0
     }
 
-    /// This with `channel` marked over range.
+    /// A copy with `channel` marked over range
     pub fn with(self, channel: PicoChannel) -> Self {
         Overflow(self.0 | 1 << channel as u16)
     }
 
+    /// Whether no channel went over range
     pub fn is_empty(&self) -> bool {
         self.0 == 0
     }
 
-    /// The channels marked over range, A first.
+    /// The channels marked over range, channel A first
     pub fn channels(&self) -> impl Iterator<Item = PicoChannel> + '_ {
         (0..16u8)
             .filter(|bit| self.0 & (1 << bit) != 0)

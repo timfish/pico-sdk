@@ -1,21 +1,31 @@
 use num_derive::*;
 use std::{convert::From, fmt, str::FromStr};
 
-/// Error when attempting to parse enums from strings
+/// The error when a string does not parse as one of the enums of this crate
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseError;
 
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, Ord, PartialOrd, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-/// Pico channel options
+/// An analog input channel of an oscilloscope
+///
+/// - It prints and parses as the letter, such as `A`.
 pub enum PicoChannel {
+    /// Channel A
     A = 0,
+    /// Channel B
     B = 1,
+    /// Channel C
     C = 2,
+    /// Channel D
     D = 3,
+    /// Channel E
     E = 4,
+    /// Channel F
     F = 5,
+    /// Channel G
     G = 6,
+    /// Channel H
     H = 7,
 }
 
@@ -64,12 +74,18 @@ impl From<PicoChannel> for i16 {
 }
 
 impl From<i32> for PicoChannel {
+    /// The channel for a driver channel number
+    ///
+    /// - Panics when the number is not 0 to 7.
     fn from(value: i32) -> Self {
         num_traits::FromPrimitive::from_i32(value).expect("Non-valid channel")
     }
 }
 
 impl From<u32> for PicoChannel {
+    /// The channel for a driver channel number
+    ///
+    /// - Panics when the number is not 0 to 7.
     fn from(value: u32) -> Self {
         num_traits::FromPrimitive::from_u32(value).expect("Non-valid channel")
     }
@@ -87,21 +103,29 @@ mod channel_tests {
     }
 }
 
-/// Vertical resolution of a flexible-resolution oscilloscope. The values
-/// are the driver's `PICO_DEVICE_RESOLUTION` codes.
+/// The vertical resolution of an oscilloscope with a choice of resolution
+///
+/// - The value of each variant is the `PICO_DEVICE_RESOLUTION` code of the driver.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, Ord, PartialOrd, Hash, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 pub enum PicoResolution {
+    /// 8 bits
     DR_8BIT = 0,
+    /// 12 bits
     DR_12BIT = 1,
+    /// 14 bits
     DR_14BIT = 2,
+    /// 15 bits
     DR_15BIT = 3,
+    /// 16 bits
     DR_16BIT = 4,
+    /// 10 bits
     DR_10BIT = 10,
 }
 
 impl PicoResolution {
+    /// The number of bits
     pub fn bits(self) -> u8 {
         match self {
             PicoResolution::DR_8BIT => 8,
@@ -113,12 +137,14 @@ impl PicoResolution {
         }
     }
 
-    /// The resolution for a driver code, or `None` for one this crate
-    /// doesn't know.
+    /// The resolution for a driver code
+    ///
+    /// - Returns `None` for a code that this crate does not know.
     pub fn from_driver_value(value: u32) -> Option<Self> {
         num_traits::FromPrimitive::from_u32(value)
     }
 
+    /// The driver code of the resolution
     pub fn to_driver_value(self) -> u32 {
         num_traits::ToPrimitive::to_u32(&self).expect("resolution fits u32")
     }
@@ -130,11 +156,13 @@ impl fmt::Display for PicoResolution {
     }
 }
 
-/// Pico coupling options
+/// The input coupling of an oscilloscope channel
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq, Default)]
 pub enum PicoCoupling {
+    /// AC coupling
     AC = 0,
+    /// DC coupling
     #[default]
     DC = 1,
 }
@@ -178,6 +206,9 @@ impl From<PicoCoupling> for i16 {
 }
 
 impl From<i32> for PicoCoupling {
+    /// The coupling for a driver value
+    ///
+    /// - Panics when the value is not 0 or 1.
     fn from(value: i32) -> Self {
         num_traits::FromPrimitive::from_i32(value).expect("Non-valid channel")
     }
@@ -195,14 +226,21 @@ mod coupling_tests {
     }
 }
 
-/// Driver downsampling mode
+/// A downsample mode, as the driver takes it
+///
+/// - The value of each variant is the driver value.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum DownsampleMode {
+    /// No downsample
     NONE = 0,
+    /// The lowest and the highest value of each group
     AGGREGATE = 1,
+    /// The first sample of each group
     DECIMATE = 2,
+    /// The mean of each group
     AVERAGE = 4,
+    /// The distribution of each group
     DISTRIBUTION = 8,
 }
 
@@ -218,26 +256,45 @@ impl From<DownsampleMode> for i32 {
     }
 }
 
-/// Pico info options
+/// An info field that the `GetUnitInfo` call of a driver reads
+///
+/// - The value of each variant is the `PICO_INFO` value of the driver.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive)]
 pub enum PicoInfo {
+    /// The driver version
     DRIVER_VERSION = 0x0000_0000,
+    /// The USB version
     USB_VERSION = 0x0000_0001,
+    /// The hardware version
     HARDWARE_VERSION = 0x0000_0002,
+    /// The model name
     VARIANT_INFO = 0x0000_0003,
+    /// The batch and serial number
     BATCH_AND_SERIAL = 0x0000_0004,
+    /// The calibration date
     CAL_DATE = 0x0000_0005,
+    /// The kernel driver version
     KERNEL_VERSION = 0x0000_0006,
+    /// The digital hardware version
     DIGITAL_HARDWARE_VERSION = 0x0000_0007,
+    /// The analog hardware version
     ANALOGUE_HARDWARE_VERSION = 0x0000_0008,
+    /// The first firmware version
     FIRMWARE_VERSION_1 = 0x0000_0009,
+    /// The second firmware version
     FIRMWARE_VERSION_2 = 0x0000_000A,
+    /// The MAC address
     MAC_ADDRESS = 0x0000_000B,
+    /// The shadow calibration status
     SHADOW_CAL = 0x0000_000C,
+    /// The IPP library version
     IPP_VERSION = 0x0000_000D,
+    /// The path of the driver library
     DRIVER_PATH = 0x0000_000E,
+    /// The third firmware version
     FIRMWARE_VERSION_3 = 0x0000_000F,
+    /// The front panel firmware version
     FRONT_PANEL_FIRMWARE_VERSION = 0x0000_0010,
 }
 

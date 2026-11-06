@@ -5,20 +5,19 @@ use std::fmt;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PowerSource {
-    /// The external supply: an AC adaptor, or a USB-C supply on the
-    /// power port of a 3000E or 5000E.
+    /// The external supply: an AC adaptor, or a USB-C supply on the power port of a 3000E or 5000E
     External,
-    /// The USB port only.
+    /// The USB port only
     Usb,
-    /// A USB 3 scope on a port that is not USB 3, run in its non-USB 3
-    /// power mode.
+    /// A USB 3 scope on a port that is not USB 3, in its non-USB 3 power mode
     UsbNonUsb3Port,
 }
 
 impl PowerSource {
-    /// The power a driver status reports, for the statuses the
-    /// ps3000a, ps4000a and ps5000a drivers return at open and when the
-    /// supply is plugged in or out.
+    /// The power source that a driver status reports
+    ///
+    /// - The ps3000a, ps4000a and ps5000a drivers return these statuses at open, and when the supply is connected or disconnected.
+    /// - Returns `None` for any other status.
     pub fn from_status(status: PicoStatus) -> Option<PowerSource> {
         match status {
             PicoStatus::POWER_SUPPLY_CONNECTED => Some(PowerSource::External),
@@ -28,7 +27,7 @@ impl PowerSource {
         }
     }
 
-    /// The `powerstate` argument of `ChangePowerSource` for this power.
+    /// The `powerstate` argument of `ChangePowerSource` for this power source
     pub fn to_status(self) -> PicoStatus {
         match self {
             PowerSource::External => PicoStatus::POWER_SUPPLY_CONNECTED,
@@ -37,6 +36,7 @@ impl PowerSource {
         }
     }
 
+    /// Whether this is [`PowerSource::External`]
     pub fn is_external(self) -> bool {
         self == PowerSource::External
     }
@@ -52,15 +52,18 @@ impl fmt::Display for PowerSource {
     }
 }
 
-/// The fastest a scope samples with a number of analog channels on at
-/// a resolution. A hardware limit: streaming to the host is slower and
-/// depends on the USB link and the host.
+/// The fastest a scope samples with a number of analog channels on, at a resolution
+///
+/// - This is a hardware limit.
+///   Streaming to the host is slower, and depends on the USB link and the host.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RateLimit {
-    /// `None` on a unit whose resolution is fixed.
+    /// The resolution, or `None` on a unit whose resolution is fixed
     pub resolution: Option<PicoResolution>,
+    /// The number of analog channels that are on
     pub channels: u8,
+    /// The maximum sample rate, in samples per second
     pub max_samples_per_second: f64,
 }
 
