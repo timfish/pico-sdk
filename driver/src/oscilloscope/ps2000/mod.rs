@@ -11,7 +11,7 @@ mod streaming;
 mod trigger;
 
 use super::{
-    bandwidth_code,
+    bandwidth_code, channel_range,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, EnumerationResult, OscilloscopeDriverInternal, SampleBuffer,
 };
@@ -334,7 +334,7 @@ impl OscilloscopeDriverInternal for PS2000Driver {
         // return those that succeed!
         Ok((1..=10)
             .flat_map(|r| -> PicoResult<PicoRange> {
-                let range = PicoRange::from(r);
+                let range = channel_range(r)?;
                 let config = OscilloscopeChannelConfig {
                     coupling: PicoCoupling::DC,
                     range,

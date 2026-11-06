@@ -159,7 +159,7 @@ pub fn status_from_raw(raw: u32) -> PicoStatus {
 
 /// Whether a raw trigger info status has the flag [`PicoStatus::DEVICE_TIME_STAMP_RESET`]
 pub fn timestamp_reset(raw: u32) -> bool {
-    raw & PicoStatus::DEVICE_TIME_STAMP_RESET as u32 != 0
+    raw & u32::from(PicoStatus::DEVICE_TIME_STAMP_RESET) != 0
 }
 
 /// A trigger time offset in seconds, from a time and a `PICO_TIME_UNITS` code

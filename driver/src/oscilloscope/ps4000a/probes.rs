@@ -72,7 +72,7 @@ pub(crate) fn state_of(p: &PS4000A_USER_PROBE_INTERACTIONS) -> Option<ProbeState
 }
 
 fn num_traits_channel(value: u32) -> Option<PicoChannel> {
-    (value < 8).then(|| PicoChannel::from(value))
+    PicoChannel::try_from(value).ok()
 }
 
 fn coupling(value: u32) -> Option<PicoCoupling> {

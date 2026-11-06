@@ -1,3 +1,4 @@
+use super::ParseError;
 use enum_iterator::Sequence;
 use num_derive::*;
 use std::fmt;
@@ -321,7 +322,6 @@ impl PicoRange {
     /// The range for a driver range value
     ///
     /// - Returns `None` for a value that this crate does not name.
-    ///   `From<i32>` panics for such a value.
     pub fn from_code(code: i32) -> Option<Self> {
         num_traits::FromPrimitive::from_i32(code)
     }
@@ -657,24 +657,25 @@ impl From<PicoRange> for i16 {
     }
 }
 
-impl From<i32> for PicoRange {
+impl TryFrom<i32> for PicoRange {
+    type Error = ParseError;
+
     /// The range for a driver range value
     ///
-    /// - Panics for a value that this crate does not name.
-    ///   Use [`PicoRange::from_code`] to get `None` instead.
-    fn from(value: i32) -> Self {
-        num_traits::FromPrimitive::from_i32(value)
-            .unwrap_or_else(|| panic!("Invalid PicoRange range '{}'", value))
+    /// - Returns [`ParseError`] for a value that this crate does not name.
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError)
     }
 }
 
-impl From<u32> for PicoRange {
+impl TryFrom<u32> for PicoRange {
+    type Error = ParseError;
+
     /// The range for a driver range value
     ///
-    /// - Panics for a value that this crate does not name.
-    fn from(value: u32) -> Self {
-        num_traits::FromPrimitive::from_u32(value)
-            .unwrap_or_else(|| panic!("Invalid PicoRange range '{}'", value))
+    /// - Returns [`ParseError`] for a value that this crate does not name.
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        num_traits::FromPrimitive::from_u32(value).ok_or(ParseError)
     }
 }
 
@@ -918,6 +919,16 @@ impl PicoRange {
 #[cfg(test)]
 mod range_tests {
     use super::*;
+
+    #[test]
+    fn range_from_unknown_number_is_err() {
+        assert_eq!(
+            PicoRange::try_from(0i32).ok(),
+            Some(PicoRange::X1_PROBE_10MV)
+        );
+        assert_eq!(PicoRange::try_from(10750i32).ok(), None);
+        assert_eq!(PicoRange::try_from(10750u32).ok(), None);
+    }
 
     #[test]
     fn full_scale_never_panics_and_matches_codes() {

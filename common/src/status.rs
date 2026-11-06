@@ -1,23 +1,72 @@
 use super::{PicoError, PicoResult};
-use num_derive::*;
 use std::convert::From;
 use thiserror::Error;
 
+// num_derive cannot derive for an enum with a field, so this macro adds
+// the `Unknown` variant and writes `FromPrimitive` and `ToPrimitive`.
+macro_rules! code_enum {
+    (
+        $(#[$meta:meta])*
+        pub enum $name:ident: $raw:ident {
+            $( $(#[$vmeta:meta])* $variant:ident = $value:literal, )*
+        }
+        $(#[$umeta:meta])*
+        $unknown:ident
+    ) => {
+        $(#[$meta])*
+        #[repr($raw)]
+        pub enum $name {
+            $( $(#[$vmeta])* $variant = $value, )*
+            $(#[$umeta])*
+            $unknown($raw),
+        }
+
+        impl num_traits::FromPrimitive for $name {
+            fn from_i64(n: i64) -> Option<Self> {
+                match n {
+                    $( $value => Some($name::$variant), )*
+                    _ => None,
+                }
+            }
+
+            fn from_u64(n: u64) -> Option<Self> {
+                i64::try_from(n).ok().and_then(Self::from_i64)
+            }
+        }
+
+        impl num_traits::ToPrimitive for $name {
+            fn to_i64(&self) -> Option<i64> {
+                match self {
+                    $( $name::$variant => Some($value), )*
+                    $name::$unknown(code) => Some(i64::from(*code)),
+                }
+            }
+
+            fn to_u64(&self) -> Option<u64> {
+                self.to_i64().and_then(|n| u64::try_from(n).ok())
+            }
+        }
+    };
+}
+
+code_enum! {
 /// A status code that a Pico driver returns
 ///
 /// - The value of each variant is the `PICO_STATUS` code of the driver.
 /// - The error text of each variant comes from picostatus.h.
+/// - [`PicoStatus::Unknown`] keeps a code that this crate does not name.
 ///
 /// ```
 /// use pico_common::PicoStatus;
 ///
 /// assert_eq!(PicoStatus::from_code(3), Some(PicoStatus::NOT_FOUND));
 /// assert!(PicoStatus::NOT_FOUND.to_result((), "open").is_err());
+/// assert_eq!(PicoStatus::from(0x3000_0000u32), PicoStatus::Unknown(0x3000_0000));
 /// ```
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive, Error)]
-pub enum PicoStatus {
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Error)]
+pub enum PicoStatus: u32 {
     /// The PicoScope is functioning correctly
     #[error("The PicoScope is functioning correctly")]
     OK = 0,
@@ -1195,6 +1244,10 @@ pub enum PicoStatus {
     #[error("")]
     SOURCE_FTD2XX_NO_FUNCTION = 536_870_921,
 }
+/// A code that this crate does not name, such as one from a newer driver
+#[error("Unknown status code {0}")]
+Unknown
+}
 
 impl PicoStatus {
     /// Whether the status is [`PicoStatus::OK`]
@@ -1213,7 +1266,6 @@ impl PicoStatus {
     /// The status for a driver code
     ///
     /// - Returns `None` for a code that this crate does not name.
-    ///   `From<u32>` panics for such a code.
     pub fn from_code(code: u32) -> Option<Self> {
         num_traits::FromPrimitive::from_u32(code)
     }
@@ -1222,11 +1274,10 @@ impl PicoStatus {
 impl From<u32> for PicoStatus {
     /// The status for a driver code
     ///
-    /// - Panics for a code that this crate does not name.
+    /// - Gives [`PicoStatus::Unknown`] for a code that this crate does not name.
     ///   Use [`PicoStatus::from_code`] to get `None` instead.
     fn from(value: u32) -> Self {
-        num_traits::FromPrimitive::from_u32(value)
-            .unwrap_or_else(|| panic!("Non-valid status code {}", value))
+        PicoStatus::from_code(value).unwrap_or(PicoStatus::Unknown(value))
     }
 }
 
@@ -1255,14 +1306,16 @@ impl PicoStatus {
     }
 }
 
+code_enum! {
 /// An error code that `usb_tc08_get_last_error` returns
 ///
 /// - The TC-08 driver has its own error codes, not [`PicoStatus`].
 ///   [`TC08Error::to_status`] gives the nearest [`PicoStatus`], so that all families use one error type.
+/// - [`TC08Error::Unknown`] keeps a code that this crate does not name.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, FromPrimitive, ToPrimitive)]
-pub enum TC08Error {
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum TC08Error: i16 {
     /// The handle is not valid
     INVALID_HANDLE = -1,
     /// No error
@@ -1300,19 +1353,23 @@ pub enum TC08Error {
     /// The communication with the unit failed
     COMMUNICATION = 16,
 }
+/// A code that this crate does not name, such as one from a newer driver
+Unknown
+}
 
 impl From<i16> for TC08Error {
     /// The error for a driver code
     ///
-    /// - Panics for a code that this crate does not name.
+    /// - Gives [`TC08Error::Unknown`] for a code that this crate does not name.
     fn from(value: i16) -> Self {
-        num_traits::FromPrimitive::from_i16(value)
-            .unwrap_or_else(|| panic!("Non-valid error code {}", value))
+        num_traits::FromPrimitive::from_i16(value).unwrap_or(TC08Error::Unknown(value))
     }
 }
 
 impl TC08Error {
     /// The [`PicoStatus`] nearest to this error
+    ///
+    /// - Gives [`PicoStatus::OPERATION_FAILED`] for [`TC08Error::Unknown`].
     pub fn to_status(&self) -> PicoStatus {
         match self {
             TC08Error::INVALID_HANDLE => PicoStatus::INVALID_HANDLE,
@@ -1333,6 +1390,7 @@ impl TC08Error {
             TC08Error::PICOPP_TOO_OLD => PicoStatus::KERNEL_DRIVER_TOO_OLD,
             TC08Error::PICO_DRIVER_FUNCTION => PicoStatus::DRIVER_FUNCTION,
             TC08Error::COMMUNICATION => PicoStatus::DEVICE_NOT_FUNCTIONING,
+            TC08Error::Unknown(_) => PicoStatus::OPERATION_FAILED,
         }
     }
 
@@ -1345,5 +1403,25 @@ impl TC08Error {
             PicoStatus::OK => Ok(ok_val),
             x => Err(PicoError::from_status(x, context)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_status_keeps_code() {
+        let status = PicoStatus::from(123_456_789u32);
+        assert_eq!(u32::from(status), 123_456_789);
+        assert!(!status.is_ok());
+        assert!(status.to_string().contains("123456789"));
+    }
+
+    #[test]
+    fn unknown_tc08_error_keeps_code() {
+        let error = TC08Error::from(99i16);
+        assert!(format!("{:?}", error).contains("99"));
+        assert_eq!(error.to_status(), PicoStatus::OPERATION_FAILED);
     }
 }

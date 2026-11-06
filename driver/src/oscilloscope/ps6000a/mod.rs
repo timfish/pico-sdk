@@ -11,7 +11,7 @@ mod streaming;
 mod trigger;
 
 use super::{
-    bandwidth_code, buffer_pointer, check_channel_limit,
+    bandwidth_code, buffer_pointer, channel_range, check_channel_limit,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result, rate_limits, variant_channel_count, EnumerationResult,
     OscilloscopeDriverInternal, PicoStreamMode, SampleBuffer,
@@ -262,7 +262,7 @@ impl OscilloscopeDriverInternal for PS6000ADriver {
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>> {
         // The 6000a doesn't support querying of supported channel ranges but
         // fortunately they use the same 10mV to 20v ranges
-        Ok((0..=10).map(|r| r.into()).collect())
+        (0..=10).map(channel_range).collect()
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

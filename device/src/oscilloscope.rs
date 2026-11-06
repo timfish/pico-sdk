@@ -610,7 +610,9 @@ impl OscilloscopeDevice {
 
         let valid_channel_ranges: HashMap<PicoChannel, Vec<PicoRange>> = (0..ch_count)
             .flat_map(|ch| -> PicoResult<(PicoChannel, Vec<_>)> {
-                let ch: PicoChannel = ch.into();
+                let ch = PicoChannel::try_from(ch).map_err(|_| {
+                    PicoError::from_status(PicoStatus::INVALID_CHANNEL, "read_unit_info")
+                })?;
                 Ok((ch, driver.get_channel_ranges(handle, ch)?))
             })
             .collect();

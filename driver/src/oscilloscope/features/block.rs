@@ -393,7 +393,7 @@ mod tests {
         let seen = Arc::new(AtomicU32::new(u32::MAX));
         let s = seen.clone();
         let (callback, parameter) = ReadyParameter::new(Some(Box::new(move |status| {
-            s.store(status as u32, Ordering::SeqCst);
+            s.store(u32::from(status), Ordering::SeqCst);
         })));
         unsafe { callback.unwrap()(1, 0, parameter.as_ptr()) };
         assert_eq!(seen.load(Ordering::SeqCst), 0);

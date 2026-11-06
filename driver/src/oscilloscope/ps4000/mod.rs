@@ -11,7 +11,7 @@ mod streaming;
 mod trigger;
 
 use super::{
-    average_only, bandwidth_code,
+    average_only, bandwidth_code, channel_range,
     dependencies::{load_dependencies, LoadedDependencies},
     get_version_string, parse_enum_result,
     trampoline::split_closure,
@@ -180,11 +180,11 @@ impl OscilloscopeDriverInternal for PS4000Driver {
         });
 
         match status {
-            PicoStatus::OK => Ok(ranges[0..len[0] as usize]
+            PicoStatus::OK => ranges[0..len[0] as usize]
                 .to_vec()
                 .iter()
-                .map(|v| PicoRange::from(*v))
-                .collect()),
+                .map(|v| channel_range(*v))
+                .collect(),
             x => Err(PicoError::from_status(x, "get_channel_ranges")),
         }
     }

@@ -73,8 +73,8 @@ pub(crate) fn accessory_string(
 pub(crate) fn tripped_channels(flags: impl IntoIterator<Item = (u32, u8)>) -> Vec<PicoChannel> {
     flags
         .into_iter()
-        .filter(|&(code, tripped)| tripped != 0 && code < 8)
-        .map(|(code, _)| PicoChannel::from(code))
+        .filter(|&(_, tripped)| tripped != 0)
+        .filter_map(|(code, _)| PicoChannel::try_from(code).ok())
         .collect()
 }
 

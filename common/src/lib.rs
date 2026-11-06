@@ -84,7 +84,7 @@
 //! - [`PicoStatus`]: the status codes of the drivers.
 //! - [`PicoError`], [`PicoResult`]: a status with the call that returned it.
 //! - [`TC08Error`], [`HRDLError`]: the error codes of the TC-08 and PicoHRDL drivers, with the nearest [`PicoStatus`].
-//! - [`ParseError`]: a string that does not parse as an enum of this crate.
+//! - [`ParseError`]: a string or a driver value that does not convert to an enum of this crate.
 //!
 //! USB:
 //! - [`UsbLink`], [`UsbSpeed`]: how a device connects to the host.

@@ -130,13 +130,15 @@ impl BlockDriver for PS2000Driver {
             .get(&handle)
             .cloned()
             .unwrap_or_default();
-        let mut guards: Vec<_> = (0..4)
-            .map(|ch| {
-                buffers
-                    .get(&PicoChannel::from(ch as u32))
-                    .map(|b| b.write())
-            })
-            .collect();
+        let mut guards: Vec<_> = [
+            PicoChannel::A,
+            PicoChannel::B,
+            PicoChannel::C,
+            PicoChannel::D,
+        ]
+        .iter()
+        .map(|ch| buffers.get(ch).map(|b| b.write()))
+        .collect();
         let shortest = guards.iter().flatten().map(|g| g.len()).min().unwrap_or(0);
         let count: i32 = narrow(count.min(shortest as u64), "samples")?;
         let mut pointer = |ch: usize| {
