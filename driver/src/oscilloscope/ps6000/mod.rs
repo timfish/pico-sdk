@@ -32,10 +32,10 @@ use pico_sys_dynamic::ps6000::{
     PS6000Loader,
 };
 
-/// Checks that the library has each function that this wrapper calls
+/// Each function that the library must have to load, and whether it has it
 ///
-/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator.
-fn required(b: &PS6000Loader) -> Result<(), DriverLoadError> {
+/// - Leaves out the signal generator calls, as they run only after the model check in `siggen.rs` finds a generator, and each checks its function first.
+fn required(b: &PS6000Loader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -107,7 +107,7 @@ impl PS6000Driver {
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PS6000Loader::new(path)? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         // Disables the splash screen on Windows
         unsafe { bindings.ps6000ApplyFix(0x1ced9168, 0x11e6) };
         Ok(PS6000Driver {

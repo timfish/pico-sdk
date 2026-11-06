@@ -4,6 +4,7 @@ use pico_common::{LedColour, LedState, PicoError, PicoLed, PicoResult};
 ///
 /// - `ScopeCapabilities::channel_leds` tells if a unit has them.
 /// - When a call gives an LED more than one time, the last entry sets it.
+/// - Each call returns Err with `NOT_USED` when the library lacks its function.
 pub trait LedDriver {
     /// Sets the colour of each LED in `colours`
     fn set_led_colours(&self, _handle: i16, _colours: &[(PicoLed, LedColour)]) -> PicoResult<()> {

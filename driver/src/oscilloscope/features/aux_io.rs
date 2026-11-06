@@ -3,6 +3,8 @@ use pico_common::{AuxIoMode, PicoError, PicoResult};
 /// The AUX I/O connector, as an input, a logic level or trigger out
 pub trait AuxIoDriver {
     /// Sets the mode of the AUX I/O connector
+    ///
+    /// - Returns Err with `NOT_USED` when the library lacks this function.
     fn set_aux_io_mode(&self, _handle: i16, _mode: AuxIoMode) -> PicoResult<()> {
         Err(PicoError::not_supported("set_aux_io_mode"))
     }

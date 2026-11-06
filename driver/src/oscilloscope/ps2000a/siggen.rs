@@ -59,4 +59,25 @@ mod tests {
         assert_eq!(of("2208A", true).max_frequency_hz, 1e6);
         assert_eq!(of("2208A", true).min_dwell_count, 3);
     }
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn a_missing_function_fails_the_call() {
+        use pico_sys_dynamic::ps2000a::PS2000ALoader;
+        let bindings = unsafe { PS2000ALoader::new(crate::tests::NO_FUNCTIONS) }.unwrap();
+        let driver = PS2000ADriver {
+            _dependencies: Vec::new(),
+            bindings: crate::Kept::new(bindings),
+        };
+        crate::oscilloscope::siggen::legacy::tests::lacks_each(
+            &driver,
+            &[
+                "ps2000aSetSigGenBuiltInV2",
+                "ps2000aSetSigGenArbitrary",
+                "ps2000aSigGenFrequencyToPhase",
+                "ps2000aSigGenArbitraryMinMaxValues",
+                "ps2000aSigGenSoftwareControl",
+            ],
+        );
+    }
 }

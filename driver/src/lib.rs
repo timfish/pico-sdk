@@ -89,7 +89,7 @@ pub mod tc08;
 
 pub use resolution::{DriverLoad, LibraryResolution};
 
-use pico_common::{PicoError, PicoStatus};
+use pico_common::{PicoError, PicoResult, PicoStatus};
 use std::{fmt, mem::ManuallyDrop};
 use thiserror::Error;
 
@@ -165,23 +165,44 @@ impl fmt::Debug for PicoDriver {
 /// - Takes the name of each function, and whether the library has it.
 /// - Returns Err with [`PicoStatus::NOT_USED`] ("The function is not available") and the name of the first function that the library lacks.
 pub(crate) fn require_functions(found: &[(&str, bool)]) -> Result<(), DriverLoadError> {
-    match found.iter().find(|(_, has)| !has) {
-        Some((name, _)) => Err(PicoError::from_status(
-            PicoStatus::NOT_USED,
-            &format!("the library lacks {name}"),
-        )
-        .into()),
-        None => Ok(()),
+    for &(name, has) in found {
+        check_function(name, has)?;
     }
+    Ok(())
 }
 
-/// Calls [`require_functions`] with each named function of a loader
+/// The name of each named function of a loader, and whether the library has it
+///
+/// - Gives the list that [`require_functions`] takes.
 macro_rules! required_functions {
     ($bindings:expr, [$($name:ident),+ $(,)?]) => {
-        $crate::require_functions(&[$((stringify!($name), $bindings.$name.is_ok())),+])
+        vec![$((stringify!($name), $bindings.$name.is_ok())),+]
     };
 }
 pub(crate) use required_functions;
+
+/// Checks that a driver library has a function, before a call to it
+///
+/// - Takes the name of the function, and whether the library has it.
+/// - Returns Err with [`PicoStatus::NOT_USED`] ("The function is not available") and the name when the library lacks the function.
+pub(crate) fn check_function(name: &str, has: bool) -> PicoResult<()> {
+    if has {
+        Ok(())
+    } else {
+        Err(PicoError::from_status(
+            PicoStatus::NOT_USED,
+            &format!("the library lacks {name}"),
+        ))
+    }
+}
+
+/// Calls [`check_function`] with one named function of a loader
+macro_rules! optional_function {
+    ($bindings:expr, $name:ident) => {
+        $crate::check_function(stringify!($name), $bindings.$name.is_ok())
+    };
+}
+pub(crate) use optional_function;
 
 /// Whether the serial that a unit gives is `wanted`
 ///
@@ -210,6 +231,45 @@ mod tests {
         assert!(!error.to_string().contains("fn_c"), "{error}");
     }
 
+    /// Asserts that `result` is the error of a function that the library lacks
+    pub(crate) fn lacks<T: fmt::Debug>(result: PicoResult<T>, name: &str) {
+        let error = result.unwrap_err();
+        assert_eq!(error.status, PicoStatus::NOT_USED, "{error}");
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("the library lacks {name}")),
+            "{error}"
+        );
+    }
+
+    /// Asserts that `required` names none of `on_demand`
+    pub(crate) fn not_required(required: &[(&str, bool)], on_demand: &[&str]) {
+        for name in on_demand {
+            assert!(
+                !required.iter().any(|(n, _)| n == name),
+                "{name} is required"
+            );
+        }
+    }
+
+    #[test]
+    fn a_missing_function_fails_the_call_check() {
+        assert!(check_function("fn_a", true).is_ok());
+        lacks(check_function("fn_b", false), "fn_b");
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn the_call_check_names_the_missing_function() {
+        use pico_sys_dynamic::ps6000a::PS6000ALoader;
+        let b = unsafe { PS6000ALoader::new(NO_FUNCTIONS) }.unwrap();
+        lacks(
+            optional_function!(b, ps6000aSigGenPause),
+            "ps6000aSigGenPause",
+        );
+    }
+
     #[test]
     fn a_serial_matches_only_the_whole_serial() {
         assert!(!serial_matches("AB123/0001", "AB123/000"));
@@ -219,11 +279,14 @@ mod tests {
         assert!(serial_matches("AB123/0001 ", " AB123/0001"));
     }
 
-    // A system library that has none of the driver functions
+    /// A system library that has none of the driver functions
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    pub(crate) const NO_FUNCTIONS: &str = "libc.so.6";
+
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[test]
     fn a_library_without_the_functions_does_not_load() {
-        const LIBRARY: &str = "libc.so.6";
+        const LIBRARY: &str = NO_FUNCTIONS;
 
         fn refused<T, E: fmt::Display>(result: Result<T, E>, first: &str) {
             match result {

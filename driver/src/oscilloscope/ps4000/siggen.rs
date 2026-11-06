@@ -49,9 +49,10 @@ impl LegacyCalls for PS4000Driver {
     }
 
     // The family has only the f32 call.
-    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoStatus {
+    fn built_in(&self, handle: i16, args: &BuiltIn) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps4000SetSigGenBuiltIn)?;
         let c = &args.common;
-        PicoStatus::from(unsafe {
+        Ok(PicoStatus::from(unsafe {
             self.bindings.ps4000SetSigGenBuiltIn(
                 handle,
                 c.offset_uv,
@@ -69,10 +70,16 @@ impl LegacyCalls for PS4000Driver {
                 c.trigger_source,
                 0,
             )
-        })
+        }))
     }
 
-    fn arbitrary(&self, handle: i16, args: &Arbitrary, samples: &mut [i16]) -> PicoStatus {
+    fn arbitrary(
+        &self,
+        handle: i16,
+        args: &Arbitrary,
+        samples: &mut [i16],
+    ) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps4000SetSigGenArbitrary)?;
         let phases = [
             args.start_phase,
             args.stop_phase,
@@ -80,10 +87,10 @@ impl LegacyCalls for PS4000Driver {
             args.dwell_count,
         ];
         if let Some(status) = phase_status(&phases) {
-            return status;
+            return Ok(status);
         }
         let c = &args.common;
-        PicoStatus::from(unsafe {
+        Ok(PicoStatus::from(unsafe {
             self.bindings.ps4000SetSigGenArbitrary(
                 handle,
                 c.offset_uv,
@@ -103,10 +110,11 @@ impl LegacyCalls for PS4000Driver {
                 c.trigger_source,
                 0,
             )
-        })
+        }))
     }
 
     fn frequency_to_phase(&self, handle: i16, hz: f64, len: u32) -> PicoResult<u64> {
+        crate::optional_function!(self.bindings, ps4000SigGenFrequencyToPhase)?;
         let mut phase = 0u32;
         PicoStatus::from(unsafe {
             self.bindings
@@ -116,6 +124,7 @@ impl LegacyCalls for PS4000Driver {
     }
 
     fn awg_limits(&self, handle: i16) -> PicoResult<AwgLimits> {
+        crate::optional_function!(self.bindings, ps4000SigGenArbitraryMinMaxValues)?;
         let (mut min_value, mut max_value, mut min_len, mut max_len) = (0, 0, 0, 0);
         PicoStatus::from(unsafe {
             self.bindings.ps4000SigGenArbitraryMinMaxValues(
@@ -137,15 +146,18 @@ impl LegacyCalls for PS4000Driver {
         )
     }
 
-    fn software_control(&self, handle: i16, state: bool) -> PicoStatus {
-        PicoStatus::from(unsafe {
+    fn software_control(&self, handle: i16, state: bool) -> PicoResult<PicoStatus> {
+        crate::optional_function!(self.bindings, ps4000SigGenSoftwareControl)?;
+        Ok(PicoStatus::from(unsafe {
             self.bindings
                 .ps4000SigGenSoftwareControl(handle, i16::from(state))
-        })
+        }))
     }
 
-    fn off(&self, handle: i16) -> PicoStatus {
-        PicoStatus::from(unsafe { self.bindings.ps4000SigGenOff(handle) })
+    fn off(&self, handle: i16) -> PicoResult<PicoStatus> {
+        Ok(PicoStatus::from(unsafe {
+            self.bindings.ps4000SigGenOff(handle)
+        }))
     }
 }
 
@@ -154,6 +166,27 @@ legacy_sig_gen_driver!(PS4000Driver);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn a_missing_function_fails_the_call() {
+        use pico_sys_dynamic::ps4000::PS4000Loader;
+        let bindings = unsafe { PS4000Loader::new(crate::tests::NO_FUNCTIONS) }.unwrap();
+        let driver = PS4000Driver {
+            _dependencies: Vec::new(),
+            bindings: crate::Kept::new(bindings),
+        };
+        crate::oscilloscope::siggen::legacy::tests::lacks_each(
+            &driver,
+            &[
+                "ps4000SetSigGenBuiltIn",
+                "ps4000SetSigGenArbitrary",
+                "ps4000SigGenFrequencyToPhase",
+                "ps4000SigGenArbitraryMinMaxValues",
+                "ps4000SigGenSoftwareControl",
+            ],
+        );
+    }
 
     #[test]
     fn the_4262_has_its_own_generator() {

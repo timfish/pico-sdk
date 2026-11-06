@@ -19,6 +19,7 @@ fn aux_io_mode(mode: AuxIoMode) -> PICO_AUXIO_MODE {
 impl AuxIoDriver for PSOSPADriver {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn set_aux_io_mode(&self, handle: i16, mode: AuxIoMode) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, psospaSetAuxIoMode)?;
         match PicoStatus::from(unsafe {
             self.bindings.psospaSetAuxIoMode(handle, aux_io_mode(mode))
         }) {

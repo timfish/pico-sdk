@@ -55,6 +55,7 @@ impl ChannelExtrasDriver for PSOSPADriver {
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn overvoltage_tripped(&self, handle: i16) -> PicoResult<Vec<PicoChannel>> {
+        crate::optional_function!(self.bindings, psospaReportAllChannelsOvervoltageTripStatus)?;
         self.overvoltage_flags(handle, "overvoltage_tripped", |flags, n| unsafe {
             self.bindings
                 .psospaReportAllChannelsOvervoltageTripStatus(handle, flags, n)
@@ -63,6 +64,10 @@ impl ChannelExtrasDriver for PSOSPADriver {
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn reset_overvoltage(&self, handle: i16) -> PicoResult<Vec<PicoChannel>> {
+        crate::optional_function!(
+            self.bindings,
+            psospaResetChannelsAndReportAllChannelsOvervoltageTripStatus
+        )?;
         self.overvoltage_flags(handle, "reset_overvoltage", |flags, n| unsafe {
             self.bindings
                 .psospaResetChannelsAndReportAllChannelsOvervoltageTripStatus(handle, flags, n)

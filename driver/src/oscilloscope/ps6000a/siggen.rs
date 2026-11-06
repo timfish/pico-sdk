@@ -62,6 +62,7 @@ impl PropertyCalls for PS6000ADriver {
     }
 
     fn limits(&self, handle: i16, param: u32) -> PicoResult<(f64, f64, f64)> {
+        crate::optional_function!(self.bindings, ps6000aSigGenLimits)?;
         let (mut least, mut most, mut step) = (0.0, 0.0, 0.0);
         PicoStatus::from(unsafe {
             self.bindings
@@ -123,6 +124,7 @@ impl PropertyCalls for PS6000ADriver {
     // 1 kHz start stands in for it, and the highest stop frequency for
     // the highest.
     fn frequency_limits(&self, handle: i16, wave: u32, samples: u64) -> PicoResult<(f64, f64)> {
+        crate::optional_function!(self.bindings, ps6000aSigGenFrequencyLimits)?;
         let mut samples = samples;
         let samples_ptr = if samples == 0 {
             std::ptr::null_mut()
@@ -174,11 +176,13 @@ impl SigGenDriver for PS6000ADriver {
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn sig_gen_pause(&self, handle: i16) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, ps6000aSigGenPause)?;
         self.pause(handle).to_result((), "sig_gen_pause")
     }
 
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     fn sig_gen_restart(&self, handle: i16) -> PicoResult<()> {
+        crate::optional_function!(self.bindings, ps6000aSigGenRestart)?;
         self.restart(handle).to_result((), "sig_gen_restart")
     }
 }

@@ -99,6 +99,7 @@ impl PL1000DriverInternal {
     /// - The guide gives no rule for calls while the unit collects samples.
     /// - Returns the value that it set.
     /// - Returns Err when `id` is not an output, or `value` does not suit the output.
+    /// - Returns Err with `NOT_USED` when the library lacks the function of the output.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     pub fn set_output(
         &self,
@@ -107,6 +108,12 @@ impl PL1000DriverInternal {
         value: &OutputValue,
     ) -> PicoResult<OutputValue> {
         let (call, set) = call(id, value)?;
+        match call {
+            Call::Do { .. } => crate::optional_function!(self.bindings, pl1000SetDo),
+            Call::PulseWidth { .. } => {
+                crate::optional_function!(self.bindings, pl1000SetPulseWidth)
+            }
+        }?;
         let status = match call {
             Call::Do { output, on } => unsafe {
                 self.bindings.pl1000SetDo(handle, on as i16, output)
@@ -122,6 +129,22 @@ impl PL1000DriverInternal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn outputs_fail_at_the_call_not_the_load() {
+        use crate::tests::{lacks, not_required, NO_FUNCTIONS};
+        use pico_sys_dynamic::pl1000::PL1000Loader;
+        let bindings = unsafe { PL1000Loader::new(NO_FUNCTIONS) }.unwrap();
+        not_required(
+            &super::super::required(&bindings),
+            &["pl1000SetDo", "pl1000SetPulseWidth"],
+        );
+        let driver = PL1000DriverInternal {
+            bindings: crate::Kept::new(bindings),
+        };
+        lacks(driver.set_output(1, "do0", &OutputValue::On), "pl1000SetDo");
+    }
 
     #[test]
     fn digital_outputs_are_the_header_codes() {

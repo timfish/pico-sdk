@@ -201,10 +201,11 @@ fn listed_resolutions(details: &JsonValue) -> Vec<enPicoDeviceResolution> {
     listed().unwrap_or_default()
 }
 
-/// Checks that the library has each function that this wrapper calls
+/// Each function that the library must have to load, and whether it has it
 ///
 /// - Leaves out `psospaGetMinimumTimebaseStateless` and `psospaSetTriggerHoldoffCounterBySamples`, as the wrapper checks them before each call.
-fn required(b: &PSOSPALoader) -> Result<(), DriverLoadError> {
+/// - Leaves out the functions of the AUX I/O, LED and overvoltage calls, and the signal generator limits, pause and restart, as each of these calls checks its function first.
+fn required(b: &PSOSPALoader) -> Vec<(&'static str, bool)> {
     crate::required_functions!(
         b,
         [
@@ -226,10 +227,6 @@ fn required(b: &PSOSPALoader) -> Result<(), DriverLoadError> {
             psospaSigGenFrequencySweep,
             psospaSigGenSoftwareTriggerControl,
             psospaSigGenApply,
-            psospaSigGenLimits,
-            psospaSigGenFrequencyLimits,
-            psospaSigGenPause,
-            psospaSigGenRestart,
             psospaSetSimpleTrigger,
             psospaSetTriggerChannelProperties,
             psospaSetTriggerChannelConditions,
@@ -261,12 +258,6 @@ fn required(b: &PSOSPALoader) -> Result<(), DriverLoadError> {
             psospaSetDeviceResolution,
             psospaGetDeviceResolution,
             psospaGetAdcLimits,
-            psospaResetChannelsAndReportAllChannelsOvervoltageTripStatus,
-            psospaReportAllChannelsOvervoltageTripStatus,
-            psospaSetLedColours,
-            psospaSetLedBrightness,
-            psospaSetLedStates,
-            psospaSetAuxIoMode,
         ]
     )
 }
@@ -309,7 +300,7 @@ impl PSOSPADriver {
     {
         let dependencies = load_dependencies(Self::DRIVER, path.as_ref());
         let bindings = crate::Kept::new(unsafe { PSOSPALoader::new(path)? });
-        required(&bindings)?;
+        crate::require_functions(&required(&bindings))?;
         Ok(PSOSPADriver {
             bindings,
             _dependencies: dependencies,
@@ -840,5 +831,66 @@ mod tests {
             Some(PowerSource::Usb)
         );
         assert_eq!(power_from_details(&details(port(0, 0), port(0, 0))), None);
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn on_demand_functions_fail_at_the_call_not_the_load() {
+        use crate::oscilloscope::{
+            siggen::properties::PropertyCalls, AuxIoDriver, ChannelExtrasDriver, LedDriver,
+            SigGenDriver,
+        };
+        use crate::tests::{lacks, not_required, NO_FUNCTIONS};
+        use pico_common::{AuxIoMode, LedColour, LedState, PicoLed};
+
+        let bindings = unsafe { PSOSPALoader::new(NO_FUNCTIONS) }.unwrap();
+        not_required(
+            &required(&bindings),
+            &[
+                "psospaSetAuxIoMode",
+                "psospaSetLedColours",
+                "psospaSetLedStates",
+                "psospaSetLedBrightness",
+                "psospaSigGenLimits",
+                "psospaSigGenFrequencyLimits",
+                "psospaSigGenPause",
+                "psospaSigGenRestart",
+                "psospaReportAllChannelsOvervoltageTripStatus",
+                "psospaResetChannelsAndReportAllChannelsOvervoltageTripStatus",
+            ],
+        );
+
+        let d = PSOSPADriver {
+            _dependencies: Vec::new(),
+            bindings: crate::Kept::new(bindings),
+            resolutions: Default::default(),
+            variant_details: Default::default(),
+            streams: Default::default(),
+            ports: Default::default(),
+            power: Default::default(),
+        };
+        lacks(d.set_aux_io_mode(1, AuxIoMode::Input), "psospaSetAuxIoMode");
+        lacks(
+            d.set_led_colours(1, &[(PicoLed::Awg, LedColour::GREEN)]),
+            "psospaSetLedColours",
+        );
+        lacks(
+            d.set_led_states(1, &[(PicoLed::Awg, LedState::On)]),
+            "psospaSetLedStates",
+        );
+        lacks(d.set_led_brightness(1, 50), "psospaSetLedBrightness");
+        assert!(!led::has_channel_leds(&d, 1));
+        lacks(d.sig_gen_info(1), "psospaSigGenLimits");
+        lacks(d.frequency_limits(1, 0, 0), "psospaSigGenFrequencyLimits");
+        lacks(d.sig_gen_pause(1), "psospaSigGenPause");
+        lacks(d.sig_gen_restart(1), "psospaSigGenRestart");
+        lacks(
+            d.overvoltage_tripped(1),
+            "psospaReportAllChannelsOvervoltageTripStatus",
+        );
+        lacks(
+            d.reset_overvoltage(1),
+            "psospaResetChannelsAndReportAllChannelsOvervoltageTripStatus",
+        );
     }
 }
