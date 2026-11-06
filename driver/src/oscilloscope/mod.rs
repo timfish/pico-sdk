@@ -257,13 +257,12 @@ pub trait OscilloscopeDriverInternal:
     ///   It does not find a unit that is open.
     ///
     /// ```no_run
-    /// use pico_common::Driver;
-    /// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+    /// use pico_common::ScopeDriver;
+    /// use pico_driver::{oscilloscope::OscilloscopeDriver, LibraryResolution};
     ///
-    /// if let PicoDriver::Oscilloscope(scope) = Driver::PS5000A.load(&LibraryResolution::Default)? {
-    ///     for unit in scope.enumerate_units()? {
-    ///         println!("{} {}", unit.variant, unit.serial);
-    ///     }
+    /// let scope = OscilloscopeDriver::load(ScopeDriver::PS5000A, &LibraryResolution::Default)?;
+    /// for unit in scope.enumerate_units()? {
+    ///     println!("{} {}", unit.variant, unit.serial);
     /// }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -274,14 +273,13 @@ pub trait OscilloscopeDriverInternal:
     /// - Returns Err with `NOT_FOUND` when no unit matches.
     ///
     /// ```no_run
-    /// use pico_common::{Driver, PicoInfo};
-    /// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+    /// use pico_common::{PicoInfo, ScopeDriver};
+    /// use pico_driver::{oscilloscope::OscilloscopeDriver, LibraryResolution};
     ///
-    /// if let PicoDriver::Oscilloscope(scope) = Driver::PS2000A.load(&LibraryResolution::Default)? {
-    ///     let handle = scope.open_unit(Some("CW356/055"))?;
-    ///     println!("{}", scope.get_unit_info(handle, PicoInfo::VARIANT_INFO)?);
-    ///     scope.close(handle)?;
-    /// }
+    /// let scope = OscilloscopeDriver::load(ScopeDriver::PS2000A, &LibraryResolution::Default)?;
+    /// let handle = scope.open_unit(Some("CW356/055"))?;
+    /// println!("{}", scope.get_unit_info(handle, PicoInfo::VARIANT_INFO)?);
+    /// scope.close(handle)?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16>;

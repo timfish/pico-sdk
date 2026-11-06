@@ -26,24 +26,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let family = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "pt104".to_string());
-    let driver = match family.as_str() {
-        "pt104" => Driver::PT104,
-        "cm3" => Driver::PLCM3,
-        "pl1000" => Driver::PL1000,
-        "hrdl" => Driver::PicoHRDL,
+    let resolution = LibraryResolution::Default;
+    match family.as_str() {
+        "pt104" => {
+            let device = PT104Driver::load(&resolution)?.open_device(None)?;
+            println!("Opened {}", device.serial);
+            pt104(device)?
+        }
+        "cm3" => {
+            let device = PLCM3Driver::load(&resolution)?.open_device(None)?;
+            println!("Opened {}", device.serial);
+            cm3(device)?
+        }
+        "pl1000" => {
+            let device = PL1000Driver::load(&resolution)?.open_device(None)?;
+            println!("Opened {}", device.serial);
+            pl1000(device)?
+        }
+        "hrdl" => {
+            let device = HRDLDriver::load(&resolution)?.open_device(None)?;
+            println!("Opened {}", device.serial);
+            hrdl(device)?
+        }
         other => return Err(format!("unknown family '{other}'").into()),
-    };
-    let device = driver
-        .load(&LibraryResolution::Default)?
-        .open_device(None)?;
-    println!("Opened {}", device.get_serial());
-
-    match device {
-        PicoDevice::PT104(device) => pt104(device)?,
-        PicoDevice::PLCM3(device) => cm3(device)?,
-        PicoDevice::PL1000(device) => pl1000(device)?,
-        PicoDevice::PicoHRDL(device) => hrdl(device)?,
-        _ => unreachable!("the driver opened another family"),
     }
 
     Ok(())

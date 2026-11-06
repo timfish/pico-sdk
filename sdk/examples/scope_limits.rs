@@ -20,17 +20,16 @@ fn main() {
     let mut args = env::args().skip(1);
     let driver_type = Driver::from_str(&args.next().expect("driver type, such as psospa"))
         .expect("a driver type such as 5000a or psospa");
+    let driver_type = driver_type
+        .as_scope()
+        .unwrap_or_else(|| panic!("{driver_type} is not a scope driver"));
     let serial = args.next();
     let resolution = args.next().map_or(LibraryResolution::Default, |dir| {
         LibraryResolution::Custom(PathBuf::from(dir))
     });
 
-    let driver = driver_type
-        .load(&resolution)
+    let driver = OscilloscopeDriver::load(driver_type, &resolution)
         .unwrap_or_else(|e| panic!("could not load the {driver_type} driver: {e}"));
-    let PicoDriver::Oscilloscope(driver) = driver else {
-        panic!("{driver_type} is not a scope driver");
-    };
     let device = driver
         .open_device(serial.as_deref())
         .unwrap_or_else(|e| panic!("could not open a {driver_type} unit: {e}"));

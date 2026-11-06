@@ -129,20 +129,20 @@ fn main() {
     let mut args = env::args().skip(1);
     let driver_type = Driver::from_str(&args.next().unwrap_or_else(|| "4000a".into()))
         .expect("a driver type such as 4000a");
+    let driver_type = driver_type
+        .as_scope()
+        .unwrap_or_else(|| panic!("{driver_type} is not a scope driver"));
     let serial = args.next().filter(|s| !s.is_empty() && s != "-");
     let seconds: u64 = args.next().map_or(20, |s| s.parse().expect("seconds"));
     let only: Option<String> = args.next().map(|s| s.to_uppercase());
 
     let resolution = cache_resolution();
-    let driver = match driver_type.load(&resolution) {
+    let driver = match OscilloscopeDriver::load(driver_type, &resolution) {
         Ok(driver) => driver,
         Err(_) => {
-            download_drivers_to_cache(&[driver_type]).expect("driver download");
-            driver_type.load(&resolution).expect("driver load")
+            download_drivers_to_cache(&[driver_type.into()]).expect("driver download");
+            OscilloscopeDriver::load(driver_type, &resolution).expect("driver load")
         }
-    };
-    let PicoDriver::Oscilloscope(driver) = driver else {
-        panic!("{driver_type} is not a scope driver");
     };
     let device = match driver.open_device(serial.as_deref()) {
         Ok(device) => device,

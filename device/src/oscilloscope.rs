@@ -536,15 +536,14 @@ impl OscilloscopeInfo {
 ///
 /// ```no_run
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use pico_common::Driver;
+/// use pico_common::ScopeDriver;
 /// use pico_device::DeviceOpen;
-/// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+/// use pico_driver::{oscilloscope::OscilloscopeDriver, LibraryResolution};
 ///
-/// if let PicoDriver::Oscilloscope(driver) = Driver::PS5000A.load(&LibraryResolution::Default)? {
-///     let scope = driver.open_device(Some("ABC/123"))?;
-///     let info = scope.info.as_ref().expect("an open device has its info");
-///     println!("{} {} at {:?}", scope.variant, scope.serial, info.resolution);
-/// }
+/// let driver = OscilloscopeDriver::load(ScopeDriver::PS5000A, &LibraryResolution::Default)?;
+/// let scope = driver.open_device(Some("ABC/123"))?;
+/// let info = scope.info.as_ref().expect("an open device has its info");
+/// println!("{} {} at {:?}", scope.variant, scope.serial, info.resolution);
 /// # Ok(())
 /// # }
 /// ```

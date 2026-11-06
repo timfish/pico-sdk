@@ -16,22 +16,19 @@ Each data logger driver has an API of its own, as the data loggers have little i
 ## Quick start
 
 ```rust
-use pico_common::{Driver, PicoInfo};
-use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+use pico_common::{PicoInfo, ScopeDriver};
+use pico_driver::{oscilloscope::OscilloscopeDriver, LibraryResolution};
 
-let driver = Driver::PS2000A.load(&LibraryResolution::Default)?;
+let scope = OscilloscopeDriver::load(ScopeDriver::PS2000A, &LibraryResolution::Default)?;
+println!("driver version {}", scope.get_version()?);
 
-if let PicoDriver::Oscilloscope(scope) = driver {
-    println!("driver version {}", scope.get_version()?);
-
-    for unit in scope.enumerate_units()? {
-        println!("{} {}", unit.variant, unit.serial);
-    }
-
-    let handle = scope.open_unit(None)?;
-    println!("opened {}", scope.get_unit_info(handle, PicoInfo::VARIANT_INFO)?);
-    scope.close(handle)?;
+for unit in scope.enumerate_units()? {
+    println!("{} {}", unit.variant, unit.serial);
 }
+
+let handle = scope.open_unit(None)?;
+println!("opened {}", scope.get_unit_info(handle, PicoInfo::VARIANT_INFO)?);
+scope.close(handle)?;
 ```
 
 ## How the parts fit
