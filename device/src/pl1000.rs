@@ -96,7 +96,9 @@ impl Drop for PL1000Device {
 impl DeviceOpen<PL1000Device> for PL1000Driver {
     fn open_device(&self, serial: Option<&str>) -> PicoResult<PL1000Device> {
         let handle = self.open_unit(serial)?;
-        let info = self.get_unit_info(handle)?;
+        let info = self.get_unit_info(handle).inspect_err(|_| {
+            let _ = self.close_unit(handle);
+        })?;
 
         Ok(PL1000Device {
             driver: self.clone(),

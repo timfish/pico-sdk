@@ -193,8 +193,9 @@ pub trait DeviceOpen<D> {
     /// Opens the unit with `serial`, or the first unit the driver finds when `serial` is `None`
     ///
     /// - The device it returns is open, and closes its unit on drop.
+    /// - It closes the unit again when it cannot read the info.
     /// - Returns Err when the driver cannot open the unit or read its info.
-    /// - Panics for an oscilloscope whose variant string has no channel count as its second character.
+    /// - Returns Err with `INVALID_VARIANT` for an oscilloscope whose variant string has no channel count as its second character.
     fn open_device(&self, serial: Option<&str>) -> PicoResult<D>;
 }
 

@@ -95,7 +95,9 @@ impl Drop for DrDAQDevice {
 impl DeviceOpen<DrDAQDevice> for DrDAQDriver {
     fn open_device(&self, serial: Option<&str>) -> PicoResult<DrDAQDevice> {
         let handle = self.open_unit(serial)?;
-        let info = self.get_unit_info(handle)?;
+        let info = self.get_unit_info(handle).inspect_err(|_| {
+            let _ = self.close_unit(handle);
+        })?;
 
         Ok(DrDAQDevice {
             driver: self.clone(),
