@@ -13,6 +13,9 @@ version = "0.4.0"
 crate-type = ["lib"]
 path = "src/lib.rs"
 
+[features]
+serde = ["dep:serde", "pico-common/serde", "pico-device/serde"]
+
 [dependencies]
 crossbeam = "0.8"
 enum-iterator = "2"
