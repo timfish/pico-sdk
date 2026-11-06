@@ -32,40 +32,43 @@ fn wait_after(config: &HRDLConfig, state: &HRDLStreamState) -> Duration {
     )
 }
 
-/// One channel's scale while the unit streams
+/// The scale of one channel while the unit streams
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HRDLChannelScale {
+    /// The input range of the channel
     pub range: HRDLRange,
-    /// The count at [`HRDLRange::volts`], from `HRDLGetMinMaxAdcCounts` once the channel is set
+    /// The count at [`HRDLRange::volts`], from `HRDLGetMinMaxAdcCounts` after the channel is set
     pub max_count: i32,
 }
 
 impl HRDLChannelScale {
-    /// The factor from an ADC count to volts: V = count / max count × Vmax (ADC-20/ADC-24
-    /// Programmer's Guide, adc20.en r2, section 4.3 Scaling)
+    /// The factor from an ADC count to volts
+    ///
+    /// - V = count / max count × Vmax (ADC-20/ADC-24 Programmer's Guide, adc20.en r2, section 4.3 Scaling).
     pub fn volts_per_count(&self) -> f64 {
         self.range.volts() / self.max_count.max(1) as f64
     }
 }
 
-/// The state of an HRDL stream
+/// The state of a PicoLog ADC-20 or ADC-24 stream
 #[derive(Clone, Debug, PartialEq)]
 pub struct HRDLStreamState {
-    /// The sample interval the unit was set to, in milliseconds
+    /// The sample interval that the unit was set to, in milliseconds
     pub interval_ms: i32,
     /// The scale of each channel that is on
     pub channels: BTreeMap<HRDLChannel, HRDLChannelScale>,
 }
 
-/// A block of samples read back from the device's streaming buffer
+/// One block of samples from the streaming buffer of a PicoLog ADC-20 or ADC-24
 #[derive(Clone, Debug)]
 pub struct HRDLStreamingEvent {
-    /// The configured sample interval, in milliseconds
+    /// The sample interval of the config, in milliseconds
     pub interval_ms: i32,
-    /// Per-channel raw ADC counts, in the order they were read; [`HRDLChannelScale`] in the
-    /// stream state scales them to volts
+    /// The raw ADC counts of each channel, in the order that the unit took them
+    ///
+    /// - The [`HRDLChannelScale`] in the stream state scales them to volts.
     pub channels: BTreeMap<HRDLChannel, Vec<i32>>,
-    /// Channels that reported an over-range sample in this block
+    /// The channels that reported an over-range sample in this block
     pub over_range: Vec<HRDLChannel>,
 }
 

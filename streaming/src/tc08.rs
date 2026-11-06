@@ -5,19 +5,21 @@ use pico_device::tc08::{TC08Config, TC08Device};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tracing::warn;
 
-/// A block of temperature readings, one entry per enabled channel
+/// One block of temperatures from a TC-08 stream
 #[derive(Clone, Debug)]
 pub struct TC08StreamingEvent {
+    /// The sample interval that the driver set, in milliseconds
     pub interval_ms: u32,
+    /// The temperatures of each channel that is on, in the order that the unit took them
     pub channels: BTreeMap<TC08Channel, Vec<f32>>,
-    /// Channels with a reading in this block over the unit's input range
+    /// The channels with a reading in this block that is over the input range of the unit
     pub over_range: Vec<TC08Channel>,
 }
 
 /// How long the runner waits between reads of the unit's buffers
 const POLL_WAIT: Duration = Duration::from_secs(1);
 
-/// A running TC-08 stream
+/// The state of a running TC-08 stream
 #[derive(Clone, Debug)]
 pub struct TC08StreamState {
     /// The sample interval the driver set, in milliseconds

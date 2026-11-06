@@ -1,11 +1,11 @@
 use parking_lot::Mutex;
 use std::sync::{Arc, Weak};
 
-/// Receives each streaming event.
+/// Receives the events of an [`EventEmitter`]
 ///
-/// Every listener gets the same event. The last listener gets the only
-/// reference unless an earlier one kept a clone, so it can take the
-/// samples without a copy:
+/// - Every listener gets the same event.
+/// - The last listener gets the only reference, unless an earlier one kept a clone.
+///   So it can take the samples with no copy.
 ///
 /// ```
 /// # use std::sync::Arc;
@@ -23,6 +23,9 @@ use std::sync::{Arc, Weak};
 /// }
 /// ```
 pub trait EventHandler<T>: Send + Sync {
+    /// Receives one event
+    ///
+    /// - It runs on the thread that sends the event, which for a runner is its background thread.
     fn new_data(&self, event: Arc<T>);
 }
 
@@ -39,24 +42,35 @@ impl<T> EventsInner<T> {
     }
 }
 
+/// Sends each event to the [`EventHandler`]s that subscribe
+///
+/// - Clones share the same listeners.
 #[derive(Clone, Default)]
 pub struct EventEmitter<T> {
     inner: Arc<Mutex<EventsInner<T>>>,
 }
 
 impl<T> EventEmitter<T> {
+    /// Makes an emitter with no listeners
     pub fn new() -> Self {
         EventEmitter {
             inner: Arc::new(Mutex::new(EventsInner::new())),
         }
     }
 
+    /// Adds a listener
+    ///
+    /// - The emitter keeps only a weak reference, so keep `observer` while you want its events.
+    /// - The emitter drops a listener at the next event after the listener drops.
     #[tracing::instrument(level = "trace", skip(self, observer))]
     pub fn subscribe(&self, observer: &Arc<dyn EventHandler<T>>) {
         self.inner.lock().listeners.push(Arc::downgrade(observer));
     }
 
-    /// Sends `value` to every live listener and drops dead ones.
+    /// Sends `value` to each live listener, in the order they subscribed
+    ///
+    /// - It calls the listeners on the thread of the caller.
+    /// - It holds the lock of the emitter during the calls, so a listener must not subscribe to the same emitter.
     #[tracing::instrument(level = "trace", skip(self, value))]
     pub fn new_data(&self, value: T) {
         let mut inner = self.inner.lock();

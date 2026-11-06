@@ -13,13 +13,15 @@ use pico_device::cm3::{PLCM3Config, PLCM3Device};
 use std::{collections::BTreeMap, time::Duration};
 use tracing::{debug, warn};
 
-/// A block of current/voltage readings, one entry per enabled channel
+/// One poll of a PicoLog CM3 stream, with one entry for each channel that is on
 #[derive(Clone, Debug)]
 pub struct PLCM3StreamingEvent {
-    /// Poll interval in milliseconds
+    /// The poll interval, in milliseconds
     pub poll_interval_ms: u32,
-    /// Each channel's new conversion as a raw value, or `None` when the channel has no
-    /// conversion since the last poll. [`pico_common::PLCM3DataType::scale`] gives its unit.
+    /// The new conversion of each channel as a raw value
+    ///
+    /// - The value is `None` when the channel has no new conversion since the last poll.
+    /// - [`PLCM3DataType::scale`](pico_common::PLCM3DataType::scale) gives its unit.
     pub channels: BTreeMap<PLCM3Channel, Option<i32>>,
 }
 

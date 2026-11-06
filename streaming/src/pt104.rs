@@ -16,16 +16,20 @@ use pico_device::pt104::{PT104Config, PT104Device};
 use std::{collections::BTreeMap, time::Duration};
 use tracing::{debug, warn};
 
-/// How many new conversions of each channel a stream drops after it sets the channels
+/// The number of new conversions of each channel that a PT-104 stream drops after it sets the channels
+///
+/// - After `UsbPt104SetChannel`, the first conversions of a channel still hold a reading of the type before.
 pub const PT104_STALE_CONVERSIONS: u32 = 2;
 
-/// A block of temperature readings, one entry per enabled channel
+/// One poll of a PT-104 stream, with one entry for each channel that is on
 #[derive(Clone, Debug)]
 pub struct PT104StreamingEvent {
-    /// Poll interval in milliseconds
+    /// The poll interval, in milliseconds
     pub poll_interval_ms: u32,
-    /// Each channel's new conversion as a raw value, or `None` when the channel has no
-    /// conversion since the last poll. [`pico_common::PT104DataType::scale`] gives its unit.
+    /// The new conversion of each channel as a raw value
+    ///
+    /// - The value is `None` when the channel has no new conversion since the last poll.
+    /// - [`PT104DataType::scale`](pico_common::PT104DataType::scale) gives its unit.
     pub channels: BTreeMap<PT104Channel, Option<i32>>,
 }
 

@@ -4,11 +4,12 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 use tracing::debug;
 
-/// The stream state of a poll-only logger
+/// The stream state of a logger that has only polls, such as the PT-104 and the PicoLog CM3
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LoggerPollState {
-    /// How often the channels are read, in milliseconds: the conversion time of the channels
-    /// that are on, so each read finds a new conversion of each channel
+    /// The time between two reads of the channels, in milliseconds
+    ///
+    /// - It is the conversion time of the channels that are on, so each read finds a new conversion of each channel.
     pub poll_interval_ms: u32,
     next_poll: Instant,
     /// New conversions still to drop, by channel number
@@ -16,7 +17,7 @@ pub struct LoggerPollState {
 }
 
 impl LoggerPollState {
-    /// A state whose first poll is one interval from now, when every channel has converted once
+    /// A state whose first poll is one interval from now, when every channel has converted one time
     pub fn new(poll_interval_ms: u32) -> Self {
         Self {
             poll_interval_ms,

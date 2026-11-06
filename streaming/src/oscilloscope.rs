@@ -65,19 +65,21 @@ fn buffer_bytes(len: usize, channels: usize, sample_size: usize) -> usize {
 
 type BufferMap = HashMap<PicoChannel, SampleBuffer>;
 
-/// One channel's samples, of the type the stream delivers.
+/// The samples of one channel, in the type that the stream gives
 #[derive(Clone, Debug, PartialEq)]
 pub enum Samples {
-    /// 8-bit codes, from an 8-bit stream with no downsample.
+    /// 8-bit codes, from an 8-bit stream with no downsample
     I8(Vec<i8>),
-    /// 16-bit codes. 8-bit units give these when they average, as the
-    /// mean keeps a fraction of a code in the low byte.
+    /// 16-bit codes
+    ///
+    /// - 8-bit units give these when they average, as the mean keeps a fraction of a code in the low byte.
     I16(Vec<i16>),
-    /// Sums of each group of a [`DownsampleKind::Sum`] stream.
+    /// The sum of each group of a [`DownsampleKind::Sum`] stream
     I32(Vec<i32>),
 }
 
 impl Samples {
+    /// The number of samples
     pub fn len(&self) -> usize {
         match self {
             Samples::I8(v) => v.len(),
@@ -86,10 +88,12 @@ impl Samples {
         }
     }
 
+    /// Whether there are no samples
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// The type of the samples
     pub fn sample_type(&self) -> SampleType {
         match self {
             Samples::I8(_) => SampleType::I8,
@@ -98,7 +102,9 @@ impl Samples {
         }
     }
 
-    /// The code at `index`, unscaled.
+    /// The code at `index`, with no scale
+    ///
+    /// - Panics when `index` is not less than [`Samples::len`].
     #[inline(always)]
     pub fn get(&self, index: usize) -> f64 {
         match self {
@@ -124,18 +130,22 @@ pub(crate) fn shift_to_i8(codes: &[i16]) -> (Vec<i8>, bool) {
 }
 
 #[derive(Clone)]
-/// A struct containing raw channel data and scaling factors to get scaled samples
+/// The raw samples of one channel in one event, and the factor that scales them
 pub struct RawChannelDataBlock {
-    /// Multiply a code by this for the value in the range's unit. For a
-    /// sum it gives the group's mean.
+    /// The factor from a code to the value in the unit of the range
+    ///
+    /// - For a sum, it gives the mean of the group.
     pub multiplier: f64,
+    /// The raw codes
     pub samples: Samples,
-    /// The input went over range at one or more samples of this block.
-    /// The driver does not say which.
+    /// Whether the input went over range at one or more samples of this block
+    ///
+    /// - The driver does not tell which samples.
     pub over_range: bool,
 }
 
 impl RawChannelDataBlock {
+    /// All the samples, scaled to the unit of the range
     pub fn scale_samples(&self) -> Vec<f64> {
         let m = self.multiplier;
         match &self.samples {
@@ -145,6 +155,9 @@ impl RawChannelDataBlock {
         }
     }
 
+    /// The sample at `index`, scaled to the unit of the range
+    ///
+    /// - Panics when `index` is not less than the number of samples.
     #[inline(always)]
     pub fn scale_sample(&self, index: usize) -> f64 {
         self.samples.get(index) * self.multiplier
@@ -221,21 +234,30 @@ pub(crate) fn multiplier(
     }
 }
 
+/// One block of samples from an oscilloscope stream
 #[derive(Clone)]
 pub struct OscilloscopeStreamEvent {
+    /// The number of samples in each channel and port
     pub length: usize,
-    /// The rate the driver set, which can differ from the rate asked for.
+    /// The rate of the samples that the stream gives
+    ///
+    /// - It is the rate that the driver set, which can differ from the rate asked for, divided by the downsample ratio.
     pub samples_per_second: f64,
+    /// The samples of each channel that is on
     pub channels: HashMap<PicoChannel, RawChannelDataBlock>,
-    /// Where the trigger of `OscilloscopeConfig::trigger` fired, as an
-    /// index into this event's samples. Families with
-    /// `TriggerCapabilities::streaming` report it.
+    /// The index in the samples of this event where the trigger of `OscilloscopeConfig::trigger` fired
+    ///
+    /// - Only families with [`TriggerCapabilities::streaming`](pico_common::TriggerCapabilities::streaming) report it.
     pub trigger_at: Option<usize>,
-    /// The 8 bits of each MSO port that is on, one byte a sample, D0 (or
-    /// D8 on `Port1`) in bit 0.
+    /// The 8 bits of each MSO port that is on, one byte for each sample
+    ///
+    /// - Bit 0 is D0, or D8 on `Port1`.
     pub digital: HashMap<DigitalPort, Vec<u8>>,
 }
 
+/// The state of a running oscilloscope stream
+///
+/// - [`StreamingRunner::get_stream`] gives it while the scope streams.
 #[derive(Clone)]
 pub struct ScopeStreamState {
     sample_config: OscilloscopeSampleConfig,
@@ -277,24 +299,24 @@ impl Default for ScopeStreamState {
     }
 }
 
-/// What a stream delivered, from the driver's start indices and
-/// counts, to tell samples the driver skipped from samples lost later.
+/// What a stream gave, from the start indices and counts of the driver
+///
+/// - Use it to tell samples that the driver skipped from samples lost later.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StreamCounts {
-    /// Samples the driver reported.
+    /// The samples that the driver reported
     pub samples: u64,
-    /// Calls that returned samples.
+    /// The calls that returned samples
     pub returns: u64,
-    /// Returns whose start index was not where the one before ended.
+    /// The returns whose start index was not where the return before ended
     pub index_gaps: u64,
-    /// Samples between the end of one return and the start of a later
-    /// one, summed over the gaps.
+    /// The samples between the end of one return and the start of a later one, summed over the gaps
     pub skipped: u64,
-    /// Times the driver asked for buffers again.
+    /// The times that the driver asked for buffers again
     pub refills: u64,
-    /// When the last return came. The samples between two snapshots
-    /// over the time between their returns give the rate the driver
-    /// delivers, with no error from samples in flight.
+    /// When the last return came
+    ///
+    /// - The samples between two snapshots, divided by the time between their returns, give the rate of the driver, with no error from samples in transit.
     pub last_return: Option<Instant>,
 }
 
@@ -435,64 +457,65 @@ impl PollTimes {
 }
 
 impl ScopeStreamState {
-    /// The rate of the samples the stream delivers: the rate the driver
-    /// set, which can differ from the rate asked for, divided by the
-    /// downsample ratio.
+    /// The rate of the samples that the stream gives
+    ///
+    /// - It is the rate that the driver set, which can differ from the rate asked for, divided by the downsample ratio.
     pub fn samples_per_second(&self) -> f64 {
         self.device_samples_per_second() / Downsample::ratio_of(self.downsample) as f64
     }
 
-    /// The rate the driver set the device to, before any downsample.
+    /// The rate that the driver set on the device, before any downsample
     pub fn device_samples_per_second(&self) -> f64 {
         self.sample_config.rate_hz()
     }
 
-    /// The device's sample interval the driver set.
+    /// The sample interval that the driver set on the device
     pub fn sample_config(&self) -> OscilloscopeSampleConfig {
         self.sample_config
     }
 
-    /// The downsample the stream runs with, `None` for raw samples.
+    /// The downsample of the stream, or `None` for raw samples
     pub fn downsample(&self) -> Option<Downsample> {
         self.downsample
     }
 
-    /// The type of the samples the stream delivers.
+    /// The type of the samples that the stream gives
     pub fn sample_type(&self) -> SampleType {
         self.layout.delivered
     }
 
-    /// A channel's multiplier: a code times this is the value in the
-    /// range's unit.
+    /// The factor from a code of `channel` to the value in the unit of the range
+    ///
+    /// - Returns `None` for a channel that is off.
     pub fn multiplier(&self, channel: PicoChannel) -> Option<f64> {
         self.multipliers.get(&channel).copied()
     }
 
-    /// What the stream delivered so far, by the driver's counts.
+    /// What the stream gave until now, from the counts of the driver
     pub fn counts(&self) -> StreamCounts {
         self.counts.snapshot()
     }
 
-    /// Whether `other` is a state of the same stream, not of one
-    /// started again since.
+    /// Whether `other` is a state of the same stream, and not of a stream that started again after it
     pub fn same_stream(&self, other: &ScopeStreamState) -> bool {
         Arc::ptr_eq(&self.counts, &other.counts)
     }
 
-    /// The MSO ports the stream delivers.
+    /// The MSO ports that the stream gives, in order
     pub fn digital_ports(&self) -> Vec<DigitalPort> {
         let mut ports: Vec<_> = self.digital_buffers.keys().copied().collect();
         ports.sort();
         ports
     }
 
-    /// The samples each channel's buffer holds.
+    /// The number of samples that the buffer of each channel holds
     pub fn buffer_len(&self) -> usize {
         self.buffer_len
     }
 
-    /// How long the buffers hold at the rate the driver set: a poll
-    /// thread held up longer than this loses samples.
+    /// The time that the buffers hold at the rate of the stream
+    ///
+    /// - A poll thread that is held up for longer than this loses samples.
     pub fn buffer_span(&self) -> Duration {
         Duration::from_secs_f64(self.buffer_len as f64 / self.samples_per_second().max(1e-9))
     }
@@ -788,7 +811,7 @@ pub(crate) fn set_resolution(
         })
 }
 
-/// A scope's streaming runner.
+/// The streaming runner of an oscilloscope
 pub type ScopeRunner = StreamingRunner<
     OscilloscopeDevice,
     OscilloscopeConfig,
@@ -797,59 +820,72 @@ pub type ScopeRunner = StreamingRunner<
     OscilloscopeStreamEvent,
 >;
 
-/// Calls a stream allows, each run between two polls so the stream
-/// goes on. LEDs are on units with `ScopeCapabilities::channel_leds`.
+/// Calls that a stream allows
+///
+/// - Each call runs between two polls through [`StreamingRunner::with_open`], so the stream goes on.
+/// - Each call returns Err with `INVALID_HANDLE` while the unit is closed, or the error of the driver.
+/// - Only units with [`ScopeCapabilities::channel_leds`](pico_common::ScopeCapabilities::channel_leds) have LEDs.
+/// - Do not call them from an event handler, as the call then never returns.
 impl ScopeRunner {
+    /// Sets the colour of each LED
     pub fn set_led_colours(&self, colours: &[(PicoLed, LedColour)]) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.set_led_colours(*info.handle, colours))
             .unwrap_or_else(|| Err(closed("set_led_colours")))
     }
 
+    /// Sets the state of each LED
     pub fn set_led_states(&self, states: &[(PicoLed, LedState)]) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.set_led_states(*info.handle, states))
             .unwrap_or_else(|| Err(closed("set_led_states")))
     }
 
+    /// Sets the brightness of the LEDs
     pub fn set_led_brightness(&self, brightness: u8) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.set_led_brightness(*info.handle, brightness))
             .unwrap_or_else(|| Err(closed("set_led_brightness")))
     }
 
+    /// Sets the mode of the AUX I/O connector
     pub fn set_aux_io_mode(&self, mode: AuxIoMode) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.set_aux_io_mode(*info.handle, mode))
             .unwrap_or_else(|| Err(closed("set_aux_io_mode")))
     }
 
-    /// Whether the trigger and the pulse width qualifier are on.
+    /// Whether the trigger is on, and whether the pulse width qualifier is on
     pub fn trigger_enabled(&self) -> PicoResult<(bool, bool)> {
         self.with_open(|device, info| device.driver.trigger_enabled(*info.handle))
             .unwrap_or_else(|| Err(closed("trigger_enabled")))
     }
 
-    /// What the unit's signal generator can do
-    /// (`ScopeCapabilities::sig_gen`).
+    /// What the signal generator of the unit can do
+    ///
+    /// - [`ScopeCapabilities::sig_gen`](pico_common::ScopeCapabilities::sig_gen) tells whether the unit has one.
     pub fn sig_gen_info(&self) -> PicoResult<SigGenInfo> {
         self.with_open(|device, info| device.driver.sig_gen_info(*info.handle))
             .unwrap_or_else(|| Err(closed("sig_gen_info")))
     }
 
-    /// Sets the signal generator, or turns it off with `None`, and
-    /// returns what the driver set.
+    /// Sets the signal generator, or turns it off with `None`
+    ///
+    /// - Returns the settings that the driver set.
     pub fn set_sig_gen(&self, config: Option<&SigGenConfig>) -> PicoResult<Option<SigGenConfig>> {
         self.with_open(|device, info| device.driver.sig_gen_apply(*info.handle, config))
             .unwrap_or_else(|| Err(closed("sig_gen_apply")))
     }
 
+    /// Sets the software trigger of the signal generator to `state`
     pub fn sig_gen_software_trigger(&self, state: bool) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.sig_gen_software_trigger(*info.handle, state))
             .unwrap_or_else(|| Err(closed("sig_gen_software_trigger")))
     }
 
+    /// Pauses the signal generator
     pub fn sig_gen_pause(&self) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.sig_gen_pause(*info.handle))
             .unwrap_or_else(|| Err(closed("sig_gen_pause")))
     }
 
+    /// Starts the paused signal generator again
     pub fn sig_gen_restart(&self) -> PicoResult<()> {
         self.with_open(|device, info| device.driver.sig_gen_restart(*info.handle))
             .unwrap_or_else(|| Err(closed("sig_gen_restart")))

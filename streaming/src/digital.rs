@@ -1,4 +1,7 @@
-//! MSO digital ports for scope streams and block captures.
+//! The MSO digital ports of a scope, for streams and block captures
+//!
+//! The scope stream and [`crate::BlockRunner`] call these functions.
+//! Call them yourself only when you drive the driver of a scope directly.
 
 use pico_common::{
     port_bytes, DigitalPort, PicoError, PicoResult, PicoStatus, SampleType, TriggerConfig,
@@ -8,12 +11,15 @@ use pico_driver::oscilloscope::SampleBuffer;
 use std::collections::HashMap;
 use tracing::debug;
 
-/// One `i16` buffer for each port a config turns on.
+/// One `i16` buffer for each port that a config turns on
 pub type PortBuffers = HashMap<DigitalPort, SampleBuffer>;
 
-/// Turns off every port of the unit. Call it with the channels off,
-/// before a resolution change: ports left on from a stream of ports
-/// alone hold the unit at 8 bits, and a change to more then fails.
+/// Turns off every port of the unit
+///
+/// - Call it with the channels off, before a change of resolution.
+///   Ports left on from a stream of ports with no channel hold the unit at 8 bits, and a change to more bits then fails.
+/// - A port with no MSO pod is not an error.
+/// - Returns Err when the driver refuses a call.
 pub fn ports_off(device: &OscilloscopeDevice, info: &OscilloscopeInfo) -> PicoResult<()> {
     for port in DigitalPort::first(info.capabilities.digital_ports) {
         match device.driver.set_digital_port(*info.handle, port, None) {
@@ -25,10 +31,11 @@ pub fn ports_off(device: &OscilloscopeDevice, info: &OscilloscopeInfo) -> PicoRe
     Ok(())
 }
 
-/// Turns on the ports `config` names, with their thresholds, and turns
-/// off the unit's other ports. Call it after the channels are set and
-/// before the buffers are given (ps2000a guide §2.6.4.1). A unit with
-/// no ports and a config with none make no call.
+/// Turns on the ports that `config` names, with their thresholds, and turns off the other ports of the unit
+///
+/// - Call it after you set the channels, and before you give the buffers (ps2000a guide §2.6.4.1).
+/// - A unit with no ports and a config with none make no call.
+/// - Returns Err when the driver refuses a call.
 pub fn set_up_ports(
     device: &OscilloscopeDevice,
     info: &OscilloscopeInfo,
@@ -52,8 +59,10 @@ pub fn set_up_ports(
     Ok(())
 }
 
-/// Refuses a digital trigger on a port `config` leaves off: the unit
-/// compares only the inputs of a port that is on, with its threshold.
+/// Refuses a digital trigger on a port that `config` leaves off
+///
+/// - The unit compares only the inputs of a port that is on, with its threshold.
+/// - Returns Err with `INVALID_DIGITAL_PORT` when the trigger names a line of a port that is off.
 pub fn check_trigger_ports(config: &OscilloscopeConfig, trigger: &TriggerConfig) -> PicoResult<()> {
     for bit in trigger.digital_bits() {
         let on = DigitalPort::ALL
@@ -73,7 +82,7 @@ pub fn check_trigger_ports(config: &OscilloscopeConfig, trigger: &TriggerConfig)
     Ok(())
 }
 
-/// A zeroed buffer of `len` samples for each port `config` turns on.
+/// A buffer of `len` zero samples for each port that `config` turns on
 pub fn port_buffers(config: &OscilloscopeConfig, len: usize) -> PortBuffers {
     config
         .digital
@@ -82,7 +91,9 @@ pub fn port_buffers(config: &OscilloscopeConfig, len: usize) -> PortBuffers {
         .collect()
 }
 
-/// The bytes of each port's samples in `range` of its buffer.
+/// The samples in `range` of the buffer of each port, one byte for each sample
+///
+/// - Panics when `range` is past the end of a buffer.
 pub fn read_ports(
     buffers: &PortBuffers,
     range: std::ops::Range<usize>,

@@ -39,26 +39,32 @@ const READY_POLL: Duration = Duration::from_millis(20);
 /// timestamp counter, to time each segment by the host's clock.
 const CAPTURE_POLL: Duration = Duration::from_millis(1);
 
-/// What to capture.
+/// What a block capture takes
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockSettings {
-    /// The rate asked for. The capture runs at the nearest timebase.
+    /// The rate asked for
+    ///
+    /// - The capture runs at the nearest timebase.
     pub samples_per_second: f64,
+    /// The samples before the trigger
     pub pre_trigger: u64,
+    /// The samples after the trigger
     pub post_trigger: u64,
-    /// 1 for block mode; more for rapid block, one capture a segment.
+    /// The number of segments: 1 for block mode, more for rapid block with one capture in each segment
     pub segments: u64,
-    /// `TriggerConfig::None` captures at once.
+    /// The trigger
+    ///
+    /// - `TriggerConfig::None` captures at once.
     pub trigger: TriggerConfig,
-    /// Columns of the min and max overview read after each capture; 0
-    /// reads none.
+    /// The columns of the min and max overview read after each capture
+    ///
+    /// - 0 reads no overview.
     pub overview_columns: usize,
 }
 
 impl BlockSettings {
-    /// One block of `samples` after the trigger at `samples_per_second`,
-    /// with no trigger and an overview of 1000 columns.
+    /// One block of `samples` after the trigger at `samples_per_second`, with no trigger and an overview of 1000 columns
     pub fn new(samples_per_second: f64, samples: u64) -> Self {
         BlockSettings {
             samples_per_second,
@@ -70,55 +76,64 @@ impl BlockSettings {
         }
     }
 
+    /// The samples in each segment, before and after the trigger
     pub fn samples(&self) -> u64 {
         self.pre_trigger + self.post_trigger
     }
 }
 
-/// What the unit will run for the settings.
+/// What the unit runs for the settings
 #[derive(Debug, Clone, Copy)]
 pub struct BlockPlan {
+    /// The timebase nearest to the rate asked for
     pub timebase: Timebase,
+    /// The number of segments
     pub segments: u64,
-    /// The samples each segment holds, where the family says.
+    /// The samples that each segment holds, when the family tells
     pub segment_samples: Option<u64>,
-    /// How the family times segments, if it has a counter.
+    /// How the family times the segments, when it has a counter
     pub timestamps: Option<TimestampCounter>,
 }
 
-/// One channel's values of a read.
+/// The values of one channel in a read
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockChannel {
-    /// Multiply a value by this for the range's unit.
+    /// The factor from a value to the unit of the range
     pub multiplier: f64,
-    /// The samples, or each group's value; the highs of an aggregate.
+    /// The samples, or the value of each group
+    ///
+    /// - For an aggregate read, these are the highs.
     pub values: Samples,
-    /// The lows of an aggregate read.
+    /// The lows of an aggregate read
     pub min: Option<Samples>,
-    /// The input went over range in the capture or segment read.
+    /// Whether the input went over range in the capture or segment that was read
     pub over_range: bool,
 }
 
-/// Values read from one segment of a capture.
+/// The values read from one segment of a capture
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockData {
+    /// The segment that was read
     pub segment: u64,
-    /// The first raw sample read.
+    /// The first raw sample that was read
     pub start: u64,
-    /// Raw samples a value stands for: 1 for a raw read.
+    /// The number of raw samples for each value: 1 for a raw read
     pub ratio: u32,
+    /// The downsample mode, or `None` for a raw read
     pub mode: Option<DownsampleKind>,
-    /// How long the read took.
+    /// The time that the read took
     pub transfer: Duration,
+    /// The values of each channel that is on
     pub channels: HashMap<PicoChannel, BlockChannel>,
-    /// Each port's samples, a byte each, one bit a line (bit 0 is D0 of
-    /// `Port0`, D8 of `Port1`). Raw reads only: a downsampled read
-    /// holds no ports.
+    /// The samples of each port, one byte for each sample and one bit for each line
+    ///
+    /// - Bit 0 is D0 of `Port0`, or D8 of `Port1`.
+    /// - Only raw reads have ports, as a mean or sum of bit patterns has no meaning.
     pub digital: HashMap<DigitalPort, Vec<u8>>,
 }
 
 impl BlockData {
-    /// Values each channel, or each port with no channel on, holds.
+    /// The values of each channel, or of each port when no channel is on
     pub fn len(&self) -> usize {
         match self.channels.values().next() {
             Some(c) => c.values.len(),
@@ -126,12 +141,14 @@ impl BlockData {
         }
     }
 
+    /// Whether the read holds no values
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Bytes read from the unit for all channels and ports. A port's
-    /// sample comes as an `i16`.
+    /// The bytes read from the unit for all the channels and ports
+    ///
+    /// - A sample of a port comes as an `i16`.
     pub fn bytes(&self) -> usize {
         let channels: usize = self
             .channels
@@ -145,44 +162,52 @@ impl BlockData {
     }
 }
 
-/// One segment of a capture.
+/// One segment of a capture
 #[derive(Debug, Clone, PartialEq)]
 pub struct SegmentInfo {
+    /// The index of the segment
     pub segment: u64,
-    /// What the family reports of the trigger.
+    /// What the family reports of the trigger
     pub trigger: TriggerInfo,
-    /// Seconds from the first segment's trigger. From the unit's counter
-    /// where it has one; else from the host clock when a capture count
-    /// rose, which is late by the poll and USB times; `None` where
-    /// neither gave a time.
+    /// The seconds from the trigger of the first segment
+    ///
+    /// - It comes from the counter of the unit, when the unit has one.
+    /// - Else it comes from the host clock when the count of captures rose, which is late by the poll and USB times.
+    /// - It is `None` when neither gave a time.
     pub since_first_s: Option<f64>,
-    /// `since_first_s` comes from the host clock, not the unit.
+    /// Whether `since_first_s` comes from the host clock, and not from the unit
     pub estimated: bool,
 }
 
-/// A capture that ended.
+/// A capture that ended
 #[derive(Debug, Clone)]
 pub struct BlockCapture {
-    /// Counts captures from 0 since the runner was made.
+    /// The count of captures from 0, since the runner was made
     pub sequence: u64,
+    /// The rate of the timebase that the capture ran at
     pub samples_per_second: f64,
+    /// The samples before the trigger
     pub pre_trigger: u64,
-    /// Samples each segment holds.
+    /// The samples that each segment holds
     pub samples: u64,
+    /// Each segment that was captured
     pub segments: Vec<SegmentInfo>,
-    /// The first segment's trigger on the host clock, estimated from
-    /// when the unit said it was ready, less the post-trigger time.
+    /// The trigger of the first segment on the host clock
+    ///
+    /// - It is an estimate: the time the unit said it was ready, less the post-trigger time.
     pub triggered_at: SystemTime,
-    /// Seconds from the trigger of the last capture's first segment, by
-    /// the unit's counter where it counts across captures (ps6000a and
-    /// psospa, ps6000apg-9 §3.18.2), else by `triggered_at`.
+    /// The seconds from the trigger of the first segment of the last capture
+    ///
+    /// - It comes from the counter of the unit, when the counter counts across captures (ps6000a and psospa, ps6000apg-9 §3.18.2).
+    /// - Else it comes from `triggered_at`.
     pub since_last_capture_s: Option<f64>,
+    /// Whether `since_last_capture_s` comes from the host clock, and not from the unit
     pub since_last_estimated: bool,
-    /// From arm to ready.
+    /// The time from the arm to the ready
     pub waited: Duration,
-    /// The time the driver said the unit would be busy collecting.
+    /// The time that the driver said the unit would be busy for the capture
     pub indisposed_ms: f64,
-    /// The overview of each segment, when settings ask for one.
+    /// The overview of each segment, when the settings ask for one
     pub overview: Vec<BlockData>,
 }
 
@@ -202,8 +227,41 @@ struct LastTrigger {
     counter: Option<u64>,
 }
 
-/// Drives block and rapid block captures on an open scope. Every call
-/// runs on the caller's thread; [`BlockRunner::run`] loops.
+/// Takes block and rapid block captures from a scope
+///
+/// - Every call runs on the thread of the caller.
+/// - A capture stays held until the next arm, so you can read raw spans of it with [`BlockRunner::read`].
+/// - [`BlockRunner::run`] captures in a loop.
+///
+/// ```no_run
+/// use pico_common::{Driver, PicoChannel, PicoCoupling, PicoRange};
+/// use pico_device::{oscilloscope::OscilloscopeConfig, DeviceOpen};
+/// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+/// use pico_streaming::{BlockRunner, BlockSettings};
+/// use std::time::Duration;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let PicoDriver::Oscilloscope(driver) = Driver::PS2000A.load(&LibraryResolution::Default)?
+///     else {
+///         unreachable!("PS2000A is an oscilloscope driver");
+///     };
+///     let device = driver.open_device(None)?;
+///
+///     let mut config = OscilloscopeConfig::default();
+///     config.enable_channel(PicoChannel::A, PicoRange::X1_PROBE_2V, PicoCoupling::DC);
+///
+///     // 10 000 samples at 1 MS/s, with no trigger
+///     let settings = BlockSettings::new(1e6, 10_000);
+///     let mut block = BlockRunner::new(device, &config, settings)?;
+///     let capture = block.capture(Duration::from_secs(1))?;
+///
+///     let data = block.read(0, 0, capture.samples, None)?;
+///     for (channel, values) in &data.channels {
+///         println!("{channel}: {} samples", values.values.len());
+///     }
+///     Ok(())
+/// }
+/// ```
 pub struct BlockRunner {
     device: OscilloscopeDevice,
     info: OscilloscopeInfo,
@@ -247,10 +305,18 @@ fn port_data(
 }
 
 impl BlockRunner {
-    /// Sets up the scope for `settings` with the channels, ports and
-    /// resolution of `config`, whose rate and downsample are not used.
-    /// Ports alone run at 8 bits, as in a stream (psospa-3
-    /// psospaSetDigitalPortOn).
+    /// Sets up the scope for `settings`, with the channels, ports and resolution of `config`
+    ///
+    /// - It opens a closed device.
+    /// - It does not use the rate and the downsample of `config`.
+    /// - Ports with no channel run at 8 bits, as in a stream (psospa-3 psospaSetDigitalPortOn).
+    /// - Returns Err when the device does not open, or when the device info refuses `config`.
+    /// - Returns Err with `INVALID_CHANNEL` when no channel or port is on.
+    /// - Returns Err with `INVALID_DIGITAL_PORT` when the trigger names a port that is off.
+    /// - Returns Err when the unit has no block mode, or has no rapid block mode and `settings` asks for more than one segment.
+    /// - Returns Err with `INVALID_PARAMETER` when `settings` asks for no segments or no samples.
+    /// - Returns Err with `TOO_MANY_SEGMENTS` or `TOO_MANY_SAMPLES` when a segment or the memory cannot hold the capture.
+    /// - Returns Err when the driver refuses a call.
     #[tracing::instrument(level = "debug", skip_all, fields(serial = %device.serial))]
     pub fn new(
         mut device: OscilloscopeDevice,
@@ -391,19 +457,25 @@ impl BlockRunner {
         })
     }
 
+    /// What the unit runs for the settings
     pub fn plan(&self) -> &BlockPlan {
         &self.plan
     }
 
+    /// The settings of the captures
     pub fn settings(&self) -> &BlockSettings {
         &self.settings
     }
 
+    /// The device that the runner drives
     pub fn device(&self) -> &OscilloscopeDevice {
         &self.device
     }
 
-    /// Starts a capture. The capture held before is lost.
+    /// Starts a capture
+    ///
+    /// - The capture held before is lost.
+    /// - Returns Err when the driver refuses the run.
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn arm(&mut self) -> PicoResult<()> {
         let h = handle(&self.info);
@@ -435,9 +507,11 @@ impl BlockRunner {
         Ok(())
     }
 
-    /// Waits up to `timeout` for the armed capture, then reads its
-    /// trigger timing and overview. `None` when it has not ended; it
-    /// stays armed.
+    /// Waits up to `timeout` for the armed capture, then reads its trigger times and overview
+    ///
+    /// - Returns `None` when the capture did not end, and the capture stays armed.
+    /// - Returns Err with `NO_SAMPLES_AVAILABLE` when no capture is armed.
+    /// - Returns Err with the status of the ready callback when that status is not `OK`.
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn wait(&mut self, timeout: Duration) -> PicoResult<Option<BlockCapture>> {
         let Some(ready) = self.armed.as_ref().map(|a| a.ready.clone()) else {
@@ -496,9 +570,11 @@ impl BlockRunner {
         self.collect(armed, ready_at, segments, &seen).map(Some)
     }
 
-    /// Arms, then waits up to `timeout`. On a timeout the capture is
-    /// stopped; a rapid block capture gives the segments it filled,
-    /// a block capture an error.
+    /// Arms, then waits up to `timeout` for the capture
+    ///
+    /// - On a timeout it stops the capture.
+    ///   A rapid block capture then gives the segments that it filled.
+    /// - Returns Err with `TIMEOUT` when no segment was captured before the timeout.
     pub fn capture(&mut self, timeout: Duration) -> PicoResult<BlockCapture> {
         self.arm()?;
         if let Some(capture) = self.wait(timeout)? {
@@ -530,8 +606,10 @@ impl BlockRunner {
         self.collect(armed, Instant::now(), segments, &[])
     }
 
-    /// Captures until `on_capture` breaks or fails, arming again after
-    /// each. `on_capture` can read raw spans of the capture it gets.
+    /// Captures until `on_capture` breaks or fails, and arms again after each capture
+    ///
+    /// - `on_capture` can read raw spans of the capture that it gets.
+    /// - Returns Err with the first error of a capture or of `on_capture`.
     pub fn run(
         &mut self,
         timeout: Duration,
@@ -545,14 +623,18 @@ impl BlockRunner {
         }
     }
 
-    /// Stops an armed capture.
+    /// Stops an armed capture
     pub fn stop(&mut self) -> PicoResult<()> {
         self.armed = None;
         self.device.driver.stop(handle(&self.info))
     }
 
-    /// Reads `count` raw samples from `start` of `segment` of the held
-    /// capture, downsampled by `downsample`.
+    /// Reads `count` raw samples from `start` of `segment` of the held capture, with the downsample `downsample`
+    ///
+    /// - It reads no more than the end of the segment.
+    /// - A downsampled read holds no ports.
+    /// - Returns Err with `NO_SAMPLES_AVAILABLE` when no capture is held.
+    /// - Returns Err with `SEGMENT_OUT_OF_RANGE` when `segment` or `start` is past the capture.
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn read(
         &mut self,
@@ -653,7 +735,10 @@ impl BlockRunner {
         Ok(data)
     }
 
-    /// Reads segments `from` to `to` whole and raw in one call.
+    /// Reads all of segments `from` to `to`, raw, in one call
+    ///
+    /// - Returns Err with `NO_SAMPLES_AVAILABLE` when no capture is held.
+    /// - Returns Err with `SEGMENT_OUT_OF_RANGE` when `from` is after `to`, or `to` is past the capture.
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn read_segments(&mut self, from: u64, to: u64) -> PicoResult<Vec<BlockData>> {
         let (segments, samples) = self.held.ok_or_else(|| {
@@ -901,7 +986,7 @@ impl BlockRunner {
             .collect()
     }
 
-    /// Gives the device back, stopping any capture.
+    /// Stops any capture, and gives the device back
     pub fn into_device(mut self) -> OscilloscopeDevice {
         self.stop().ok();
         self.buffers.clear();
