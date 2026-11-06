@@ -78,9 +78,11 @@
 //! - Each runner has one background thread, which takes all the steps.
 //! - The handlers of [`StreamingRunner::events`] and [`StreamingRunner::notices`] run on that thread, inside a step.
 //!   A slow handler delays the next poll of the device.
-//! - A handler must not call [`StreamingRunner::with_open`], [`StreamingRunner::reopen`], [`StreamingRunner::hold_steps`] or a [`ScopeRunner`] method, as these wait for the step to end.
-//!   [`StreamingRunner::start`] called from a handler returns `TIMEOUT` after 30 s.
-//!   A handler must not subscribe to the emitter that calls it.
+//! - A call that waits for the step to end does not wait when a handler makes it inside that step.
+//!   [`StreamingRunner::start`], [`StreamingRunner::reopen`], each [`ScopeRunner`] method and each [`Outputs`](pico_common::Outputs) call return `BUSY` at once.
+//!   [`StreamingRunner::with_open`] returns `None` at once.
+//!   [`StreamingRunner::hold_steps`] returns its guard at once, and the background steps stop when the step ends.
+//! - An emitter calls its handlers with its lock free, so a handler can subscribe to the emitter that calls it.
 //! - [`StreamingRunner::stop`], [`StreamingRunner::close`] and the getters do not wait for a step, so a handler can call them.
 //! - [`StreamingRunner::with_open`] runs its closure between two steps, so a call that a stream allows, such as an output set, does not stop the stream.
 //! - [`StreamingRunner::hold_steps`] stops the background steps until its guard drops, so the caller can drive the open device for a while.

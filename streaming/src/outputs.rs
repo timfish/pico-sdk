@@ -1,5 +1,5 @@
 use crate::state::{StreamDevice, StreamingRunner};
-use pico_common::{OutputSpec, OutputValue, Outputs, PicoError, PicoResult, PicoStatus};
+use pico_common::{OutputSpec, OutputValue, Outputs, PicoResult};
 use pico_device::outputs::DeviceOutputs;
 use std::fmt;
 
@@ -20,16 +20,12 @@ where
     Event: Clone + Send + Sync + 'static,
 {
     fn outputs(&self) -> PicoResult<Vec<OutputSpec>> {
-        self.with_open(|device, info| device.outputs_of(info))
-            .unwrap_or_else(|| Err(closed("outputs")))
+        self.call_open("outputs", |device, info| device.outputs_of(info))
     }
 
     fn set_output(&self, id: &str, value: &OutputValue) -> PicoResult<OutputValue> {
-        self.with_open(|device, info| device.set_output_of(info, id, value))
-            .unwrap_or_else(|| Err(closed("set_output")))
+        self.call_open("set_output", |device, info| {
+            device.set_output_of(info, id, value)
+        })
     }
-}
-
-fn closed(context: &str) -> PicoError {
-    PicoError::from_status(PicoStatus::INVALID_HANDLE, context)
 }

@@ -567,6 +567,40 @@ mod streaming_tests {
         streaming.close();
     }
 
+    /// Calls an LED set on its first event, and sends the answer.
+    struct SetsLeds {
+        streaming: Mutex<Option<pico_streaming::ScopeRunner>>,
+        done: Mutex<std::sync::mpsc::Sender<PicoResult<()>>>,
+    }
+
+    impl EventHandler<OscilloscopeStreamEvent> for SetsLeds {
+        fn new_data(&self, _: Arc<OscilloscopeStreamEvent>) {
+            if let Some(streaming) = self.streaming.lock().unwrap().take() {
+                let answer = streaming.set_led_brightness(50);
+                self.done.lock().unwrap().send(answer).ok();
+            }
+        }
+    }
+
+    /// A scope call from an event handler, inside the step that sends
+    /// the event, returns `BUSY` at once and makes no driver call.
+    #[test]
+    fn a_scope_call_from_a_handler_returns_busy_at_once() {
+        let streaming = polled_scope(Arc::new(AtomicUsize::new(0)), Ok(()));
+        let (done, answers) = std::sync::mpsc::channel();
+        let sets: Arc<dyn EventHandler<OscilloscopeStreamEvent>> = Arc::new(SetsLeds {
+            streaming: Mutex::new(Some(streaming.clone())),
+            done: Mutex::new(done),
+        });
+        streaming.events.subscribe(&sets);
+        start_a(&streaming);
+        let answer = answers
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the call from the handler did not return");
+        assert_eq!(answer.unwrap_err().status, PicoStatus::BUSY);
+        streaming.close();
+    }
+
     /// Counts the events of a stream; panics on the first when `panic`.
     struct Count {
         events: AtomicUsize,

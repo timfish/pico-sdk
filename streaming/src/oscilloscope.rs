@@ -824,76 +824,82 @@ pub type ScopeRunner = StreamingRunner<
 ///
 /// - Each call runs between two polls through [`StreamingRunner::with_open`], so the stream goes on.
 /// - Each call returns Err with `INVALID_HANDLE` while the unit is closed, or the error of the driver.
+/// - Each call returns Err with `BUSY` at once when an event handler calls it inside a step.
 /// - Only units with [`ScopeCapabilities::channel_leds`](pico_common::ScopeCapabilities::channel_leds) have LEDs.
-/// - Do not call them from an event handler, as the call then never returns.
 impl ScopeRunner {
     /// Sets the colour of each LED
     pub fn set_led_colours(&self, colours: &[(PicoLed, LedColour)]) -> PicoResult<()> {
-        self.with_open(|device, info| device.driver.set_led_colours(*info.handle, colours))
-            .unwrap_or_else(|| Err(closed("set_led_colours")))
+        self.call_open("set_led_colours", |device, info| {
+            device.driver.set_led_colours(*info.handle, colours)
+        })
     }
 
     /// Sets the state of each LED
     pub fn set_led_states(&self, states: &[(PicoLed, LedState)]) -> PicoResult<()> {
-        self.with_open(|device, info| device.driver.set_led_states(*info.handle, states))
-            .unwrap_or_else(|| Err(closed("set_led_states")))
+        self.call_open("set_led_states", |device, info| {
+            device.driver.set_led_states(*info.handle, states)
+        })
     }
 
     /// Sets the brightness of the LEDs
     pub fn set_led_brightness(&self, brightness: u8) -> PicoResult<()> {
-        self.with_open(|device, info| device.driver.set_led_brightness(*info.handle, brightness))
-            .unwrap_or_else(|| Err(closed("set_led_brightness")))
+        self.call_open("set_led_brightness", |device, info| {
+            device.driver.set_led_brightness(*info.handle, brightness)
+        })
     }
 
     /// Sets the mode of the AUX I/O connector
     pub fn set_aux_io_mode(&self, mode: AuxIoMode) -> PicoResult<()> {
-        self.with_open(|device, info| device.driver.set_aux_io_mode(*info.handle, mode))
-            .unwrap_or_else(|| Err(closed("set_aux_io_mode")))
+        self.call_open("set_aux_io_mode", |device, info| {
+            device.driver.set_aux_io_mode(*info.handle, mode)
+        })
     }
 
     /// Whether the trigger is on, and whether the pulse width qualifier is on
     pub fn trigger_enabled(&self) -> PicoResult<(bool, bool)> {
-        self.with_open(|device, info| device.driver.trigger_enabled(*info.handle))
-            .unwrap_or_else(|| Err(closed("trigger_enabled")))
+        self.call_open("trigger_enabled", |device, info| {
+            device.driver.trigger_enabled(*info.handle)
+        })
     }
 
     /// What the signal generator of the unit can do
     ///
     /// - [`ScopeCapabilities::sig_gen`](pico_common::ScopeCapabilities::sig_gen) tells whether the unit has one.
     pub fn sig_gen_info(&self) -> PicoResult<SigGenInfo> {
-        self.with_open(|device, info| device.driver.sig_gen_info(*info.handle))
-            .unwrap_or_else(|| Err(closed("sig_gen_info")))
+        self.call_open("sig_gen_info", |device, info| {
+            device.driver.sig_gen_info(*info.handle)
+        })
     }
 
     /// Sets the signal generator, or turns it off with `None`
     ///
     /// - Returns the settings that the driver set.
     pub fn set_sig_gen(&self, config: Option<&SigGenConfig>) -> PicoResult<Option<SigGenConfig>> {
-        self.with_open(|device, info| device.driver.sig_gen_apply(*info.handle, config))
-            .unwrap_or_else(|| Err(closed("sig_gen_apply")))
+        self.call_open("sig_gen_apply", |device, info| {
+            device.driver.sig_gen_apply(*info.handle, config)
+        })
     }
 
     /// Sets the software trigger of the signal generator to `state`
     pub fn sig_gen_software_trigger(&self, state: bool) -> PicoResult<()> {
-        self.with_open(|device, info| device.driver.sig_gen_software_trigger(*info.handle, state))
-            .unwrap_or_else(|| Err(closed("sig_gen_software_trigger")))
+        self.call_open("sig_gen_software_trigger", |device, info| {
+            device.driver.sig_gen_software_trigger(*info.handle, state)
+        })
     }
 
     /// Pauses the signal generator
     pub fn sig_gen_pause(&self) -> PicoResult<()> {
-        self.with_open(|device, info| device.driver.sig_gen_pause(*info.handle))
-            .unwrap_or_else(|| Err(closed("sig_gen_pause")))
+        self.call_open("sig_gen_pause", |device, info| {
+            device.driver.sig_gen_pause(*info.handle)
+        })
     }
 
     /// Starts the paused signal generator again
     pub fn sig_gen_restart(&self) -> PicoResult<()> {
-        self.with_open(|device, info| device.driver.sig_gen_restart(*info.handle))
-            .unwrap_or_else(|| Err(closed("sig_gen_restart")))
+        self.call_open("sig_gen_restart", |device, info| {
+            device.driver.sig_gen_restart(*info.handle)
+        })
     }
-}
-
-fn closed(context: &str) -> PicoError {
-    PicoError::from_status(PicoStatus::INVALID_HANDLE, context)
 }
 
 impl
