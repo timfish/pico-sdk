@@ -166,10 +166,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let driver = Driver::TC08.load(&cache_resolution())?;
-//! let PicoDevice::TC08(tc08) = driver.open_device(None)? else {
-//!     unreachable!("the TC-08 driver opens only TC-08 devices");
-//! };
+//! let tc08 = TC08Driver::load(&cache_resolution())?.open_device(None)?;
 //! let stream = tc08.into_streaming_device();
 //!
 //! let printer: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(Printer);
@@ -229,8 +226,14 @@ pub mod prelude {
     };
     pub use pico_download::{cache_resolution, download_drivers_to_cache};
     pub use pico_driver::{
+        cm3::PLCM3Driver,
+        drdaq::DrDAQDriver,
+        hrdl::HRDLDriver,
         kernel_driver,
-        oscilloscope::{ChannelExtrasDriver, EnumerationResult, EtsDriver},
+        oscilloscope::{ChannelExtrasDriver, EnumerationResult, EtsDriver, OscilloscopeDriver},
+        pl1000::PL1000Driver,
+        pt104::PT104Driver,
+        tc08::TC08Driver,
         DriverLoad, DriverLoadError, LibraryResolution, PicoDriver,
     };
     pub use pico_enumeration::{

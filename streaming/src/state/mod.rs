@@ -444,9 +444,9 @@ fn next_state<Config, Info, Stream, Event>(
 /// - When the last clone drops, the runner closes the unit and waits for the background thread to end.
 ///
 /// ```no_run
-/// use pico_common::{Driver, TC08Channel, TCType};
+/// use pico_common::{TC08Channel, TCType};
 /// use pico_device::{tc08::TC08Config, DeviceOpen};
-/// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+/// use pico_driver::{tc08::TC08Driver, LibraryResolution};
 /// use pico_streaming::{EventHandler, IntoStreamingDevice, TC08StreamingEvent};
 /// use std::{sync::Arc, thread, time::Duration};
 ///
@@ -461,10 +461,9 @@ fn next_state<Config, Info, Stream, Event>(
 /// }
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let PicoDriver::TC08(driver) = Driver::TC08.load(&LibraryResolution::Default)? else {
-///         unreachable!("TC08 is the TC-08 driver");
-///     };
-///     let tc08 = driver.open_device(None)?.into_streaming_device();
+///     let tc08 = TC08Driver::load(&LibraryResolution::Default)?
+///         .open_device(None)?
+///         .into_streaming_device();
 ///
 ///     let printer: Arc<dyn EventHandler<TC08StreamingEvent>> = Arc::new(Printer);
 ///     tc08.events.subscribe(&printer);

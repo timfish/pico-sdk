@@ -124,19 +124,23 @@ counts!(HRDLStreamingEvent, |e: &HRDLStreamingEvent| e
     .map(Vec::len)
     .sum());
 
-fn open(driver: Driver) -> Option<PicoDevice> {
-    let loaded = match driver.load(&LibraryResolution::Default) {
+fn open<L, D, E>(name: &str, load: impl FnOnce(&LibraryResolution) -> Result<L, E>) -> Option<D>
+where
+    L: DeviceOpen<D>,
+    E: std::fmt::Display,
+{
+    let loaded = match load(&LibraryResolution::Default) {
         Ok(loaded) => loaded,
         Err(e) => {
             let reason: String = e.to_string().chars().take(80).collect();
-            println!("{driver:?}: driver not loaded ({reason}...); skipped");
+            println!("{name}: driver not loaded ({reason}...); skipped");
             return None;
         }
     };
     match loaded.open_device(None) {
         Ok(device) => Some(device),
         Err(e) => {
-            println!("{driver:?}: no unit ({e}); skipped");
+            println!("{name}: no unit ({e}); skipped");
             None
         }
     }
@@ -152,55 +156,53 @@ fn main() {
     let mut found = 0;
     let counter = Arc::new(Counter(AtomicU64::new(0)));
 
-    for driver in [Driver::PL1000, Driver::DrDAQ, Driver::PicoHRDL] {
-        let Some(device) = open(driver) else {
-            continue;
-        };
+    if let Some(device) = open("PL1000", PL1000Driver::load) {
         found += 1;
-        println!("{driver:?} {}: open", device.get_serial());
+        println!("PL1000 {}: open", device.serial);
         counter.0.store(0, Ordering::Relaxed);
-        match device {
-            PicoDevice::PL1000(device) => {
-                exercise(&device, &mut failures);
-                let runner = device.into_streaming_device();
-                let handler: Arc<dyn EventHandler<PL1000StreamingEvent>> = counter.clone();
-                runner.events.subscribe(&handler);
-                let mut config = PL1000Config {
-                    sample_interval_us: 10_000,
-                    ..Default::default()
-                };
-                config.enable_channel(PL1000Channel::CHANNEL_1);
-                streaming(runner.start(config), &runner, &counter, &mut failures);
-                runner.close();
-            }
-            PicoDevice::DrDAQ(device) => {
-                exercise(&device, &mut failures);
-                let runner = device.into_streaming_device();
-                let handler: Arc<dyn EventHandler<DrDAQStreamingEvent>> = counter.clone();
-                runner.events.subscribe(&handler);
-                let mut config = DrDAQConfig {
-                    sample_interval_us: 10_000,
-                    ..Default::default()
-                };
-                config.enable_channel(DrDAQChannel::CHANNEL_EXT1);
-                streaming(runner.start(config), &runner, &counter, &mut failures);
-                runner.close();
-            }
-            PicoDevice::PicoHRDL(device) => {
-                exercise(&device, &mut failures);
-                let runner = device.into_streaming_device();
-                let handler: Arc<dyn EventHandler<HRDLStreamingEvent>> = counter.clone();
-                runner.events.subscribe(&handler);
-                let mut config = HRDLConfig {
-                    sample_interval_ms: 100,
-                    ..Default::default()
-                };
-                config.enable_channel(HRDLChannel::CHANNEL_1, HRDLRange::Range2500mV, true);
-                streaming(runner.start(config), &runner, &counter, &mut failures);
-                runner.close();
-            }
-            _ => unreachable!("a logger driver opened another family"),
-        }
+        exercise(&device, &mut failures);
+        let runner = device.into_streaming_device();
+        let handler: Arc<dyn EventHandler<PL1000StreamingEvent>> = counter.clone();
+        runner.events.subscribe(&handler);
+        let mut config = PL1000Config {
+            sample_interval_us: 10_000,
+            ..Default::default()
+        };
+        config.enable_channel(PL1000Channel::CHANNEL_1);
+        streaming(runner.start(config), &runner, &counter, &mut failures);
+        runner.close();
+    }
+    if let Some(device) = open("DrDAQ", DrDAQDriver::load) {
+        found += 1;
+        println!("DrDAQ {}: open", device.serial);
+        counter.0.store(0, Ordering::Relaxed);
+        exercise(&device, &mut failures);
+        let runner = device.into_streaming_device();
+        let handler: Arc<dyn EventHandler<DrDAQStreamingEvent>> = counter.clone();
+        runner.events.subscribe(&handler);
+        let mut config = DrDAQConfig {
+            sample_interval_us: 10_000,
+            ..Default::default()
+        };
+        config.enable_channel(DrDAQChannel::CHANNEL_EXT1);
+        streaming(runner.start(config), &runner, &counter, &mut failures);
+        runner.close();
+    }
+    if let Some(device) = open("PicoHRDL", HRDLDriver::load) {
+        found += 1;
+        println!("PicoHRDL {}: open", device.serial);
+        counter.0.store(0, Ordering::Relaxed);
+        exercise(&device, &mut failures);
+        let runner = device.into_streaming_device();
+        let handler: Arc<dyn EventHandler<HRDLStreamingEvent>> = counter.clone();
+        runner.events.subscribe(&handler);
+        let mut config = HRDLConfig {
+            sample_interval_ms: 100,
+            ..Default::default()
+        };
+        config.enable_channel(HRDLChannel::CHANNEL_1, HRDLRange::Range2500mV, true);
+        streaming(runner.start(config), &runner, &counter, &mut failures);
+        runner.close();
     }
 
     println!("{found} loggers found, {failures} calls failed");
