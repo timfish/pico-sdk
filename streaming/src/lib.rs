@@ -113,13 +113,13 @@
 //!   It waits twice as long after each one that follows, up to 10 s.
 //!   The waits start again from 1 s once the device is where its target asks.
 //! - A logger stream step that fails closes the unit, and the same opens follow.
-//! - `LOST_AFTER_STARTS` starts in a row that fail with a status that neither [`unit_lost`] nor [`settings_refused`] names, such as `BUSY`, also count the unit as lost.
+//! - `LOST_AFTER_STARTS` starts in a row on one handle that fail with a status that neither [`unit_lost`] nor [`settings_refused`] names, such as `BUSY`, also count the unit as lost.
 //!   The count takes the starts of the background thread and of each call to [`StreamingRunner::start`].
 //!   The runner closes the unit, sends [`DeviceNotice::StartsFailed`], and opens the unit again.
 //! - A start that fails with a status that [`settings_refused`] names does not count, as the unit works.
 //!   The runner sets the target to open, sends [`DeviceNotice::StartRefused`], and does not try the start again.
 //!   A config that [`StreamDevice::check`] refuses also sets the target to open.
-//! - A start that streams, or a unit counted as lost, sets the count of failed starts back to 0.
+//! - A start that streams, a unit counted as lost, or each open of the unit, such as by [`StreamingRunner::reopen`], sets the count of failed starts back to 0.
 //! - A failed change of scope resolution is not tried again.
 //!   A `TIMEOUT` from it counts as a lost unit, so the unit opens again.
 //! - [`StreamingRunner::reopen`] closes and opens the unit at once, also while the caller holds the steps.

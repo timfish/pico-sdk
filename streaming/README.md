@@ -113,13 +113,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   It waits twice as long after each one that follows, up to 10 s.
   The waits start again from 1 s once the device is where its target asks.
 - A logger stream step that fails closes the unit, and the same opens follow.
-- `LOST_AFTER_STARTS` starts in a row that fail with a status that neither [`unit_lost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.unit_lost.html) nor [`settings_refused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.settings_refused.html) names, such as `BUSY`, also count the unit as lost.
+- `LOST_AFTER_STARTS` starts in a row on one handle that fail with a status that neither [`unit_lost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.unit_lost.html) nor [`settings_refused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.settings_refused.html) names, such as `BUSY`, also count the unit as lost.
   The count takes the starts of the background thread and of each call to [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start).
   The runner closes the unit, sends [`DeviceNotice::StartsFailed`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StartsFailed), and opens the unit again.
 - A start that fails with a status that [`settings_refused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.settings_refused.html) names does not count, as the unit works.
   The runner sets the target to open, sends [`DeviceNotice::StartRefused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StartRefused), and does not try the start again.
   A config that [`StreamDevice::check`](https://docs.rs/pico-streaming/latest/pico_streaming/state/trait.StreamDevice.html#tymethod.check) refuses also sets the target to open.
-- A start that streams, or a unit counted as lost, sets the count of failed starts back to 0.
+- A start that streams, a unit counted as lost, or each open of the unit, such as by [`StreamingRunner::reopen`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.reopen), sets the count of failed starts back to 0.
 - A failed change of scope resolution is not tried again.
   A `TIMEOUT` from it counts as a lost unit, so the unit opens again.
 - [`StreamingRunner::reopen`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.reopen) closes and opens the unit at once, also while the caller holds the steps.
