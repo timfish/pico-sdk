@@ -598,9 +598,13 @@ pub(crate) fn bandwidth_code<T: Copy>(
 /// The range for a range code that the driver lists for a channel
 ///
 /// - Returns Err with `INVALID_VOLTAGE_RANGE` for a code that [`PicoRange`] does not name.
+/// - The error text shows the code.
 pub(crate) fn channel_range(code: i32) -> PicoResult<PicoRange> {
-    PicoRange::try_from(code).map_err(|_| {
-        PicoError::from_status(PicoStatus::INVALID_VOLTAGE_RANGE, "get_channel_ranges")
+    PicoRange::try_from(code).map_err(|e| {
+        PicoError::from_status(
+            PicoStatus::INVALID_VOLTAGE_RANGE,
+            &format!("get_channel_ranges: {e}"),
+        )
     })
 }
 
@@ -656,6 +660,13 @@ mod tests {
             .into_iter()
             .map(|r| (r.serial, r.variant))
             .collect()
+    }
+
+    #[test]
+    fn channel_range_error_keeps_code() {
+        let error = channel_range(999).unwrap_err();
+        assert_eq!(error.status, PicoStatus::INVALID_VOLTAGE_RANGE);
+        assert!(error.to_string().contains("999"));
     }
 
     #[test]

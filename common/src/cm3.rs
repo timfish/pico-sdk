@@ -37,14 +37,14 @@ impl fmt::Display for PLCM3Channel {
 impl FromStr for PLCM3Channel {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(' ', "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace(' ', "").to_uppercase();
 
         match input.as_str() {
             "1" => Ok(PLCM3Channel::CHANNEL_1),
             "2" => Ok(PLCM3Channel::CHANNEL_2),
             "3" => Ok(PLCM3Channel::CHANNEL_3),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }
@@ -132,8 +132,8 @@ impl fmt::Display for PLCM3DataType {
 impl FromStr for PLCM3DataType {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace([' ', '/'], "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace([' ', '/'], "").to_uppercase();
 
         match input.as_str() {
             "OFF" => Ok(PLCM3DataType::Off),
@@ -141,7 +141,7 @@ impl FromStr for PLCM3DataType {
             "10MVA" | "10MILLIVOLTSPERAMP" => Ok(PLCM3DataType::TenMillivoltsPerAmp),
             "100MVA" | "100MILLIVOLTSPERAMP" => Ok(PLCM3DataType::HundredMillivoltsPerAmp),
             "VOLTAGE" | "V" => Ok(PLCM3DataType::Voltage),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }

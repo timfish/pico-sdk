@@ -1,5 +1,5 @@
 use super::{PicoError, PicoResult};
-use std::convert::From;
+use std::{convert::From, fmt};
 use thiserror::Error;
 
 // num_derive cannot derive for an enum with a field, so this macro adds
@@ -1394,15 +1394,35 @@ impl TC08Error {
         }
     }
 
+    /// The [`PicoError`] for this error, with `context`
+    ///
+    /// - The status is [`TC08Error::to_status`].
+    /// - For [`TC08Error::Unknown`], the context also shows the code, such as `start: Unknown(99)`.
+    pub fn to_error(&self, context: &str) -> PicoError {
+        match self {
+            TC08Error::Unknown(_) => {
+                PicoError::from_status(self.to_status(), &format!("{context}: {self}"))
+            }
+            _ => PicoError::from_status(self.to_status(), context),
+        }
+    }
+
     /// Converts the error to a [`PicoResult`]
     ///
     /// - Returns `Ok(ok_val)` for [`TC08Error::OK`].
-    /// - Returns `Err` with `context` for all other errors.
+    /// - Returns `Err` from [`TC08Error::to_error`] with `context` for all other errors.
     pub fn to_result<T>(self, ok_val: T, context: &str) -> PicoResult<T> {
         match self.to_status() {
             PicoStatus::OK => Ok(ok_val),
-            x => Err(PicoError::from_status(x, context)),
+            _ => Err(self.to_error(context)),
         }
+    }
+}
+
+impl fmt::Display for TC08Error {
+    /// Prints the variant name, such as `NOT_FOUND`, or `Unknown(99)` with the code
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -1423,5 +1443,7 @@ mod tests {
         let error = TC08Error::from(99i16);
         assert!(format!("{:?}", error).contains("99"));
         assert_eq!(error.to_status(), PicoStatus::OPERATION_FAILED);
+        let result = error.to_result((), "start");
+        assert!(result.unwrap_err().to_string().contains("99"));
     }
 }

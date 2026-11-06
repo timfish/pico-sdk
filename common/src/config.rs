@@ -38,9 +38,9 @@ impl TryFrom<i32> for TimeUnits {
 
     /// The unit for a `PICO_TIME_UNITS` value
     ///
-    /// - Returns [`ParseError`] when the value is not 0 to 5.
+    /// - Returns [`ParseError::Number`] when the value is not 0 to 5.
     fn try_from(value: i32) -> Result<Self, Self::Error> {
-        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError)
+        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError::Number(value.into()))
     }
 }
 

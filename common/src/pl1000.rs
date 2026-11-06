@@ -73,8 +73,8 @@ impl fmt::Display for PL1000Channel {
 impl FromStr for PL1000Channel {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(' ', "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace(' ', "").to_uppercase();
 
         match input.as_str() {
             "1" => Ok(PL1000Channel::CHANNEL_1),
@@ -93,7 +93,7 @@ impl FromStr for PL1000Channel {
             "14" => Ok(PL1000Channel::CHANNEL_14),
             "15" => Ok(PL1000Channel::CHANNEL_15),
             "16" => Ok(PL1000Channel::CHANNEL_16),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }

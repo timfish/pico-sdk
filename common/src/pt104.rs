@@ -42,15 +42,15 @@ impl fmt::Display for PT104Channel {
 impl FromStr for PT104Channel {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(' ', "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace(' ', "").to_uppercase();
 
         match input.as_str() {
             "1" => Ok(PT104Channel::CHANNEL_1),
             "2" => Ok(PT104Channel::CHANNEL_2),
             "3" => Ok(PT104Channel::CHANNEL_3),
             "4" => Ok(PT104Channel::CHANNEL_4),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }
@@ -161,8 +161,8 @@ impl fmt::Display for PT104DataType {
 impl FromStr for PT104DataType {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace([' ', '-', '±'], "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace([' ', '-', '±'], "").to_uppercase();
 
         match input.as_str() {
             "OFF" => Ok(PT104DataType::Off),
@@ -184,7 +184,7 @@ impl FromStr for PT104DataType {
             "SINGLEENDED02500MV" | "SINGLEENDED2500MV" | "SINGLEENDEDTO2500MV" => {
                 Ok(PT104DataType::SingleEndedTo2500mV)
             }
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }
@@ -282,7 +282,10 @@ mod tests {
     #[test]
     fn four_channels() {
         assert_eq!(enum_iterator::all::<PT104Channel>().count(), 4);
-        assert_eq!(PT104Channel::from_str("5"), Err(ParseError));
+        assert_eq!(
+            PT104Channel::from_str("5"),
+            Err(ParseError::Text("5".to_string()))
+        );
     }
 
     #[test]

@@ -52,8 +52,8 @@ impl fmt::Display for TC08Channel {
 impl FromStr for TC08Channel {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(' ', "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace(' ', "").to_uppercase();
 
         match input.as_str() {
             "COLDJUNCTION" | "CJC" | "0" => Ok(TC08Channel::CHANNEL_CJC),
@@ -65,7 +65,7 @@ impl FromStr for TC08Channel {
             "6" => Ok(TC08Channel::CHANNEL_6),
             "7" => Ok(TC08Channel::CHANNEL_7),
             "8" => Ok(TC08Channel::CHANNEL_8),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }
@@ -118,8 +118,8 @@ impl fmt::Display for TCType {
 impl FromStr for TCType {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(' ', "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace(' ', "").to_uppercase();
         let input = input.strip_prefix("TYPE").unwrap_or(&input);
 
         match input {
@@ -131,7 +131,7 @@ impl FromStr for TCType {
             "R" => Ok(TCType::R),
             "S" => Ok(TCType::S),
             "T" => Ok(TCType::T),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }
@@ -159,13 +159,13 @@ impl fmt::Display for MainsRejectionFreq {
 impl FromStr for MainsRejectionFreq {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.to_uppercase().replace([' ', 'H', 'Z'], "");
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.to_uppercase().replace([' ', 'H', 'Z'], "");
 
         match input.as_str() {
             "50" => Ok(MainsRejectionFreq::_50Hz),
             "60" => Ok(MainsRejectionFreq::_60Hz),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }

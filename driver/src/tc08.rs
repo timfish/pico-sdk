@@ -49,11 +49,11 @@ impl TC08DriverInternal {
 
     /// Runs a driver call that reports success as a non-zero return, converting a failure into
     /// the reason reported by `usb_tc08_get_last_error`
-    fn wrap_with_get_last_error<F: FnOnce() -> i16>(&self, handle: i16, func: F) -> PicoStatus {
+    fn wrap_with_get_last_error<F: FnOnce() -> i16>(&self, handle: i16, func: F) -> TC08Error {
         if func() == 0 {
-            self.get_last_error(handle).to_status()
+            self.get_last_error(handle)
         } else {
-            PicoStatus::OK
+            TC08Error::OK
         }
     }
 
@@ -179,10 +179,9 @@ impl TC08DriverInternal {
         let result = unsafe { self.bindings.usb_tc08_get_minimum_interval_ms(handle) };
 
         if result <= 0 {
-            Err(PicoError::from_status(
-                self.get_last_error(handle).to_status(),
-                "get_minimum_interval_ms",
-            ))
+            Err(self
+                .get_last_error(handle)
+                .to_error("get_minimum_interval_ms"))
         } else {
             Ok(result as u32)
         }
@@ -196,10 +195,7 @@ impl TC08DriverInternal {
         let result = unsafe { self.bindings.usb_tc08_run(handle, interval_ms) };
 
         if result == 0 {
-            Err(PicoError::from_status(
-                self.get_last_error(handle).to_status(),
-                "start",
-            ))
+            Err(self.get_last_error(handle).to_error("start"))
         } else {
             Ok(result)
         }
@@ -232,10 +228,7 @@ impl TC08DriverInternal {
         };
 
         if result < 0 {
-            Err(PicoError::from_status(
-                self.get_last_error(handle).to_status(),
-                "get_values",
-            ))
+            Err(self.get_last_error(handle).to_error("get_values"))
         } else {
             values.truncate(result as usize);
             Ok((values, overflow[0] > 0))

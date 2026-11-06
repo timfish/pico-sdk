@@ -67,8 +67,8 @@ impl fmt::Display for HRDLChannel {
 impl FromStr for HRDLChannel {
     type Err = crate::ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace(' ', "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace(' ', "").to_uppercase();
 
         match input.as_str() {
             "1" => Ok(HRDLChannel::CHANNEL_1),
@@ -87,7 +87,7 @@ impl FromStr for HRDLChannel {
             "14" => Ok(HRDLChannel::CHANNEL_14),
             "15" => Ok(HRDLChannel::CHANNEL_15),
             "16" => Ok(HRDLChannel::CHANNEL_16),
-            _ => Err(crate::ParseError),
+            _ => Err(crate::ParseError::Text(text.to_string())),
         }
     }
 }
@@ -170,8 +170,8 @@ impl fmt::Display for HRDLRange {
 impl FromStr for HRDLRange {
     type Err = crate::ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.to_uppercase().replace([' ', 'M', 'V'], "");
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.to_uppercase().replace([' ', 'M', 'V'], "");
 
         match input.as_str() {
             "2500" => Ok(HRDLRange::Range2500mV),
@@ -181,7 +181,7 @@ impl FromStr for HRDLRange {
             "156" => Ok(HRDLRange::Range156mV),
             "78" => Ok(HRDLRange::Range78mV),
             "39" => Ok(HRDLRange::Range39mV),
-            _ => Err(crate::ParseError),
+            _ => Err(crate::ParseError::Text(text.to_string())),
         }
     }
 }
