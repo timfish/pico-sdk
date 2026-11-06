@@ -62,8 +62,8 @@ impl fmt::Display for DrDAQChannel {
 impl FromStr for DrDAQChannel {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.replace([' ', '(', ')'], "").to_uppercase();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input = text.replace([' ', '(', ')'], "").to_uppercase();
 
         match input.as_str() {
             "EXT1" | "EXTERNAL1" | "1" => Ok(DrDAQChannel::CHANNEL_EXT1),
@@ -76,7 +76,7 @@ impl FromStr for DrDAQChannel {
             "TEMP" | "TEMPERATURE" | "8" => Ok(DrDAQChannel::CHANNEL_TEMP),
             "MICROPHONEWAVEFORM" | "MICWAVE" | "9" => Ok(DrDAQChannel::CHANNEL_MIC_WAVE),
             "MICROPHONELEVEL" | "MICLEVEL" | "10" => Ok(DrDAQChannel::CHANNEL_MIC_LEVEL),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }

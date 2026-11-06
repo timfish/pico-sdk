@@ -121,8 +121,8 @@ impl fmt::Display for ScopeDriver {
 impl FromStr for Driver {
     type Err = ParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input: String = input
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let input: String = text
             .to_uppercase()
             .replace("USB", "")
             .replace("PS", "")
@@ -146,7 +146,7 @@ impl FromStr for Driver {
             "TC08" => Ok(Driver::TC08),
             "HRDL" | "PICOHRDL" => Ok(Driver::PicoHRDL),
             "DRDAQ" => Ok(Driver::DrDAQ),
-            _ => Err(ParseError),
+            _ => Err(ParseError::Text(text.to_string())),
         }
     }
 }
@@ -350,8 +350,14 @@ mod tests {
         assert_eq!(Driver::from_str("pt104"), Ok(Driver::PT104));
         assert_eq!(Driver::from_str("usbpt104"), Ok(Driver::PT104));
         assert_eq!(Driver::from_str("PT-104"), Ok(Driver::PT104));
-        assert_eq!(Driver::from_str("nonsense"), Err(ParseError));
-        assert_eq!(Driver::from_str("--"), Err(ParseError));
+        assert_eq!(
+            Driver::from_str("nonsense"),
+            Err(ParseError::Text("nonsense".to_string()))
+        );
+        assert_eq!(
+            Driver::from_str("--"),
+            Err(ParseError::Text("--".to_string()))
+        );
     }
 
     /// The forms the scope examples' usage lines name, as a shell or

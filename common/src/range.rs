@@ -662,9 +662,9 @@ impl TryFrom<i32> for PicoRange {
 
     /// The range for a driver range value
     ///
-    /// - Returns [`ParseError`] for a value that this crate does not name.
+    /// - Returns [`ParseError::Number`] for a value that this crate does not name.
     fn try_from(value: i32) -> Result<Self, Self::Error> {
-        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError)
+        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError::Number(value.into()))
     }
 }
 
@@ -673,9 +673,9 @@ impl TryFrom<u32> for PicoRange {
 
     /// The range for a driver range value
     ///
-    /// - Returns [`ParseError`] for a value that this crate does not name.
+    /// - Returns [`ParseError::Number`] for a value that this crate does not name.
     fn try_from(value: u32) -> Result<Self, Self::Error> {
-        num_traits::FromPrimitive::from_u32(value).ok_or(ParseError)
+        num_traits::FromPrimitive::from_u32(value).ok_or(ParseError::Number(value.into()))
     }
 }
 

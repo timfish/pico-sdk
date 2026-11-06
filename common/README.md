@@ -84,7 +84,7 @@ Errors:
 - [`PicoStatus`](https://docs.rs/pico-common/latest/pico_common/status/enum.PicoStatus.html): the status codes of the drivers.
 - [`PicoError`](https://docs.rs/pico-common/latest/pico_common/error/struct.PicoError.html), [`PicoResult`](https://docs.rs/pico-common/latest/pico_common/error/type.PicoResult.html): a status with the call that returned it.
 - [`TC08Error`](https://docs.rs/pico-common/latest/pico_common/status/enum.TC08Error.html), [`HRDLError`](https://docs.rs/pico-common/latest/pico_common/hrdl/enum.HRDLError.html): the error codes of the TC-08 and PicoHRDL drivers, with the nearest [`PicoStatus`](https://docs.rs/pico-common/latest/pico_common/status/enum.PicoStatus.html).
-- [`ParseError`](https://docs.rs/pico-common/latest/pico_common/enums/struct.ParseError.html): a string or a driver value that does not convert to an enum of this crate.
+- [`ParseError`](https://docs.rs/pico-common/latest/pico_common/enums/enum.ParseError.html): a string or a driver value that does not convert to an enum of this crate.
 
 USB:
 - [`UsbLink`](https://docs.rs/pico-common/latest/pico_common/usb/struct.UsbLink.html), [`UsbSpeed`](https://docs.rs/pico-common/latest/pico_common/usb/enum.UsbSpeed.html): how a device connects to the host.
