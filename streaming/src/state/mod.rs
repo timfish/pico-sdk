@@ -692,12 +692,12 @@ where
     /// - It stops a stream that runs, then starts the new one.
     /// - It opens a closed unit first.
     /// - A unit found lost opens again one time within the call.
-    /// - Returns Err with `TIMEOUT` when another step holds the device for more than 30 s, or when the device does not stream after 11 steps.
+    /// - Returns Err with `TIMEOUT` when another step holds the device for more than 30 s, and changes nothing.
     /// - Returns Err with `BUSY` at once when a handler calls it inside a step, and changes nothing.
-    /// - Returns Err when [`StreamDevice::check`] refuses the config, or when [`settings_refused`] names the status of the start.
-    ///   The target is then open, and the background thread does not try again.
-    /// - Returns Err when the open or the start fails for another reason, or when the unit is lost a second time.
-    ///   The target stays a stream, so the background thread tries again.
+    /// - Returns Err with `TIMEOUT` when the device does not stream after 11 steps.
+    /// - Returns Err when [`StreamDevice::check`] refuses the config, or when the open or the start fails, or when the unit is lost a second time.
+    /// - After each of these last errors, the target is open, and the background thread does not try the stream again.
+    /// - After it returns Ok, a unit found lost later opens again and the stream starts again, as the crate docs tell.
     pub fn start(&self, config: Config) -> PicoResult<()> {
         if self.steps.held_here() {
             return Err(in_step("start"));
@@ -732,12 +732,24 @@ where
         self.state.write().target = Target::Streaming(config);
         self.wake();
 
-        // Drive the state until we're streaming or we get an error we can return.
-        // A unit found lost opens again once; a second lost start is the error.
+        let started = self.step_to_stream(&steps);
+        if started.is_err() {
+            let mut state = self.state.write();
+            if matches!(state.target, Target::Streaming(_)) {
+                state.target = Target::Open;
+            }
+        }
+        started
+    }
+
+    /// Steps until the device streams, or until an error that `start`
+    /// returns. A unit found lost opens again once; a second lost start
+    /// is the error.
+    fn step_to_stream(&self, steps: &StepsGuard<'_>) -> PicoResult<()> {
         let mut count = 0;
         let mut lost = false;
         loop {
-            if let Stepped::UnitLost(error) = self.step(&steps)? {
+            if let Stepped::UnitLost(error) = self.step(steps)? {
                 if lost {
                     return Err(error);
                 }

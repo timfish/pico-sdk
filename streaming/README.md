@@ -110,11 +110,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - Each time, the runner sends [`DeviceNotice::UnitLost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.UnitLost) to its notices.
 - [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start) opens the unit again one time within the call.
   A second lost start returns the error.
+- When [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start) returns an error after it set the target to its stream, it sets the target to open, so the background thread does not try that stream again.
+  A unit lost after a start that returned Ok opens again and starts again, as above.
 - After a step that fails or finds the unit lost, the background thread waits 1 s.
   It waits twice as long after each one that follows, up to 10 s.
   The waits start again from 1 s once the device is where its target asks.
 - A logger stream step that fails closes the unit, and the same opens follow.
 - `LOST_AFTER_STARTS` starts in a row that fail with a status that neither [`unit_lost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.unit_lost.html) nor [`settings_refused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.settings_refused.html) names, such as `BUSY`, also count the unit as lost.
+  The count takes the starts of the background thread and of each call to [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start).
   The runner closes the unit, sends [`DeviceNotice::StartsFailed`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StartsFailed), and opens the unit again.
 - A start that fails with a status that [`settings_refused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/fn.settings_refused.html) names does not count, as the unit works.
   The runner sets the target to open, sends [`DeviceNotice::StartRefused`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StartRefused), and does not try the start again.
