@@ -2,14 +2,22 @@ use super::{BandwidthLimit, PicoCoupling, PicoRange};
 use num_derive::*;
 use std::convert::From;
 
-/// Pico time units
+/// A time unit of the Pico drivers
+///
+/// - The value of each variant is the `PICO_TIME_UNITS` value of the driver.
 #[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum TimeUnits {
+    /// Femtoseconds
     FS = 0,
+    /// Picoseconds
     PS = 1,
+    /// Nanoseconds
     NS = 2,
+    /// Microseconds
     US = 3,
+    /// Milliseconds
     MS = 4,
+    /// Seconds
     S = 5,
 }
 
@@ -26,12 +34,16 @@ impl From<TimeUnits> for i16 {
 }
 
 impl From<i32> for TimeUnits {
+    /// The unit for a `PICO_TIME_UNITS` value
+    ///
+    /// - Panics when the value is not 0 to 5.
     fn from(value: i32) -> Self {
         num_traits::FromPrimitive::from_i32(value).expect("Non-valid time unit")
     }
 }
 
 impl TimeUnits {
+    /// The length of one unit, in seconds
     pub fn get_multiplier(self) -> f64 {
         match self {
             TimeUnits::S => 1.0,
@@ -44,18 +56,34 @@ impl TimeUnits {
     }
 }
 
-/// Sample configuration
+/// The sample interval of an oscilloscope, as a count of time units
+///
+/// ```
+/// use pico_common::{OscilloscopeSampleConfig, TimeUnits};
+///
+/// let config = OscilloscopeSampleConfig::from_samples_per_second(1_000);
+/// assert_eq!(config.interval, 1_000_000);
+/// assert_eq!(config.units, TimeUnits::NS);
+/// assert_eq!(config.get_interval(), 0.001);
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct OscilloscopeSampleConfig {
+    /// The interval, in `units`
     pub interval: u32,
+    /// The time unit of `interval`
     pub units: TimeUnits,
 }
 
 impl OscilloscopeSampleConfig {
+    /// Makes a config with an interval of `interval` `units`
     pub fn new(interval: u32, units: TimeUnits) -> OscilloscopeSampleConfig {
         OscilloscopeSampleConfig { interval, units }
     }
 
+    /// Makes a config from a sample rate, as a whole number of nanoseconds
+    ///
+    /// - The interval rounds down to a whole nanosecond.
+    ///   Thus a rate above 1 GS/s gives an interval of 0.
     pub fn from_samples_per_second(samples_per_second: u32) -> OscilloscopeSampleConfig {
         let interval: f64 = (1f64 / (samples_per_second as f64)) * 1_000_000_000_f64;
 
@@ -65,21 +93,24 @@ impl OscilloscopeSampleConfig {
         }
     }
 
+    /// The interval, in seconds
     pub fn get_interval(self) -> f64 {
         self.units.get_multiplier() * (self.interval as f64)
     }
 
+    /// The sample rate, in samples per second, rounded down
     pub fn samples_per_second(self) -> u32 {
         (1f64 / self.get_interval()) as u32
     }
 
-    /// The sample rate this interval gives, not rounded.
+    /// The sample rate, in samples per second, not rounded
     pub fn rate_hz(self) -> f64 {
         1f64 / self.get_interval()
     }
 
-    /// An interval a driver returns as a decimal number of `units`, held
-    /// in the coarsest unit that keeps it whole and fits a `u32`.
+    /// Makes a config from an interval that a driver returns as a decimal number of `units`
+    ///
+    /// - It uses the largest unit, not larger than `units`, that keeps the interval a whole number and fits a `u32`.
     pub fn from_interval(interval: f64, units: TimeUnits) -> OscilloscopeSampleConfig {
         let finer = [
             TimeUnits::S,
@@ -104,6 +135,7 @@ impl OscilloscopeSampleConfig {
         best
     }
 
+    /// A copy with a new interval in the same unit
     pub fn with_interval(self, interval: u32) -> OscilloscopeSampleConfig {
         OscilloscopeSampleConfig { interval, ..self }
     }
@@ -162,15 +194,32 @@ mod tests {
     }
 }
 
-/// Channel configuration
+/// The settings of one oscilloscope channel
+///
+/// - [`OscilloscopeChannelConfig::new`] and [`Default`] give DC coupling, the ±20 V range, no offset and full bandwidth.
+///
+/// ```
+/// use pico_common::{OscilloscopeChannelConfig, PicoCoupling, PicoRange};
+///
+/// let config = OscilloscopeChannelConfig {
+///     coupling: PicoCoupling::AC,
+///     range: PicoRange::X1_PROBE_500MV,
+///     ..Default::default()
+/// };
+/// assert_eq!(config.offset, 0.0);
+/// ```
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OscilloscopeChannelConfig {
+    /// The input coupling
     pub coupling: PicoCoupling,
+    /// The input range
     pub range: PicoRange,
+    /// The analog offset, in volts
     pub offset: f64,
-    /// `None` gives the unit's full bandwidth. A limit must be one of
-    /// `ScopeCapabilities::bandwidth_limits`.
+    /// The bandwidth limit, or `None` for the full bandwidth of the unit
+    ///
+    /// - A limit must be one of [`ScopeCapabilities::bandwidth_limits`](crate::ScopeCapabilities::bandwidth_limits).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -179,6 +228,7 @@ pub struct OscilloscopeChannelConfig {
 }
 
 impl OscilloscopeChannelConfig {
+    /// Makes the default channel config
     pub fn new() -> OscilloscopeChannelConfig {
         OscilloscopeChannelConfig {
             coupling: PicoCoupling::DC,

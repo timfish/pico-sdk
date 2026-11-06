@@ -4,18 +4,21 @@ use std::{fmt, str::FromStr, sync::Arc};
 
 use crate::ParseError;
 
-/// PicoLog CM3 current logger channels
+/// A channel of the PicoLog CM3 current data logger
 ///
-/// The CM3 has 3 current clamp inputs.
-///
-/// `Ord` follows the driver's channel numbering so iterating an ordered collection keyed by this
-/// enum gives channels in numeric order.
+/// - The CM3 has 3 current clamp inputs.
+/// - `Ord` follows the channel numbers of the driver.
+///   An ordered collection with this key gives the channels in number order.
+/// - It prints and parses as the channel number, such as `1`.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum PLCM3Channel {
+    /// Channel 1
     CHANNEL_1 = 1,
+    /// Channel 2
     CHANNEL_2 = 2,
+    /// Channel 3
     CHANNEL_3 = 3,
 }
 
@@ -46,29 +49,29 @@ impl FromStr for PLCM3Channel {
     }
 }
 
-/// What a PicoLog CM3 channel is measuring
+/// What a PicoLog CM3 channel measures
 ///
-/// The CM3 reads current clamps that output a proportional millivolt signal, or a channel can be
-/// set to read voltage directly. There is no separate "wires" setting like the PT-104 - a channel
-/// is off, one of the three clamp scalings, or a raw voltage input.
+/// - A channel is off, reads a current clamp at one of three scales, or reads a voltage.
+///   A current clamp gives a voltage in proportion to the current.
+/// - The CM3 has no "wires" setting, as the PT-104 has.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum PLCM3DataType {
     /// Channel disabled
     #[default]
     Off,
-    /// Current clamp that outputs 1mV per amp
+    /// Current clamp that gives 1 mV per amp
     OneMillivoltPerAmp,
-    /// Current clamp that outputs 10mV per amp
+    /// Current clamp that gives 10 mV per amp
     TenMillivoltsPerAmp,
-    /// Current clamp that outputs 100mV per amp
+    /// Current clamp that gives 100 mV per amp
     HundredMillivoltsPerAmp,
-    /// Raw voltage input
+    /// Voltage input
     Voltage,
 }
 
 impl From<PLCM3DataType> for u32 {
-    /// Maps to PLCM3_DATA_TYPES constants from the FFI bindings.
+    /// The `PLCM3_DATA_TYPES` value of the driver
     fn from(value: PLCM3DataType) -> Self {
         match value {
             PLCM3DataType::Off => 0,
@@ -83,11 +86,19 @@ impl From<PLCM3DataType> for u32 {
 impl PLCM3DataType {
     /// The factor from a raw `PLCM3GetValue` reading to the unit, and the unit
     ///
-    /// A voltage channel reads µV (PicoLog CM3 Programmer's Guide, plcm3pg r4, section 2.9,
-    /// `PLCM3_DATA_TYPES`). The guide gives no unit for the clamp types; Pico's published
-    /// examples read every clamp type as mA (`ApplyScaling` in `plcm3/plcm3CExamples/plcm3Con.c`
-    /// of github.com/picotech/picosdk-c-examples, and the C# and VB .NET examples alike), so the
-    /// driver applies the clamp's mV/A itself. `None` for [`PLCM3DataType::Off`].
+    /// - A voltage channel reads µV (PicoLog CM3 Programmer's Guide, plcm3pg r4, section 2.9, `PLCM3_DATA_TYPES`).
+    /// - A clamp channel reads mA.
+    ///   The guide gives no unit for the clamp types, but the Pico examples read each clamp type as mA.
+    ///   See `ApplyScaling` in `plcm3/plcm3CExamples/plcm3Con.c` of github.com/picotech/picosdk-c-examples, and the C# and VB .NET examples.
+    ///   Thus the driver applies the mV/A of the clamp itself.
+    /// - Returns `None` for [`PLCM3DataType::Off`].
+    ///
+    /// ```
+    /// use pico_common::PLCM3DataType;
+    ///
+    /// assert_eq!(PLCM3DataType::Voltage.scale(), Some((1e-6, "V")));
+    /// assert_eq!(PLCM3DataType::TenMillivoltsPerAmp.to_unit(2_000), Some(2.0));
+    /// ```
     pub fn scale(self) -> Option<(f64, &'static str)> {
         match self {
             PLCM3DataType::Off => None,
@@ -98,7 +109,9 @@ impl PLCM3DataType {
         }
     }
 
-    /// A raw reading in the unit of [`PLCM3DataType::scale`]
+    /// Converts a raw reading to the unit of [`PLCM3DataType::scale`]
+    ///
+    /// - Returns `None` for [`PLCM3DataType::Off`].
     pub fn to_unit(self, raw: i32) -> Option<f64> {
         self.scale().map(|(factor, _)| raw as f64 * factor)
     }
@@ -133,17 +146,19 @@ impl FromStr for PLCM3DataType {
     }
 }
 
-/// What was discovered about a PicoLog CM3 unit once it was opened
+/// What the driver tells about a PicoLog CM3 unit after it opens
 ///
-/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
-/// unit handle), not configuration or a capability. Every other field is already trivially
-/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
-/// can do so from those fields directly without this type needing to derive serde itself.
+/// - It has no `Serialize` or `Deserialize`, as `handle` is the handle of an open unit.
+///   The other fields are strings, which you can serialize one by one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PLCM3Info {
+    /// The driver handle of the open unit
     pub handle: Arc<i16>,
+    /// The serial number
     pub serial: String,
+    /// The hardware version
     pub hardware_version: String,
+    /// The firmware version
     pub firmware_version: String,
 }
 

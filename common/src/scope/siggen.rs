@@ -1,128 +1,208 @@
 use crate::{PicoError, PicoResult, PicoStatus};
 use std::time::Duration;
 
+/// The waveform of a signal generator
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SigGenShape {
+    /// Sine wave
     Sine,
+    /// Square wave
     Square,
+    /// Triangle wave
     Triangle,
+    /// Rising ramp
     RampUp,
+    /// Falling ramp
     RampDown,
+    /// Sin(x)/x
     Sinc,
+    /// Gaussian
     Gaussian,
+    /// Half-wave rectified sine
     HalfSine,
+    /// DC level
     Dc,
+    /// White noise
     WhiteNoise,
+    /// Pseudo-random binary sequence
     Prbs,
-    /// Samples from -32767 to 32767 over the output range.
+    /// An arbitrary waveform, with samples from -32767 to 32767 over the output range
     Arbitrary(Vec<i16>),
 }
 
+/// The kind of a [`SigGenShape`], with no waveform data
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SigGenShapeKind {
+    /// Sine wave
     Sine,
+    /// Square wave
     Square,
+    /// Triangle wave
     Triangle,
+    /// Rising ramp
     RampUp,
+    /// Falling ramp
     RampDown,
+    /// Sin(x)/x
     Sinc,
+    /// Gaussian
     Gaussian,
+    /// Half-wave rectified sine
     HalfSine,
+    /// DC level
     Dc,
+    /// White noise
     WhiteNoise,
+    /// Pseudo-random binary sequence
     Prbs,
+    /// Arbitrary waveform
     Arbitrary,
 }
 
+/// The direction of a frequency sweep
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SweepKind {
+    /// From the start frequency up to the stop frequency
     Up,
+    /// From the stop frequency down to the start frequency
     Down,
+    /// Up, then down
     UpDown,
+    /// Down, then up
     DownUp,
 }
 
+/// A frequency sweep from [`SigGenConfig::frequency_hz`] to `stop_hz`
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sweep {
+    /// The stop frequency, in hertz
     pub stop_hz: f64,
+    /// The frequency step, in hertz
     pub increment_hz: f64,
+    /// The time at each step, in seconds
     pub dwell_s: f64,
+    /// The direction of the sweep
     pub kind: SweepKind,
 }
 
+/// How a trigger starts the signal generator
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SigGenTriggerKind {
+    /// On a rising edge
     Rising,
+    /// On a falling edge
     Falling,
+    /// While the gate is high
     GateHigh,
+    /// While the gate is low
     GateLow,
 }
 
+/// The source of a signal generator trigger
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SigGenTriggerSource {
+    /// The trigger of the scope
     ScopeTrigger,
+    /// The EXT input
     External,
+    /// The AUX input
     Aux,
+    /// A software trigger call
     Software,
 }
 
+/// A trigger for the signal generator
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SigGenTrigger {
+    /// How the trigger starts the generator
     pub kind: SigGenTriggerKind,
+    /// The trigger source
     pub source: SigGenTriggerSource,
-    /// Cycles, or sweeps with a sweep, after each trigger. 0 runs on
-    /// with no end.
+    /// The number of cycles after each trigger, or of sweeps when there is a sweep
+    ///
+    /// - 0 runs with no end.
     pub cycles_or_shots: u64,
+    /// An auto trigger time
+    ///
+    /// - [`SigGenInfo::check`] refuses a value, as no Pico API sets it.
     pub auto_trigger: Option<Duration>,
 }
 
-/// One output setting. `amplitude_v` is peak to peak.
+/// The settings of a signal generator output
+///
+/// ```
+/// use pico_common::{SigGenConfig, SigGenShape};
+///
+/// let config = SigGenConfig {
+///     offset_v: 0.5,
+///     ..SigGenConfig::new(SigGenShape::Sine, 1_000.0, 2.0)
+/// };
+/// assert_eq!(config.amplitude_v, 2.0);
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct SigGenConfig {
+    /// The waveform
     pub shape: SigGenShape,
+    /// The frequency, in hertz, or the start frequency of a sweep
     pub frequency_hz: f64,
+    /// The amplitude, in volts peak to peak
     pub amplitude_v: f64,
+    /// The offset, in volts
     pub offset_v: f64,
+    /// The duty cycle in percent, for square and triangle waves only
     pub duty_percent: Option<f64>,
+    /// The start phase, in degrees
+    ///
+    /// - [`SigGenInfo::check`] refuses a value, as no Pico API sets it.
     pub phase_deg: Option<f64>,
+    /// A frequency sweep, or `None` for a fixed frequency
     pub sweep: Option<Sweep>,
+    /// A trigger, or `None` for an output that runs freely
     pub trigger: Option<SigGenTrigger>,
+    /// Whether the output filter is on, or `None` to keep the default of the driver
     pub filter: Option<bool>,
 }
 
-/// What the unit's signal generator can do, read from the driver or
-/// from the family's guide.
+/// What the signal generator of a unit can do
+///
+/// - The values come from the driver, or from the guide of the family.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct SigGenInfo {
+    /// The waveforms that the generator has
     pub shapes: Vec<SigGenShapeKind>,
-    /// Built-in shapes; an arbitrary waveform's highest rate also
-    /// depends on its length, and the driver checks it.
+    /// The lowest and highest frequency of the built-in waveforms, in hertz
+    ///
+    /// - The highest rate of an arbitrary waveform also depends on its length, and the driver checks it.
     pub frequency_hz: (f64, f64),
+    /// The lowest and highest amplitude, in volts peak to peak
     pub amplitude_v: (f64, f64),
+    /// The lowest and highest offset, in volts
     pub offset_v: (f64, f64),
-    /// The output stays in this span: offset ± amplitude / 2.
+    /// The span that the output stays in, in volts: offset ± amplitude / 2
     pub output_v: (f64, f64),
-    /// The fewest and most samples of an arbitrary waveform.
+    /// The minimum and maximum number of samples of an arbitrary waveform
     pub awg_samples: Option<(u64, u64)>,
-    /// The update rate of the AWG's DAC.
+    /// The update rate of the AWG DAC, in hertz
     pub awg_dac_hz: Option<f64>,
-    /// Square and triangle take a duty cycle.
+    /// Whether square and triangle waves take a duty cycle
     pub duty_cycle: bool,
-    /// An output filter that `SigGenConfig::filter` sets.
+    /// Whether there is an output filter that [`SigGenConfig::filter`] sets
     pub filter: bool,
+    /// The trigger sources that the generator has
     pub trigger_sources: Vec<SigGenTriggerSource>,
 }
 
 impl SigGenShape {
+    /// The kind of the waveform
     pub fn kind(&self) -> SigGenShapeKind {
         match self {
             SigGenShape::Sine => SigGenShapeKind::Sine,
@@ -142,14 +222,16 @@ impl SigGenShape {
 }
 
 impl SigGenShapeKind {
-    /// DC and white noise have no frequency.
+    /// Whether the waveform has a frequency
+    ///
+    /// - DC and white noise have no frequency.
     pub fn has_frequency(self) -> bool {
         !matches!(self, SigGenShapeKind::Dc | SigGenShapeKind::WhiteNoise)
     }
 }
 
 impl SigGenConfig {
-    /// A free-running output with no offset, sweep or trigger.
+    /// Makes an output that runs freely, with no offset, sweep or trigger
     pub fn new(shape: SigGenShape, frequency_hz: f64, amplitude_v: f64) -> Self {
         SigGenConfig {
             shape,
@@ -174,7 +256,12 @@ fn within(value: f64, (low, high): (f64, f64)) -> bool {
 }
 
 impl SigGenInfo {
-    /// Refuses a config this unit cannot set, before any driver call.
+    /// Checks that the unit can set `config`, before any driver call
+    ///
+    /// - Returns Err when the unit does not have the waveform, the duty cycle, the filter or the trigger source.
+    /// - Returns Err when a value is not finite or is out of range, or the output goes outside [`SigGenInfo::output_v`].
+    /// - Returns Err when `phase_deg` or `auto_trigger` has a value.
+    /// - The status of the error tells which check failed, such as [`PicoStatus::SIGGEN_FREQUENCY_OUT_OF_RANGE`].
     pub fn check(&self, config: &SigGenConfig) -> PicoResult<()> {
         let kind = config.shape.kind();
         if !self.shapes.contains(&kind) {

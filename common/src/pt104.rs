@@ -4,21 +4,26 @@ use std::{fmt, str::FromStr, sync::Arc};
 
 use crate::ParseError;
 
-/// USB PT-104 channels
+/// A channel of the USB PT-104 temperature data logger
 ///
-/// The unit has 4 inputs. The driver also numbers channels 5 to 8, which read only as the
-/// other side of a single-ended input on 1 to 4; on a USB PT-104 a read of 5 to 8 beside a
-/// differential input returns `PICO_INVALID_CHANNEL`, so they are left out.
-///
-/// `Ord` follows the driver's channel numbering so iterating an ordered
-/// collection keyed by this enum gives channels in numeric order.
+/// - The unit has 4 inputs.
+/// - The driver also has channels 5 to 8, which read only the other side of a single-ended input on 1 to 4.
+///   On a USB PT-104, a read of 5 to 8 next to a differential input returns `PICO_INVALID_CHANNEL`.
+///   Thus this enum does not have them.
+/// - `Ord` follows the channel numbers of the driver.
+///   An ordered collection with this key gives the channels in number order.
+/// - It prints and parses as the channel number, such as `1`.
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, ToPrimitive, Sequence)]
 pub enum PT104Channel {
+    /// Channel 1
     CHANNEL_1 = 1,
+    /// Channel 2
     CHANNEL_2 = 2,
+    /// Channel 3
     CHANNEL_3 = 3,
+    /// Channel 4
     CHANNEL_4 = 4,
 }
 
@@ -50,33 +55,33 @@ impl FromStr for PT104Channel {
     }
 }
 
-/// Sensor types that can be connected to PT-104 channels
+/// The sensor or input type of a PT-104 channel
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum PT104DataType {
     /// Channel disabled
     #[default]
     Off,
-    /// Platinum RTD, 100 ohm
+    /// Platinum RTD, 100 Ω
     PT100,
-    /// Platinum RTD, 1000 ohm
+    /// Platinum RTD, 1000 Ω
     PT1000,
-    /// Resistance converter up to 375 ohm
+    /// Resistance converter up to 375 Ω
     ResistanceTo375R,
-    /// Resistance converter up to 10 kilohm
+    /// Resistance converter up to 10 kΩ
     ResistanceTo10K,
     /// Differential voltage input, range ±115 mV
     DifferentialTo115mV,
     /// Differential voltage input, range ±2500 mV
     DifferentialTo2500mV,
-    /// Single-ended voltage input, range 0-115 mV
+    /// Single-ended voltage input, range 0 to 115 mV
     SingleEndedTo115mV,
-    /// Single-ended voltage input, range 0-2500 mV
+    /// Single-ended voltage input, range 0 to 2500 mV
     SingleEndedTo2500mV,
 }
 
 impl From<PT104DataType> for u32 {
-    /// Maps to USBPT104_DATA_TYPES constants from the FFI bindings.
+    /// The `USBPT104_DATA_TYPES` value of the driver
     fn from(value: PT104DataType) -> Self {
         match value {
             PT104DataType::Off => 0,
@@ -95,10 +100,17 @@ impl From<PT104DataType> for u32 {
 impl PT104DataType {
     /// The factor from a raw `UsbPt104GetValue` reading to the unit, and the unit
     ///
-    /// From the scaling table of `UsbPt104GetValue` in the USB PT-104 Programmer's Guide
-    /// (usbpt104pg r8, section 3.4): temperature in 1/1000 °C, 0 to 2.5 V in 10 nV, 0 to
-    /// 115 mV in 1 nV, 0 to 375 Ω in 1 µΩ and 0 to 10 kΩ in 1 mΩ. The wiring does not change
-    /// the scale. `None` for [`PT104DataType::Off`].
+    /// - The scale table of `UsbPt104GetValue` is in the USB PT-104 Programmer's Guide (usbpt104pg r8, section 3.4).
+    ///   Temperature is in 1/1000 °C, 0 to 2.5 V in 10 nV, 0 to 115 mV in 1 nV, 0 to 375 Ω in 1 µΩ and 0 to 10 kΩ in 1 mΩ.
+    /// - The wiring does not change the scale.
+    /// - Returns `None` for [`PT104DataType::Off`].
+    ///
+    /// ```
+    /// use pico_common::PT104DataType;
+    ///
+    /// assert_eq!(PT104DataType::PT100.scale(), Some((1e-3, "°C")));
+    /// assert_eq!(PT104DataType::PT100.to_unit(21_500), Some(21.5));
+    /// ```
     pub fn scale(self) -> Option<(f64, &'static str)> {
         match self {
             PT104DataType::Off => None,
@@ -114,7 +126,9 @@ impl PT104DataType {
         }
     }
 
-    /// A raw reading in the unit of [`PT104DataType::scale`]
+    /// Converts a raw reading to the unit of [`PT104DataType::scale`]
+    ///
+    /// - Returns `None` for [`PT104DataType::Off`].
     pub fn to_unit(self, raw: i32) -> Option<f64> {
         self.scale().map(|(factor, _)| raw as f64 * factor)
     }
@@ -175,16 +189,17 @@ impl FromStr for PT104DataType {
     }
 }
 
-/// Resistance wire configuration for PT RTD sensors
+/// The number of wires to a platinum resistance sensor on a PT-104
 ///
-/// The PT-104 supports both 2-wire, 3-wire, and 4-wire configurations
-/// for platinum resistance thermometers. 2-wire is the least accurate,
-/// 4-wire is the most accurate.
+/// - 2 wires give the least accuracy, and 4 wires give the most.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Sequence)]
 pub enum PT104Wires {
+    /// 2 wires
     TwoWire = 2,
+    /// 3 wires
     ThreeWire = 3,
+    /// 4 wires
     #[default]
     FourWire = 4,
 }
@@ -205,17 +220,19 @@ impl fmt::Display for PT104Wires {
     }
 }
 
-/// What was discovered about a PT-104 once it was opened
+/// What the driver tells about a PT-104 unit after it opens
 ///
-/// Deliberately not `Serialize`/`Deserialize`: `handle` is live driver session state (an open
-/// unit handle), not configuration or a capability. Every other field is already trivially
-/// serializable (`String`), so a consumer that wants to ship the capability data over the wire
-/// can do so from those fields directly without this type needing to derive serde itself.
+/// - It has no `Serialize` or `Deserialize`, as `handle` is the handle of an open unit.
+///   The other fields are strings, which you can serialize one by one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PT104Info {
+    /// The driver handle of the open unit
     pub handle: Arc<i16>,
+    /// The serial number
     pub serial: String,
+    /// The hardware version
     pub hardware_version: String,
+    /// The firmware version
     pub firmware_version: String,
 }
 

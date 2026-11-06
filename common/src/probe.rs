@@ -1,50 +1,91 @@
 use crate::{PicoChannel, PicoCoupling, PicoRange, PicoStatus};
 use std::fmt;
 
-/// A probe a scope detects on a channel: Pico's `PICO_CONNECT_PROBE`
-/// values (PicoConnectProbes.h), for PicoConnect probes on D9 inputs
-/// and BNC+ probes. A value this crate does not name is `Other`.
+/// A probe that a scope detects on a channel
+///
+/// - The values are the `PICO_CONNECT_PROBE` values of the driver (PicoConnectProbes.h).
+///   They are for PicoConnect probes on D9 inputs, and for BNC+ probes.
+/// - A value that this crate does not name is [`PicoProbe::Other`].
+///
+/// ```
+/// use pico_common::PicoProbe;
+///
+/// let probe = PicoProbe::from_code(5010);
+/// assert_eq!(probe, PicoProbe::CurrentClamp60A);
+/// assert_eq!(probe.tag(), "current_clamp_60a");
+/// assert_eq!(PicoProbe::from_code(5099), PicoProbe::Other(5099));
+/// ```
 #[allow(non_camel_case_types)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PicoProbe {
+    /// No probe
     None,
+    /// D9-BNC adaptor
     D9Bnc,
+    /// D9-2×BNC adaptor
     D9TwoBnc,
+    /// Differential probe
     Differential,
+    /// 200 A/2 kA current clamp
     CurrentClamp200A2kA,
+    /// 40 A current clamp
     CurrentClamp40A,
+    /// 1 kV CAT III probe
     Cat3Hv1kV,
+    /// 2000 A RMS current clamp
     CurrentClamp2000ARms,
+    /// Test lead, blue
     TestLeadBlue,
+    /// Test lead, red
     TestLeadRed,
+    /// Test lead, green
     TestLeadGreen,
+    /// Test lead, yellow
     TestLeadYellow,
+    /// COP probe
     CopProbe,
+    /// Temperature probe
     Temperature,
+    /// 100 A current clamp
     CurrentClamp100A,
+    /// HT pickup
     HtPickup,
+    /// ×10 scope probe
     X10ScopeProbe,
+    /// 2000 A current clamp
     CurrentClamp2000A,
+    /// Pressure sensor
     PressureSensor,
+    /// Resistance lead
     ResistanceLead,
+    /// 60 A current clamp
     CurrentClamp60A,
+    /// Optical sensor
     OpticalSensor,
+    /// 60 A current clamp, version 2
     CurrentClamp60AV2,
+    /// High-voltage differential probe
     HighVoltageDifferential,
+    /// Tri-axial accelerometer
     TriAxialAccelerometer,
+    /// Microphone
     Microphone,
+    /// ×10 passive probe
     PassiveX10,
+    /// ×10 active probe, 750 MHz
     ActiveX10_750MHz,
+    /// ×10 active probe, 1.3 GHz
     ActiveX10_1_3GHz,
+    /// ×10 passive probe, 50 Ω
     PassiveX10_50Ohm,
-    /// The driver found an intelligent probe it has not identified yet.
+    /// An intelligent probe that the driver did not identify yet
     Intelligent,
-    /// The driver could not identify the probe.
+    /// A probe that the driver could not identify
     Unknown,
-    /// The probe reported a fault.
+    /// A probe that reports a fault
     Fault,
-    /// A value this crate does not name.
+    /// A `PICO_CONNECT_PROBE` value that this crate does not name
     Other(i32),
 }
 
@@ -86,7 +127,9 @@ const CODES: &[(PicoProbe, i32)] = &[
 ];
 
 impl PicoProbe {
-    /// The probe of a `PICO_CONNECT_PROBE` value.
+    /// The probe for a `PICO_CONNECT_PROBE` value
+    ///
+    /// - Returns [`PicoProbe::Other`] for a value that this crate does not name.
     pub fn from_code(code: i32) -> Self {
         CODES
             .iter()
@@ -94,7 +137,7 @@ impl PicoProbe {
             .map_or(PicoProbe::Other(code), |(p, _)| *p)
     }
 
-    /// The `PICO_CONNECT_PROBE` value.
+    /// The `PICO_CONNECT_PROBE` value of the probe
     pub fn code(self) -> i32 {
         match self {
             PicoProbe::Other(code) => code,
@@ -106,8 +149,9 @@ impl PicoProbe {
         }
     }
 
-    /// A short stable name: `current_clamp_60a`, or `probe_5099` for a
-    /// value this crate does not name.
+    /// A short name that does not change, such as `current_clamp_60a`
+    ///
+    /// - Returns `probe_` and the value, such as `probe_5099`, for a value that this crate does not name.
     pub fn tag(self) -> String {
         let name = match self {
             PicoProbe::None => "none",
@@ -191,40 +235,51 @@ impl fmt::Display for PicoProbe {
     }
 }
 
-/// What a scope reports of the probe on one channel.
+/// What a scope tells about the probe on one channel
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProbeState {
+    /// The channel
     pub channel: PicoChannel,
-    /// [`PicoProbe::None`] while no probe is connected, as the driver
-    /// goes on naming the last probe after it is unplugged.
+    /// The probe, or [`PicoProbe::None`] while no probe is connected
+    ///
+    /// - The driver continues to name the last probe after you disconnect it, but this field does not.
     pub probe: PicoProbe,
-    /// False once the probe is unplugged. The driver keeps its settings
-    /// and sets them again when it comes back.
+    /// Whether the probe is connected
+    ///
+    /// - When you disconnect the probe, the driver keeps its settings and sets them again when you connect it.
     pub connected: bool,
+    /// Whether the channel is on
     pub enabled: bool,
+    /// Whether the probe needs power from the scope
     pub requires_power: bool,
+    /// Whether the scope gives power to the probe
     pub powered: bool,
-    /// The driver's status for this probe; `None` for a value this
-    /// crate does not name.
+    /// The status of the probe from the driver
+    ///
+    /// - `None` for a status that this crate does not name.
     pub status: Option<PicoStatus>,
-    /// The ranges the probe offers, in the driver's order, each with
-    /// the unit it reads in ([`PicoRange::get_units`]). Empty while no
-    /// probe is connected.
+    /// The ranges of the probe, in the order of the driver
+    ///
+    /// - [`PicoRange::get_units`] gives the unit of each range.
+    /// - Empty while no probe is connected.
     pub ranges: Vec<PicoRange>,
-    /// Range values the probe offers that this crate does not name.
+    /// The range values of the probe that this crate does not name
     pub unknown_ranges: Vec<i32>,
-    /// The range the probe is set to, where this crate names it.
+    /// The range of the probe, when this crate names it
     pub range: Option<PicoRange>,
+    /// The couplings of the probe
     pub couplings: Vec<PicoCoupling>,
+    /// The coupling of the probe, when known
     pub coupling: Option<PicoCoupling>,
 }
 
 impl ProbeState {
-    /// Whether `other` reports the same probe in the same state: the
-    /// probe, connected, power, status, ranges and couplings. The range
-    /// and coupling set, and whether the channel is on, are left out:
-    /// they follow the application's own channel calls.
+    /// Whether `other` tells of the same probe in the same state
+    ///
+    /// - It compares the channel, probe, connection, power, status, ranges and couplings.
+    /// - It does not compare the range, the coupling, or whether the channel is on.
+    ///   These follow the channel calls that you make.
     pub fn same_probe(&self, other: &ProbeState) -> bool {
         self.channel == other.channel
             && self.probe == other.probe
@@ -237,8 +292,9 @@ impl ProbeState {
             && self.couplings == other.couplings
     }
 
-    /// The ranges of `first..=last` this crate names, and the values of
-    /// those it does not.
+    /// Splits the range values `first..=last` into the ranges this crate names and the values it does not name
+    ///
+    /// - Returns two empty lists when `last` is less than `first`, or `last - first` is more than 64.
     pub fn split_ranges(first: i32, last: i32) -> (Vec<PicoRange>, Vec<i32>) {
         let mut known = Vec::new();
         let mut unknown = Vec::new();
@@ -254,8 +310,10 @@ impl ProbeState {
         (known, unknown)
     }
 
-    /// The ranges of a connected probe this crate can scale: those with
-    /// a known symmetric full scale ([`PicoRange::full_scale`]).
+    /// The ranges of a connected probe that this crate can scale
+    ///
+    /// - These are the ranges with a known symmetric full scale ([`PicoRange::full_scale`]).
+    /// - Empty while no probe is connected.
     pub fn scaled_ranges(&self) -> Vec<PicoRange> {
         if !self.connected {
             return Vec::new();
@@ -267,8 +325,10 @@ impl ProbeState {
             .collect()
     }
 
-    /// Why a channel with this probe cannot run, if it cannot: a fault,
-    /// a probe with no power, or one with no range this crate scales.
+    /// Why a channel with this probe cannot run
+    ///
+    /// - Returns a message for a fault, for a probe with no power, or for a probe with no range that this crate can scale.
+    /// - Returns `None` when the channel can run, or when no probe is connected.
     pub fn problem(&self) -> Option<String> {
         if !self.connected {
             return None;
