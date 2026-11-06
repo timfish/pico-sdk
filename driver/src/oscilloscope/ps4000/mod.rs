@@ -26,6 +26,9 @@ use pico_sys_dynamic::ps4000::{
     enRatioMode_RATIO_MODE_AVERAGE, enRatioMode_RATIO_MODE_NONE, PS4000Loader,
 };
 
+/// The wrapper of the `ps4000` driver, for the PicoScope 4000 Series units that use it
+///
+/// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
 pub struct PS4000Driver {
     _dependencies: LoadedDependencies,
     bindings: crate::Kept<PS4000Loader>,
@@ -40,6 +43,11 @@ impl std::fmt::Debug for PS4000Driver {
 impl PS4000Driver {
     pub(crate) const DRIVER: Driver = Driver::PS4000;
 
+    /// Loads the library file at `path`
+    ///
+    /// - It first loads `picoipp` from the same directory, when it can.
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,

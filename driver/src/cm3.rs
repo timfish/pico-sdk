@@ -1,20 +1,15 @@
-//! Safe wrapper for the PicoLog CM3 current data logger driver (`Driver::PLCM3`).
+//! The PicoLog CM3 current data logger driver (`Driver::PLCM3`)
 //!
-//! The CM3 has no capture buffer: once channels are set "the driver begins to take continuous
-//! readings", and `PLCM3GetValue` gives the most recent reading of one channel (PicoLog CM3
-//! Programmer's Guide, plcm3pg r4, section 2.5). The driver's routines (section 2.1) have no
-//! run, block or stop call. Call [`PLCM3DriverInternal::get_value`] to read a channel.
-//!
-//! Two differences from the TC-08/PT-104 pattern worth knowing about:
-//!
-//! - `PLCM3OpenUnit` takes the serial of the unit to open (section 2.7), and `PLCM3Enumerate`
-//!   lists the serials of the units attached (section 2.3), so no unit is opened only to read
-//!   its serial.
-//! - There is no ping call (section 2.1). [`crate::PicoDriver`] families without one substitute
-//!   a `get_unit_info` round trip to check the connection, same as PT-104.
-//!
-//! Ethernet discovery/connection (`PLCM3Enumerate` over Ethernet, `PLCM3OpenUnitViaIp`) is out of
-//! scope here - USB only, matching the PT-104 wrapper's scope decision.
+//! - The CM3 has no capture buffer.
+//!   When the channels are set, "the driver begins to take continuous readings" (PicoLog CM3 Programmer's Guide, plcm3pg r4, section 2.5).
+//!   Call [`PLCM3DriverInternal::get_value`] to read the newest value of a channel.
+//! - The driver has no run, block or stop call (section 2.1).
+//! - `PLCM3OpenUnit` takes the serial of the unit to open (section 2.7), and `PLCM3Enumerate` lists the serials of the connected units (section 2.3).
+//!   So the wrapper does not open a unit only to read its serial.
+//! - The driver has no ping call (section 2.1).
+//!   To check the connection, call [`PLCM3DriverInternal::get_unit_info`].
+//! - This wrapper is for USB only.
+//!   It does not wrap the Ethernet calls.
 
 use crate::LibraryResolution;
 use pico_common::{
@@ -24,6 +19,10 @@ use pico_common::{
 use pico_sys_dynamic::plcm3::{enPLCM3CommunicationType_PLCM3_CT_USB, PLCM3Loader};
 use std::{fmt, ops::Deref, path::Path, sync::Arc};
 
+/// The methods of the PicoLog CM3 driver
+///
+/// - Get it through [`PLCM3Driver`], which dereferences to it.
+/// - Each method that takes a `handle` needs a unit that [`PLCM3DriverInternal::open_unit`] opened.
 pub struct PLCM3DriverInternal {
     bindings: crate::Kept<PLCM3Loader>,
 }
@@ -49,10 +48,10 @@ impl PLCM3DriverInternal {
         Ok(buffer.from_pico_i8_string(required_size as usize))
     }
 
-    /// Opens a unit, optionally filtered by serial number
+    /// Opens the unit with `serial`, or the first unit with `None`, and returns its handle
     ///
-    /// Unlike TC08/PT-104, `PLCM3OpenUnit` takes the serial directly rather than requiring every
-    /// connected unit to be opened in turn (section 2.7).
+    /// - `PLCM3OpenUnit` takes the serial, so it opens no other unit (section 2.7).
+    /// - Returns Err with `NOT_FOUND` when no unit matches.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         let mut handle: i16 = 0;
@@ -76,9 +75,11 @@ impl PLCM3DriverInternal {
         }
     }
 
-    /// The serials of the units attached by USB
+    /// The serials of the units on USB
     ///
-    /// `PLCM3Enumerate` writes a comma-separated list such as `USB:DV045/055` (section 2.3).
+    /// - `PLCM3Enumerate` writes a list with commas between entries, such as `USB:DV045/055` (section 2.3).
+    ///   This method keeps only the USB entries.
+    /// - Returns an empty list when the driver finds no unit.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn enumerate_usb(&self) -> PicoResult<Vec<String>> {
         let mut buffer = vec![0i8; 4096];
@@ -102,9 +103,9 @@ impl PLCM3DriverInternal {
         Ok(parse_usb_serials(&buffer.from_pico_i8_string(length)))
     }
 
-    /// Opens every unit attached by USB, one by serial at a time
+    /// Opens each unit on USB, one serial at a time, and gives its handle
     ///
-    /// The caller owns every handle this yields and must close the ones it does not keep.
+    /// - You own each handle, so close the units that you do not keep.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
         let serials = match self.enumerate_usb() {
             Ok(serials) => serials.into_iter().map(Ok).collect(),
@@ -115,6 +116,9 @@ impl PLCM3DriverInternal {
             .map(|serial: PicoResult<String>| self.open_unit(Some(&serial?)))
     }
 
+    /// The serial, hardware version and firmware version of the unit
+    ///
+    /// - The versions are empty when the driver does not give them.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<PLCM3Info> {
         let serial = self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL))?;
@@ -131,7 +135,7 @@ impl PLCM3DriverInternal {
         })
     }
 
-    /// Sets the mains rejection frequency for filtering
+    /// Sets the mains frequency that the unit filters out
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_mains(&self, handle: i16, freq: MainsRejectionFreq) -> PicoResult<()> {
         let sixty_hertz: u16 = match freq {
@@ -143,9 +147,9 @@ impl PLCM3DriverInternal {
         PicoStatus::from(status).to_result((), "set_mains")
     }
 
-    /// Configures a channel with the type of clamp (or voltage) connected to it
+    /// Sets the type of the current clamp, or the voltage, on a channel
     ///
-    /// Each channel that is on takes about 720 ms to measure (section 2.9).
+    /// - Each channel that is on takes about 720 ms to measure (section 2.9).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_channel(
         &self,
@@ -161,10 +165,10 @@ impl PLCM3DriverInternal {
         PicoStatus::from(status).to_result((), "set_channel")
     }
 
-    /// Reads the newest conversion of a channel (section 2.5)
+    /// Reads the newest value of a channel (section 2.5)
     ///
-    /// The scale of the raw value depends on the channel's [`PLCM3DataType`]; see
-    /// [`PLCM3DataType::scale`].
+    /// - The scale of the raw value depends on the [`PLCM3DataType`] of the channel (see [`PLCM3DataType::scale`]).
+    /// - Returns [`LoggerReading::NotReady`] when the driver has no value yet, and [`LoggerReading::Repeat`] when the value is not new.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn get_value(&self, handle: i16, channel: PLCM3Channel) -> PicoResult<LoggerReading> {
         let mut value: i32 = 0;
@@ -182,6 +186,7 @@ impl PLCM3DriverInternal {
         }
     }
 
+    /// Closes the unit
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
         let status = unsafe { self.bindings.PLCM3CloseUnit(handle) };
@@ -200,16 +205,26 @@ fn parse_usb_serials(details: &str) -> Vec<String> {
 }
 
 /// A loaded PicoLog CM3 driver
+///
+/// - It dereferences to [`PLCM3DriverInternal`], which has the methods.
+/// - Clones share the loaded library.
 #[derive(Clone)]
 pub struct PLCM3Driver(Arc<PLCM3DriverInternal>);
 
 impl PLCM3Driver {
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(PLCM3Driver(Arc::new(PLCM3DriverInternal {
             bindings: crate::Kept::new(unsafe { PLCM3Loader::new(path.as_ref())? }),
         })))
     }
 
+    /// Loads the library that `resolution` finds
+    ///
+    /// - Returns Err when the library does not load.
     pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
         PLCM3Driver::new(resolution.get_path(Driver::PLCM3))
     }

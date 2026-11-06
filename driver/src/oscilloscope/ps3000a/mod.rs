@@ -30,6 +30,9 @@ use pico_sys_dynamic::ps3000a::{
     PS3000ALoader,
 };
 
+/// The wrapper of the `ps3000a` driver, for the PicoScope 3000 Series units that use it
+///
+/// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
 pub struct PS3000ADriver {
     _dependencies: LoadedDependencies,
     bindings: crate::Kept<PS3000ALoader>,
@@ -45,6 +48,10 @@ impl std::fmt::Debug for PS3000ADriver {
 impl PS3000ADriver {
     pub(crate) const DRIVER: Driver = Driver::PS3000A;
 
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,

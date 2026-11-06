@@ -1,15 +1,12 @@
-//! Safe wrapper for the USB PT-104 platinum resistance temperature data logger driver.
+//! The USB PT-104 platinum resistance data logger driver
 //!
-//! The PT-104 is a temperature and resistance logger with 8 channels. Unlike the TC-08
-//! (which streams thermocouple readings), the PT-104 is poll-only: call `get_value()` to read
-//! the current value from a channel. There is no streaming mode or buffer.
-//!
-//! Compared to the TC-08, the PT-104:
-//! - Has no thermocouple type negotiation: channel type (PT100, voltage range, etc) is set explicitly.
-//! - Returns a single i32 raw value per channel read, not buffered samples; see
-//!   [`PT104DataType::scale`] for its unit.
-//! - Uses 4-wire, 3-wire, or 2-wire resistance measurement (for PT100/PT1000).
-//! - Returns `PICO_NO_SAMPLES_AVAILABLE` if data is not ready (not an error).
+//! - The PT-104 has 8 channels for temperature, resistance or voltage.
+//! - It has no stream and no buffer.
+//!   Call [`PT104DriverInternal::get_value`] to read the newest value of a channel.
+//! - You set the type of each channel, such as PT100 or a voltage range, and the number of wires (2, 3 or 4).
+//! - Each read gives one raw `i32` value.
+//!   [`PT104DataType::scale`] gives its unit.
+//! - The driver has no list call, so you open each unit to find it.
 
 use crate::LibraryResolution;
 use pico_common::{
@@ -19,6 +16,10 @@ use pico_common::{
 use pico_sys_dynamic::pt104::PT104Loader;
 use std::{fmt, iter, ops::Deref, path::Path, sync::Arc};
 
+/// The methods of the PT-104 driver
+///
+/// - Get it through [`PT104Driver`], which dereferences to it.
+/// - Each method that takes a `handle` needs a unit that [`PT104DriverInternal::open_unit`] opened.
 pub struct PT104DriverInternal {
     bindings: crate::Kept<PT104Loader>,
 }
@@ -54,10 +55,9 @@ impl PT104DriverInternal {
         Ok(buffer.from_pico_i8_string(required_size.max(0) as usize))
     }
 
-    /// Opens the next unit that is not already open
+    /// Opens the next unit that is not open, and returns its handle
     ///
-    /// The PT-104 has no enumerate call; instead you open units sequentially and get a handle,
-    /// returning an invalid handle when none are left. This is different from TC08, which returns 0.
+    /// - Returns Err with `PicoStatus::NOT_FOUND` when all connected units are open.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_next_unit(&self) -> Result<i16, PicoStatus> {
         let mut handle: i16 = 0;
@@ -76,9 +76,9 @@ impl PT104DriverInternal {
         }
     }
 
-    /// Iterates every connected unit, opening each one
+    /// Opens each connected unit that is not open, and gives its handle
     ///
-    /// The caller owns every handle this yields and must close the ones it does not keep.
+    /// - You own each handle, so close the units that you do not keep.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
         iter::from_fn(|| match self.open_next_unit() {
             Ok(handle) => Some(Ok(handle)),
@@ -87,10 +87,12 @@ impl PT104DriverInternal {
         })
     }
 
-    /// Opens a unit, optionally with a specific serial number
+    /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
-    /// Because units can only be found by opening them, looking for a particular serial means
-    /// opening others along the way. Those are closed again before returning.
+    /// - A unit matches when its batch and serial string contains `serial`.
+    /// - To find a serial, it must open other units.
+    ///   It closes them again before it returns.
+    /// - Returns Err with `NOT_FOUND` when no unit matches.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         let mut handles_to_close = Vec::new();
@@ -121,6 +123,9 @@ impl PT104DriverInternal {
         result
     }
 
+    /// The serial, hardware version and firmware version of the unit
+    ///
+    /// - The versions are empty when the driver does not give them.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<PT104Info> {
         let serial = self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL))?;
@@ -137,7 +142,7 @@ impl PT104DriverInternal {
         })
     }
 
-    /// Sets the mains rejection frequency for filtering
+    /// Sets the mains frequency that the unit filters out
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_mains(&self, handle: i16, freq: MainsRejectionFreq) -> PicoResult<()> {
         let sixty_hertz = match freq {
@@ -157,7 +162,7 @@ impl PT104DriverInternal {
         }
     }
 
-    /// Configures a channel with a sensor type and wire configuration
+    /// Sets the sensor type and the number of wires of a channel
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_channel(
         &self,
@@ -185,10 +190,11 @@ impl PT104DriverInternal {
         }
     }
 
-    /// Reads the newest conversion of a channel
+    /// Reads the newest value of a channel
     ///
-    /// The scale of the raw value depends on the channel's [`PT104DataType`]; see
-    /// [`PT104DataType::scale`]. `filtered` asks for the driver's low-pass filtered value.
+    /// - The scale of the raw value depends on the [`PT104DataType`] of the channel (see [`PT104DataType::scale`]).
+    /// - With `filtered`, the driver gives its low-pass filtered value.
+    /// - Returns [`LoggerReading::NotReady`] when the driver has no value yet, and [`LoggerReading::Repeat`] when the value is not new.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn get_value(
         &self,
@@ -216,6 +222,7 @@ impl PT104DriverInternal {
         }
     }
 
+    /// Closes the unit
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
         let status = unsafe { self.bindings.UsbPt104CloseUnit(handle) };
@@ -232,16 +239,26 @@ impl PT104DriverInternal {
 }
 
 /// A loaded USB PT-104 driver
+///
+/// - It dereferences to [`PT104DriverInternal`], which has the methods.
+/// - Clones share the loaded library.
 #[derive(Clone)]
 pub struct PT104Driver(Arc<PT104DriverInternal>);
 
 impl PT104Driver {
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(PT104Driver(Arc::new(PT104DriverInternal {
             bindings: crate::Kept::new(unsafe { PT104Loader::new(path.as_ref())? }),
         })))
     }
 
+    /// Loads the library that `resolution` finds
+    ///
+    /// - Returns Err when the library does not load.
     pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
         PT104Driver::new(resolution.get_path(Driver::PT104))
     }

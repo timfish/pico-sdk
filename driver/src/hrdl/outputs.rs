@@ -36,7 +36,10 @@ impl DigitalIo {
     }
 }
 
-/// The outputs of the unit `info` describes.
+/// The outputs of the unit that `info` is for
+///
+/// - The ADC-24 has four digital I/O pins.
+///   The ADC-20 has none, so its list is empty.
 pub fn outputs(info: &HRDLInfo) -> Vec<OutputSpec> {
     if info.is_adc20() {
         return Vec::new();
@@ -57,8 +60,14 @@ pub fn outputs(info: &HRDLInfo) -> Vec<OutputSpec> {
 }
 
 impl HRDLDriverInternal {
-    /// Sets output `id` of the unit `info` describes. Returns the
-    /// value set.
+    /// Sets output `id` of the unit that `info` is for
+    ///
+    /// - `id` is one of the outputs from [`outputs`](crate::hrdl::outputs()).
+    /// - One driver call sets the direction and level of all pins (ADC-20/ADC-24 User's Guide adc20.en r6 §5.4.16), so the driver keeps the pins of each open unit.
+    /// - While the unit collects samples, the level of a pin can change but not its direction.
+    ///   To use a pin during a stream, set it `On` or `Off` before the stream.
+    /// - Returns the value that it set.
+    /// - Returns Err when `id` is not an output, or `value` does not suit the output.
     #[tracing::instrument(level = "debug", skip(self, info), err(level = "warn", Display))]
     pub fn set_output(
         &self,

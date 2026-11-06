@@ -4,19 +4,21 @@ use pico_common::{
     SampleType,
 };
 
-/// Continuous streaming. Every family has it.
+/// Continuous streaming, which every range has
 pub trait StreamingDriver {
-    /// The streaming downsample modes the driver has.
+    /// The downsample modes that a stream takes
     fn downsample_modes(&self) -> &'static [DownsampleKind] {
         &[DownsampleKind::Average]
     }
-    /// The sample types the driver writes into buffers. Drivers of 8-bit
-    /// units without `I8` write 8-bit codes shifted left by 8 in `I16`.
+    /// The sample types that the driver writes into buffers
+    ///
+    /// - A driver of 8-bit units that does not list `I8` writes each 8-bit value shifted left by 8 bits into an `I16` buffer.
     fn sample_types(&self) -> &'static [SampleType] {
         &[SampleType::I16]
     }
-    /// Give the driver a buffer to write data into, for a stream with
-    /// `downsample`
+    /// Gives the driver the buffer of `channel` for a stream with `downsample`
+    ///
+    /// - Give a buffer for each channel that is on before [`StreamingDriver::start_streaming`].
     fn set_data_buffer(
         &self,
         handle: i16,
@@ -25,8 +27,10 @@ pub trait StreamingDriver {
         buffer_len: usize,
         downsample: Option<Downsample>,
     ) -> PicoResult<()>;
-    /// Starts the device streaming. `sample_config` is the device's
-    /// interval, before any downsample.
+    /// Starts the stream
+    ///
+    /// - `sample_config` gives the interval of the unit, before any downsample.
+    /// - Returns the sample configuration that the driver set.
     fn start_streaming(
         &self,
         handle: i16,
@@ -35,9 +39,9 @@ pub trait StreamingDriver {
         buffer_len: usize,
         downsample: Option<Downsample>,
     ) -> PicoResult<OscilloscopeSampleConfig>;
-    /// Gets the latest streaming values. `callback` gets the start index
-    /// and count of new samples in the buffers, and the channels whose
-    /// input went over range in them.
+    /// Gets the newest samples of the stream
+    ///
+    /// - `callback` gets the start index and the number of the new samples in the buffers, and the channels that went over range in them.
     fn get_latest_streaming_values<'a>(
         &self,
         handle: i16,

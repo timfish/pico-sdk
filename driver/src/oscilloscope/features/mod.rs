@@ -1,8 +1,8 @@
-//! One trait per scope feature. Every family implements every trait; a
-//! method the family or the model lacks returns
-//! [`PicoError::not_supported`](pico_common::PicoError::not_supported).
-//! `ScopeCapabilities`, read at open, says which features a unit has.
-//! Each family keeps its impl of a feature in `<family>/<feature>.rs`.
+//! One trait for each oscilloscope feature
+//!
+//! - Each range implements each trait.
+//! - A method that the range or the model does not have returns [`PicoError::not_supported`](pico_common::PicoError::not_supported).
+//! - [`OscilloscopeDriverInternal::capabilities`](super::OscilloscopeDriverInternal::capabilities) tells which features a unit has.
 
 mod aux_io;
 mod block;

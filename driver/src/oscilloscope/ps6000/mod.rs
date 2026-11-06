@@ -31,6 +31,9 @@ use pico_sys_dynamic::ps6000::{
     PS6000Loader,
 };
 
+/// The wrapper of the `ps6000` driver, for the PicoScope 6000 Series units that use it
+///
+/// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
 pub struct PS6000Driver {
     _dependencies: LoadedDependencies,
     bindings: crate::Kept<PS6000Loader>,
@@ -45,6 +48,11 @@ impl std::fmt::Debug for PS6000Driver {
 impl PS6000Driver {
     pub(crate) const DRIVER: Driver = Driver::PS6000;
 
+    /// Loads the library file at `path`
+    ///
+    /// - It first loads `picoipp` from the same directory, when it can.
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,

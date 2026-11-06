@@ -2,15 +2,16 @@ use crate::oscilloscope::SampleBuffer;
 use pico_common::{DigitalPort, DigitalPortConfig, Downsample, Overflow, PicoError, PicoResult};
 use std::collections::HashMap;
 
-/// The digital inputs of MSO models. Data comes in `i16` buffers like
-/// the analogue data, one per port, the port's 8 bits in the low byte
-/// (see [`pico_common::port_bytes`]).
+/// The digital inputs of the MSO models
+///
+/// - The data comes in `i16` buffers, as the analogue data does, with one buffer for each port.
+/// - The 8 bits of a port are in the low byte (see [`pico_common::port_bytes`]).
 pub trait DigitalPortDriver {
-    /// The ports the unit has.
+    /// The ports that the unit has
     fn digital_ports(&self, _handle: i16) -> PicoResult<Vec<DigitalPort>> {
         Err(PicoError::not_supported("digital_ports"))
     }
-    /// Turns a port on with `config`, or off with `None`.
+    /// Turns a port on with `config`, or off with `None`
     fn set_digital_port(
         &self,
         _handle: i16,
@@ -19,9 +20,11 @@ pub trait DigitalPortDriver {
     ) -> PicoResult<()> {
         Err(PicoError::not_supported("set_digital_port"))
     }
-    /// Give the driver an `i16` buffer for a port's samples in a
-    /// stream, as `StreamingDriver::set_data_buffer` does for a channel.
-    /// A port turned off leaves the stream.
+    /// Gives the driver an `i16` buffer for the samples of a port in a stream
+    ///
+    /// - It works as [`StreamingDriver::set_data_buffer`](super::StreamingDriver::set_data_buffer) does for a channel.
+    /// - A port that is off is not in the stream.
+    /// - Returns Err with `RATIO_MODE_NOT_SUPPORTED` for a downsample, as the ports stream raw samples only.
     fn set_digital_buffer(
         &self,
         _handle: i16,
@@ -32,9 +35,9 @@ pub trait DigitalPortDriver {
     ) -> PicoResult<()> {
         Err(PicoError::not_supported("set_digital_buffer"))
     }
-    /// Give the driver an `i16` buffer for a port's samples of a block
-    /// capture into `segment`, as `BlockDriver::set_block_buffer` does
-    /// for a channel.
+    /// Gives the driver an `i16` buffer for the samples of a port in a block capture into `segment`
+    ///
+    /// - It works as [`BlockDriver::set_block_buffer`](super::BlockDriver::set_block_buffer) does for a channel.
     fn set_digital_block_buffer(
         &self,
         _handle: i16,

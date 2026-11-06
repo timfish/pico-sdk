@@ -1,17 +1,11 @@
-//! Safe wrapper for the USB TC-08 thermocouple data logger driver.
+//! The USB TC-08 thermocouple data logger driver
 //!
-//! The TC-08 API differs from the oscilloscope drivers in almost every respect, so it does not
-//! implement [`crate::oscilloscope::OscilloscopeDriverInternal`]. There is only one TC-08 driver,
-//! so there is no trait here either - the concrete wrapper is the API.
-//!
-//! Two differences worth knowing about:
-//!
-//! - There is no enumerate call. `usb_tc08_open_unit` opens the next unattached unit and returns
-//!   0 when there are none left, so enumeration means opening every unit and closing the ones you
-//!   did not want. [`TC08DriverInternal::open_unit_iter`] wraps that loop.
-//! - Most functions return a bare success flag, and the reason for a failure has to be fetched
-//!   separately with `usb_tc08_get_last_error`. [`TC08DriverInternal::wrap_with_get_last_error`]
-//!   does that so callers see a normal `PicoResult`.
+//! - The driver has no list call.
+//!   `usb_tc08_open_unit` opens the next unit that is not open, and returns 0 when no unit is left.
+//!   To find the units, open each one and close the ones you do not want.
+//!   [`TC08DriverInternal::open_unit_iter`] does that loop.
+//! - Most driver functions return only a success flag, and `usb_tc08_get_last_error` gives the cause of a failure.
+//!   The wrapper reads the cause for you, so each method returns a normal `PicoResult`.
 
 use crate::LibraryResolution;
 use pico_common::{
@@ -39,6 +33,10 @@ fn to_tc08_info(handle: i16, value: USBTC08_INFO) -> TC08Info {
     }
 }
 
+/// The methods of the TC-08 driver
+///
+/// - Get it through [`TC08Driver`], which dereferences to it.
+/// - Each method that takes a `handle` needs a unit that [`TC08DriverInternal::open_unit`] opened.
 pub struct TC08DriverInternal {
     bindings: crate::Kept<TC08Loader>,
 }
@@ -59,9 +57,9 @@ impl TC08DriverInternal {
         }
     }
 
-    /// Opens the next unit that is not already open
+    /// Opens the next unit that is not open, and returns its handle
     ///
-    /// Returns `PicoStatus::NOT_FOUND` once every connected unit has been opened.
+    /// - Returns Err with `PicoStatus::NOT_FOUND` when all connected units are open.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_next_unit(&self) -> Result<i16, PicoStatus> {
         let result = unsafe { self.bindings.usb_tc08_open_unit() };
@@ -73,9 +71,9 @@ impl TC08DriverInternal {
         }
     }
 
-    /// Iterates every connected unit, opening each one
+    /// Opens each connected unit that is not open, and gives its handle
     ///
-    /// The caller owns every handle this yields and must close the ones it does not keep.
+    /// - You own each handle, so close the units that you do not keep.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
         iter::from_fn(|| match self.open_next_unit() {
             Ok(handle) => Some(Ok(handle)),
@@ -84,10 +82,21 @@ impl TC08DriverInternal {
         })
     }
 
-    /// Opens a unit, optionally with a specific serial number
+    /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
-    /// Because units can only be found by opening them, looking for a particular serial means
-    /// opening others along the way. Those are closed again before returning.
+    /// - To find a serial, it must open other units.
+    ///   It closes them again before it returns.
+    /// - Returns Err with `NOT_FOUND` when no unit matches.
+    ///
+    /// ```no_run
+    /// use pico_driver::{tc08::TC08Driver, LibraryResolution};
+    ///
+    /// let driver = TC08Driver::load(&LibraryResolution::Default)?;
+    /// let handle = driver.open_unit(None)?;
+    /// println!("{}", driver.get_unit_info(handle)?.serial);
+    /// driver.close_unit(handle)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         let mut handles_to_close = Vec::new();
@@ -116,6 +125,7 @@ impl TC08DriverInternal {
         result
     }
 
+    /// The serial, hardware version and variant of the unit
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<TC08Info> {
         let mut info: USBTC08_INFO = unsafe { MaybeUninit::zeroed().assume_init() };
         info.size = size_of::<USBTC08_INFO>() as i16;
@@ -126,6 +136,7 @@ impl TC08DriverInternal {
         .to_result(to_tc08_info(handle, info), "get_unit_info")
     }
 
+    /// Sets the mains frequency that the unit filters out
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_mains_rejection(&self, handle: i16, freq: MainsRejectionFreq) -> PicoResult<()> {
         let sixty_hertz = match freq {
@@ -139,7 +150,7 @@ impl TC08DriverInternal {
         .to_result((), "set_mains_rejection")
     }
 
-    /// Sets the thermocouple type for a channel, or disables it with `None`
+    /// Sets the thermocouple type of a channel, or turns the channel off with `None`
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn configure_channel(
         &self,
@@ -157,10 +168,9 @@ impl TC08DriverInternal {
         .to_result((), "configure_channel")
     }
 
-    /// The shortest interval the device can sample at with the currently enabled channels
+    /// The shortest sample interval in ms with the channels that are on now
     ///
-    /// Every enabled channel adds to the conversion time, so this has to be read back after
-    /// configuring channels rather than assumed up front.
+    /// - Each channel that is on adds to the conversion time, so call it after you set the channels.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn get_minimum_interval_ms(&self, handle: i16) -> PicoResult<u32> {
         let result = unsafe { self.bindings.usb_tc08_get_minimum_interval_ms(handle) };
@@ -175,7 +185,9 @@ impl TC08DriverInternal {
         }
     }
 
-    /// Starts streaming, returning the interval the driver actually settled on
+    /// Starts a stream with `interval_ms` between samples
+    ///
+    /// - Returns the interval in ms that the driver set.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn start(&self, handle: i16, interval_ms: i32) -> PicoResult<i32> {
         let result = unsafe { self.bindings.usb_tc08_run(handle, interval_ms) };
@@ -190,8 +202,9 @@ impl TC08DriverInternal {
         }
     }
 
-    /// Reads buffered samples for one channel, and whether any of them
-    /// was over the unit's input range (TC-08 guide §3.2.4).
+    /// Reads at most `buffer_size` samples of one channel from the driver buffer
+    ///
+    /// - Returns the samples, and `true` when one or more of them was over the input range of the unit (TC-08 guide §3.2.4).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,
@@ -226,12 +239,14 @@ impl TC08DriverInternal {
         }
     }
 
+    /// Stops the stream
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn stop(&self, handle: i16) -> PicoResult<()> {
         self.wrap_with_get_last_error(handle, || unsafe { self.bindings.usb_tc08_stop(handle) })
             .to_result((), "stop")
     }
 
+    /// Closes the unit
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
         self.wrap_with_get_last_error(handle, || unsafe {
@@ -242,16 +257,26 @@ impl TC08DriverInternal {
 }
 
 /// A loaded USB TC-08 driver
+///
+/// - It dereferences to [`TC08DriverInternal`], which has the methods.
+/// - Clones share the loaded library.
 #[derive(Clone)]
 pub struct TC08Driver(Arc<TC08DriverInternal>);
 
 impl TC08Driver {
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(TC08Driver(Arc::new(TC08DriverInternal {
             bindings: crate::Kept::new(unsafe { TC08Loader::new(path.as_ref())? }),
         })))
     }
 
+    /// Loads the library that `resolution` finds
+    ///
+    /// - Returns Err when the library does not load.
     pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
         TC08Driver::new(resolution.get_path(Driver::TC08))
     }

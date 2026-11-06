@@ -1,9 +1,21 @@
+//! Checks for the Pico Technology kernel driver on Windows
+
 #[cfg(not(target_os = "windows"))]
+/// Tells if the Pico Technology kernel driver looks missing
+///
+/// - On Windows it returns `true` when no USB device has a compatible driver from Pico Technology Ltd.
+/// - On other systems it always returns `false`.
+/// - Use it when a driver finds no units, to tell the user to install the kernel driver.
 pub fn is_missing() -> bool {
     false
 }
 
 #[cfg(target_os = "windows")]
+/// Tells if the Pico Technology kernel driver looks missing
+///
+/// - On Windows it returns `true` when no USB device has a compatible driver from Pico Technology Ltd.
+/// - On other systems it always returns `false`.
+/// - Use it when a driver finds no units, to tell the user to install the kernel driver.
 pub fn is_missing() -> bool {
     use std::{
         ffi::OsStr,

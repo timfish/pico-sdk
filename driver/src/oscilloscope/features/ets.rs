@@ -2,22 +2,24 @@ use parking_lot::RwLock;
 use pico_common::{EtsConfig, EtsLimits, PicoError, PicoResult};
 use std::sync::Arc;
 
-/// Equivalent-time sampling, in block mode. A capture needs a trigger
-/// and a signal that repeats.
+/// Equivalent-time sampling (ETS), in block mode
+///
+/// - A capture needs a trigger and a signal that repeats.
 pub trait EtsDriver {
-    /// Turns ETS on, or off with `None`. Returns the interval between
-    /// samples in picoseconds while on.
+    /// Turns ETS on, or off with `None`
+    ///
+    /// - Returns the interval between samples in picoseconds while ETS is on.
     fn set_ets(&self, _handle: i16, _ets: Option<&EtsConfig>) -> PicoResult<Option<f64>> {
         Err(PicoError::not_supported("set_ets"))
     }
-    /// The buffer the driver writes each sample's time into, in
-    /// femtoseconds. The caller keeps it alive while the driver holds
-    /// it, and gives it again after any change of its length.
+    /// Gives the driver the buffer for the time of each sample, in femtoseconds
+    ///
+    /// - Keep the buffer while the driver holds it.
+    /// - Give it again after a change of its length.
     fn set_ets_time_buffer(&self, _handle: i16, _buffer: Arc<RwLock<Vec<i64>>>) -> PicoResult<()> {
         Err(PicoError::not_supported("set_ets_time_buffer"))
     }
-    /// The most cycles and interleaves the unit takes, where the driver
-    /// says.
+    /// The most cycles and interleaves that the unit takes
     fn ets_limits(&self, _handle: i16) -> PicoResult<EtsLimits> {
         Err(PicoError::not_supported("ets_limits"))
     }

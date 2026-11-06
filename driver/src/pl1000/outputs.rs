@@ -9,7 +9,9 @@ use pico_common::{find_output, OutputKind, OutputSpec, OutputValue, PicoResult, 
 /// the same level at 0 or 100%.
 const STEADY_PERIOD_US: u16 = 1000;
 
-/// The outputs every PicoLog 1000 Series unit has.
+/// The outputs that each PicoLog 1000 Series unit has
+///
+/// - They are the digital outputs DO0 to DO3 (pl1000pg-8 §4.13) and one PWM output (§4.15).
 pub fn outputs() -> Vec<OutputSpec> {
     let digital = OutputKind::Digital {
         release: false,
@@ -91,7 +93,12 @@ fn call(id: &str, value: &OutputValue) -> PicoResult<(Call, OutputValue)> {
 }
 
 impl PL1000DriverInternal {
-    /// Sets output `id` of the unit. Returns the value set.
+    /// Sets output `id` of the unit
+    ///
+    /// - `id` is one of the outputs from [`outputs`](crate::pl1000::outputs()).
+    /// - The guide gives no rule for calls while the unit collects samples.
+    /// - Returns the value that it set.
+    /// - Returns Err when `id` is not an output, or `value` does not suit the output.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     pub fn set_output(
         &self,

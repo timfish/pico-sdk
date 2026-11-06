@@ -1,6 +1,7 @@
-//! A scope's outputs: the AUX I/O connector (ps6000a, psospa), the
-//! signal generator, and the LEDs of units that have them. Each is a
-//! call on the open unit, so a stream goes on.
+//! The outputs of an oscilloscope, as [`OutputSpec`] entries
+//!
+//! - The outputs are the AUX I/O connector (ps6000a, psospa), the signal generator, and the LEDs of the units that have them.
+//! - Each change is a call on the open unit, so a stream goes on.
 
 use super::OscilloscopeDriverInternal;
 use pico_common::{
@@ -8,9 +9,9 @@ use pico_common::{
     PicoChannel, PicoLed, PicoResult, ScopeCapabilities, SigGenConfig,
 };
 
-/// The outputs of an open scope with `capabilities` and analog
-/// `channels`. The signal generator is listed once its driver gives its
-/// limits.
+/// The outputs of an open unit with `capabilities` and the analog `channels`
+///
+/// - The list has the signal generator only when its driver gives its limits.
 pub fn scope_outputs(
     driver: &dyn OscilloscopeDriverInternal,
     handle: i16,
@@ -109,8 +110,12 @@ fn calls(specs: &[OutputSpec], id: &str, value: &OutputValue) -> PicoResult<Vec<
     })
 }
 
-/// Sets output `id`, one of `specs`. Returns the value set: the
-/// signal generator's as its driver reports it.
+/// Sets output `id`, one of `specs`
+///
+/// - `specs` comes from [`scope_outputs`].
+/// - Returns the value that it set.
+///   For the signal generator, that is the value that its driver gives.
+/// - Returns Err when `id` is not in `specs`, or `value` does not suit the output.
 #[tracing::instrument(level = "debug", skip(driver, specs), err(level = "warn", Display))]
 pub fn set_scope_output(
     driver: &dyn OscilloscopeDriverInternal,

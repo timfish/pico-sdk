@@ -22,6 +22,7 @@ const AWG_UPDATE_RATE: (f64, f64) = (1.0, 2_000_000.0);
 /// An arbitrary waveform's full scale (§3.26).
 const AWG_FULL_SCALE: f64 = 1000.0;
 
+/// The shapes and limits of the DrDAQ signal generator
 pub fn sig_gen_info() -> SigGenInfo {
     use SigGenShapeKind::*;
     SigGenInfo {
@@ -38,7 +39,10 @@ pub fn sig_gen_info() -> SigGenInfo {
     }
 }
 
-/// The outputs of a USB DrDAQ.
+/// The outputs of a USB DrDAQ
+///
+/// - GPIO 1 to 4 are digital outputs, and GPIO 1 and 2 are also PWM outputs.
+/// - The list also has the signal generator and the RGB LED.
 pub fn outputs() -> Vec<OutputSpec> {
     let mut specs: Vec<OutputSpec> = (1..=4)
         .map(|n| {
@@ -218,7 +222,11 @@ fn calls(id: &str, value: &OutputValue) -> PicoResult<(Vec<Call>, OutputValue)> 
 }
 
 impl DrDAQDriverInternal {
-    /// Sets output `id` of the unit. Returns the value set.
+    /// Sets output `id` of the unit
+    ///
+    /// - `id` is one of the outputs from [`outputs`](crate::drdaq::outputs()).
+    /// - Returns the value that it set.
+    /// - Returns Err when `id` is not an output, or `value` does not suit the output.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn", Display))]
     pub fn set_output(
         &self,

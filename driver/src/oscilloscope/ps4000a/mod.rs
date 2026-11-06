@@ -38,6 +38,9 @@ use std::matches;
 /// guide gives no count of reports to wait for.
 const PROBE_WAIT: std::time::Duration = std::time::Duration::from_millis(800);
 
+/// The wrapper of the `ps4000a` driver, for the PicoScope 4000 Series units that use it
+///
+/// - Use it through [`OscilloscopeDriver`](crate::oscilloscope::OscilloscopeDriver).
 pub struct PS4000ADriver {
     _dependencies: LoadedDependencies,
     bindings: crate::Kept<PS4000ALoader>,
@@ -53,6 +56,10 @@ impl std::fmt::Debug for PS4000ADriver {
 impl PS4000ADriver {
     pub(crate) const DRIVER: Driver = Driver::PS4000A;
 
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P>(path: P) -> Result<Self, ::libloading::Error>
     where
         P: AsRef<::std::ffi::OsStr>,

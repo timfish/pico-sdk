@@ -1,11 +1,12 @@
-//! Safe wrappers for Pico Technology oscilloscope drivers.
+//! The oscilloscope drivers, with one API for every range
 //!
-//! Every oscilloscope driver exposes the same capabilities through slightly different C APIs, so
-//! each wrapper implements [`OscilloscopeDriverInternal`] and callers work against
-//! [`OscilloscopeDriver`] without caring which product range they have.
+//! Each range has its own C driver with a different API.
+//! Each wrapper, such as [`PS2000ADriver`], implements [`OscilloscopeDriverInternal`] and the traits in [`features`].
+//! [`OscilloscopeDriver`] holds any of them, so the code that uses it does not depend on the range.
 //!
-//! Data loggers are a separate family with a different API shape entirely - see
-//! [`crate::tc08`].
+//! - Each call on a unit takes the handle that [`OscilloscopeDriverInternal::open_unit`] gave.
+//! - A feature that the range or the model does not have returns [`PicoError::not_supported`].
+//!   [`OscilloscopeDriverInternal::capabilities`] tells which features a unit has.
 
 mod dependencies;
 pub mod features;
@@ -49,25 +50,33 @@ use pico_common::{
 use std::{collections::HashMap, fmt, ops::Deref, sync::Arc};
 use version_compare::Version;
 
-/// Serial and variant pairs returned by driver enumeration
+/// One unit that [`OscilloscopeDriverInternal::enumerate_units`] found
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct EnumerationResult {
+    /// The model name, such as `2206B`
     pub variant: String,
+    /// The batch and serial number, such as `CW356/055`
     pub serial: String,
 }
 
-/// A buffer the driver writes samples into, of the type the driver was
-/// asked for.
+/// A buffer that the driver writes samples into
+///
+/// - The variant must be a type that the driver takes, from [`StreamingDriver::sample_types`].
+/// - Clones share the same memory.
+/// - The driver keeps a pointer to the memory, so keep the buffer and do not change its length while the driver holds it.
 #[derive(Clone, Debug)]
 pub enum SampleBuffer {
+    /// 8-bit samples
     I8(Arc<RwLock<Vec<i8>>>),
+    /// 16-bit samples
     I16(Arc<RwLock<Vec<i16>>>),
+    /// 32-bit samples, for a sum downsample
     I32(Arc<RwLock<Vec<i32>>>),
 }
 
 impl SampleBuffer {
-    /// A zeroed buffer of `len` samples of `sample_type`.
+    /// Makes a buffer of `len` samples of `sample_type`, all zero
     pub fn new(sample_type: SampleType, len: usize) -> Self {
         match sample_type {
             SampleType::I8 => SampleBuffer::I8(Arc::new(RwLock::new(vec![0; len]))),
@@ -76,6 +85,7 @@ impl SampleBuffer {
         }
     }
 
+    /// The type of the samples
     pub fn sample_type(&self) -> SampleType {
         match self {
             SampleBuffer::I8(_) => SampleType::I8,
@@ -84,6 +94,7 @@ impl SampleBuffer {
         }
     }
 
+    /// The number of samples
     pub fn len(&self) -> usize {
         match self {
             SampleBuffer::I8(b) => b.read().len(),
@@ -92,11 +103,15 @@ impl SampleBuffer {
         }
     }
 
+    /// Tells if the buffer has no samples
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// The `i16` buffer, for drivers that take no other type.
+    /// The `i16` memory, for drivers that take no other type
+    ///
+    /// - Returns Err with `RATIO_MODE_DOES_NOT_SUPPORT_DATATYPE` when the buffer is not [`SampleBuffer::I16`].
+    ///   `context` goes into the error.
     pub fn as_i16(&self, context: &str) -> PicoResult<&Arc<RwLock<Vec<i16>>>> {
         match self {
             SampleBuffer::I16(b) => Ok(b),
@@ -206,8 +221,11 @@ pub(crate) fn buffer_pointer(buffer: &SampleBuffer) -> *mut std::ffi::c_void {
     }
 }
 
-/// Common trait implemented for every oscilloscope driver. Each feature
-/// is a trait of its own; see [`features`].
+/// The calls that every oscilloscope driver has
+///
+/// - Each feature, such as block mode or the trigger, is a trait of its own in [`features`].
+/// - Each method that takes a `handle` needs a unit that [`OscilloscopeDriverInternal::open_unit`] opened.
+/// - The default methods are for a range that does not have the feature.
 pub trait OscilloscopeDriverInternal:
     StreamingDriver
     + BlockDriver
@@ -223,105 +241,162 @@ pub trait OscilloscopeDriverInternal:
     + Send
     + Sync
 {
-    /// Gets the underlying driver type
+    /// The driver this wrapper is for
     fn get_driver(&self) -> Driver;
-    /// Gets the driver version string
+    /// The version of the driver library, such as `2.1.30.1878`
+    ///
+    /// - It needs no open unit.
     fn get_version(&self) -> PicoResult<String>;
-    /// Gets the path to the loaded driver
+    /// The path of the loaded library file, as the driver gives it
+    ///
+    /// - Returns `None` when the driver does not give its path.
     fn get_path(&self) -> PicoResult<Option<String>>;
-    /// Returns a list of discovered serial numbers
+    /// Lists the units that the driver finds
+    ///
+    /// - The ps2000 driver has no list call, so its wrapper opens each unit to read its serial, then closes it.
+    ///   It does not find a unit that is open.
+    ///
+    /// ```no_run
+    /// use pico_common::Driver;
+    /// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+    ///
+    /// if let PicoDriver::Oscilloscope(scope) = Driver::PS5000A.load(&LibraryResolution::Default)? {
+    ///     for unit in scope.enumerate_units()? {
+    ///         println!("{} {}", unit.variant, unit.serial);
+    ///     }
+    /// }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     fn enumerate_units(&self) -> PicoResult<Vec<EnumerationResult>>;
-    /// Opens a device, optionally with a specific serial number
+    /// Opens the unit with `serial`, or the first unit with `None`, and returns its handle
+    ///
+    /// - Close the unit with [`OscilloscopeDriverInternal::close`].
+    /// - Returns Err with `NOT_FOUND` when no unit matches.
+    ///
+    /// ```no_run
+    /// use pico_common::{Driver, PicoInfo};
+    /// use pico_driver::{DriverLoad, LibraryResolution, PicoDriver};
+    ///
+    /// if let PicoDriver::Oscilloscope(scope) = Driver::PS2000A.load(&LibraryResolution::Default)? {
+    ///     let handle = scope.open_unit(Some("CW356/055"))?;
+    ///     println!("{}", scope.get_unit_info(handle, PicoInfo::VARIANT_INFO)?);
+    ///     scope.close(handle)?;
+    /// }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16>;
-    /// Ping a unit to see if it's still connected
+    /// Checks that the unit is still connected
     fn ping_unit(&self, handle: i16) -> PicoResult<()>;
-    /// Get the maximum expected ADC value. This is required to scale to volts
+    /// The ADC count at the top of the range
+    ///
+    /// - Use it to scale samples to volts.
+    /// - On a range with a choice of resolution, it changes with the resolution.
     fn maximum_value(&self, handle: i16) -> PicoResult<i16>;
-    /// Close the specified unit
+    /// Closes the unit
     fn close(&self, handle: i16) -> PicoResult<()>;
-    /// Get one of the unit info strings
+    /// One information string of the unit
     fn get_unit_info(&self, handle: i16, info_type: PicoInfo) -> PicoResult<String>;
-    /// Get valid ranges for the specified channel
+    /// The ranges that `channel` takes
     fn get_channel_ranges(&self, handle: i16, channel: PicoChannel) -> PicoResult<Vec<PicoRange>>;
-    /// The resolutions the unit supports, each with its maximum ADC value.
-    /// Empty, or the one resolution, for a unit whose resolution is fixed.
+    /// The resolutions the unit has, each with its maximum ADC value
+    ///
+    /// - Empty, or one resolution, for a unit with a fixed resolution.
     fn get_resolutions(&self, _handle: i16) -> PicoResult<Vec<(PicoResolution, i16)>> {
         Ok(Vec::new())
     }
-    /// The resolution the unit is set to, or `None` if it is fixed
+    /// The resolution of the unit now
+    ///
+    /// - Returns `None` when the resolution is fixed.
     fn get_resolution(&self, _handle: i16) -> Option<PicoResolution> {
         None
     }
-    /// Set the unit's resolution. Takes effect from the next stream start.
+    /// Sets the resolution of the unit
+    ///
+    /// - The change starts with the next stream.
+    /// - Returns Err with `RESOLUTION_NOT_SUPPORTED_BY_VARIANT` on a unit with a fixed resolution.
     fn set_resolution(&self, _handle: i16, _resolution: PicoResolution) -> PicoResult<()> {
         Err(PicoError::from_status(
             PicoStatus::RESOLUTION_NOT_SUPPORTED_BY_VARIANT,
             "set_resolution",
         ))
     }
-    /// Resolutions of the unit that allow fewer channels than it has,
-    /// each with the most channels it allows. Empty when every
-    /// resolution allows every channel.
+    /// The resolutions that allow fewer channels than the unit has, each with the most channels it allows
+    ///
+    /// - Empty when each resolution allows all channels.
+    /// - [`check_channel_limit`] uses this list.
     fn get_resolution_channel_limits(&self, _handle: i16) -> Vec<(PicoResolution, u8)> {
         Vec::new()
     }
-    /// The fastest the unit samples with each count of analog channels
-    /// on, at each resolution. Empty where the driver cannot say.
+    /// The fastest sample rate for each number of analog channels on, at each resolution
+    ///
+    /// - Empty when the driver cannot tell.
     fn get_rate_limits(&self, _handle: i16) -> Vec<RateLimit> {
         Vec::new()
     }
-    /// Where the unit takes its power from, or `None` for a unit with
-    /// no choice of power.
+    /// The power source of the unit
+    ///
+    /// - Returns `None` for a unit with no choice of power.
     fn get_power_source(&self, _handle: i16) -> Option<PowerSource> {
         None
     }
-    /// Tell the driver which power to run on. Settings on the unit are
-    /// lost, so channels and streams are set up again after it.
+    /// Tells the driver which power source to use
+    ///
+    /// - The unit loses its settings, so set up the channels and the stream again after this call.
+    /// - Returns Err with `POWER_SUPPLY_REQUEST_INVALID` on a unit with no choice of power.
     fn set_power_source(&self, _handle: i16, _power: PowerSource) -> PicoResult<()> {
         Err(PicoError::from_status(
             PicoStatus::POWER_SUPPLY_REQUEST_INVALID,
             "set_power_source",
         ))
     }
-    /// Channels that run only on the external supply.
+    /// The channels that work only on the external power supply
     fn get_supply_channels(&self, _handle: i16) -> Vec<PicoChannel> {
         Vec::new()
     }
-    /// What the unit can do beyond streaming. Every feature is off by
-    /// default.
+    /// The features of the unit other than streaming
+    ///
+    /// - The default has all features off.
     fn capabilities(&self, _handle: i16) -> PicoResult<ScopeCapabilities> {
         Ok(ScopeCapabilities::default())
     }
-    /// The probe state of each channel the unit reported one for, on a
-    /// unit that detects probes. Empty for others. A channel with a
-    /// connected probe takes the probe's ranges in
-    /// [`get_channel_ranges`](Self::get_channel_ranges).
+    /// The probe state of each channel that the unit gave one for
+    ///
+    /// - Empty on a unit that does not detect probes.
+    /// - A channel with a probe takes the ranges of the probe in [`get_channel_ranges`](Self::get_channel_ranges).
     fn probes(&self, _handle: i16) -> Vec<ProbeState> {
         Vec::new()
     }
-    /// The probe states the unit reported since the last call, oldest
-    /// first: each is the new state of one channel.
+    /// The probe states that the unit gave since the last call, oldest first
+    ///
+    /// - Each entry is the new state of one channel.
     fn take_probe_changes(&self, _handle: i16) -> Vec<ProbeState> {
         Vec::new()
     }
-    /// Set up a channel with the supplied config
+    /// Turns on a channel with `config`
     fn enable_channel(
         &self,
         handle: i16,
         channel: PicoChannel,
         config: &OscilloscopeChannelConfig,
     ) -> PicoResult<()>;
-    /// Disable a channel
+    /// Turns off a channel
     fn disable_channel(&self, handle: i16, channel: PicoChannel) -> PicoResult<()>;
-    /// Remove every data buffer given to the driver. Drivers that add
-    /// buffers, rather than replace them per channel, keep them across
-    /// streams and refuse a buffer of another length.
+    /// Removes all the data buffers that the driver holds for the unit
+    ///
+    /// - Some drivers add buffers instead of replacing the buffer of a channel.
+    ///   They keep the buffers from one stream to the next, and refuse a buffer of a different length.
+    ///   Call this before you give new buffers to such a driver.
     fn clear_data_buffers(&self, _handle: i16) -> PicoResult<()> {
         Ok(())
     }
     /// Stops a stream or a block capture
     fn stop(&self, handle: i16) -> PicoResult<()>;
-    /// Check that the driver meets the minimum version tested with these wrappers
+    /// Checks that the library is not older than the oldest version this crate was tested with
+    ///
+    /// - The ps2000 driver needs 3.0.30.1878 or later, ps6000a needs 1.0.54.2438 or later, and the other ranges need 2.1.30.1878 or later.
+    ///   There is no minimum for psospa.
+    /// - [`DriverLoad::load`](crate::DriverLoad::load) does not call it.
+    /// - Returns Err with [`DriverLoadError::VersionError`] when the library is older.
     fn check_version(&self) -> Result<(), DriverLoadError> {
         let loaded_str = &self.get_version()?;
         let loaded_version = Version::from(loaded_str);
@@ -344,14 +419,15 @@ pub trait OscilloscopeDriverInternal:
     }
 }
 
-/// A loaded oscilloscope driver, whichever product range it is for
+/// A loaded oscilloscope driver of any range
 ///
-/// This is a newtype rather than a bare `Arc<dyn ..>` so that family level behaviour has
-/// somewhere to live and so [`crate::PicoDriver`] can hold it.
+/// - It dereferences to [`OscilloscopeDriverInternal`], so call the methods of that trait and of the [`features`] traits on it.
+/// - Clones share the loaded library.
 #[derive(Clone)]
 pub struct OscilloscopeDriver(Arc<dyn OscilloscopeDriverInternal>);
 
 impl OscilloscopeDriver {
+    /// Wraps the driver of one range, such as [`PS2000ADriver`]
     pub fn new<D: OscilloscopeDriverInternal + 'static>(driver: D) -> Self {
         OscilloscopeDriver(Arc::new(driver))
     }
@@ -488,8 +564,10 @@ pub(crate) fn bandwidth_code<T: Copy>(
         })
 }
 
-/// Refuses a stream of `enabled` channels at `resolution` when `limits`
-/// allow fewer.
+/// Checks that `resolution` allows `enabled` channels
+///
+/// - `limits` comes from [`OscilloscopeDriverInternal::get_resolution_channel_limits`].
+/// - Returns Err with `INVALID_NUMBER_CHANNELS_FOR_RESOLUTION` when `limits` allows fewer channels at `resolution`.
 pub fn check_channel_limit(
     limits: &[(PicoResolution, u8)],
     resolution: PicoResolution,

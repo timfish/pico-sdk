@@ -1,17 +1,11 @@
-//! Safe wrapper for the ADC-20/ADC-24 high-resolution data logger driver (`Driver::PicoHRDL`).
+//! The ADC-20 and ADC-24 high-resolution data logger driver (`Driver::PicoHRDL`)
 //!
-//! Like the PL1000/DrDAQ, the HRDL driver keeps a streaming buffer: "the driver constantly polls
-//! the device, and samples are placed in a buffer until retrieved by your application"
-//! (ADC-20/ADC-24 Programmer's Guide, adc20.en r2, section 4.1 Recording methods). `HRDLRun` with
-//! `BM_STREAM` starts it, and each `HRDLGetValues` call returns the readings since the last call
-//! (sections 5.15 and 6.1.2).
-//!
-//! HRDL's error model is different from every other driver in this crate, though: most calls
-//! return 1 on success and 0 on failure instead of a `PICO_STATUS`, and the reason for a failure
-//! is read separately from the `HRDL_SETTINGS` info field as a decimal string (sections 5.9,
-//! 5.16 and 5.18), parsed into a [`HRDLError`]. [`HRDLDriverInternal::wrap_with_get_last_error`]
-//! centralizes that, the same role [`crate::tc08::TC08DriverInternal::wrap_with_get_last_error`]
-//! plays for the TC-08 (different transport, same idea).
+//! - The driver keeps a stream buffer.
+//!   "The driver constantly polls the device, and samples are placed in a buffer until retrieved by your application" (ADC-20/ADC-24 Programmer's Guide, adc20.en r2, section 4.1 Recording methods).
+//!   `HRDLRun` with `BM_STREAM` starts it, and each `HRDLGetValues` call returns the values since the last call (sections 5.15 and 6.1.2).
+//! - Most driver calls return 1 for success and 0 for failure, not a `PICO_STATUS`.
+//!   The cause of a failure is a decimal string in the `HRDL_SETTINGS` information field (sections 5.9, 5.16 and 5.18).
+//!   The wrapper reads it as a [`HRDLError`], so each method returns a normal `PicoResult`.
 
 mod outputs;
 
@@ -29,6 +23,10 @@ use pico_sys_dynamic::picohrdl::{
 };
 use std::{cmp::Ordering, collections::HashMap, fmt, ops::Deref, path::Path, sync::Arc};
 
+/// The methods of the ADC-20 and ADC-24 driver
+///
+/// - Get it through [`HRDLDriver`], which dereferences to it.
+/// - Each method that takes a `handle` needs a unit that [`HRDLDriverInternal::open_unit`] opened.
 pub struct HRDLDriverInternal {
     bindings: crate::Kept<HRDLLoader>,
     /// The digital I/O pins of each open unit, as last set.
@@ -92,10 +90,11 @@ impl HRDLDriverInternal {
             .unwrap_or(PicoStatus::OPERATION_FAILED)
     }
 
-    /// Opens the next unit that is not already open
+    /// Opens the next unit that is not open, and returns its handle
     ///
-    /// `HRDLOpenUnit` returns a handle, 0 when no unit is found, or -1 when a unit fails to open
-    /// (section 5.11); the driver supports up to 20 units.
+    /// - `HRDLOpenUnit` returns a handle, 0 when it finds no unit, or -1 when a unit does not open (section 5.11).
+    /// - The driver takes up to 20 units.
+    /// - Returns Err with `PicoStatus::NOT_FOUND` when all connected units are open.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_next_unit(&self) -> Result<i16, PicoStatus> {
         let result = unsafe { self.bindings.HRDLOpenUnit() };
@@ -107,10 +106,10 @@ impl HRDLDriverInternal {
         }
     }
 
-    /// Iterates every connected unit, opening each one
+    /// Opens each connected unit that is not open, and gives its handle
     ///
-    /// The caller owns every handle this yields and must close the ones it does not keep. The
-    /// iteration ends after the first error, as a unit that fails to open would fail again.
+    /// - You own each handle, so close the units that you do not keep.
+    /// - It stops after the first error, as a unit that does not open would fail again.
     pub fn open_unit_iter(&self) -> impl Iterator<Item = PicoResult<i16>> + '_ {
         let mut done = false;
         std::iter::from_fn(move || {
@@ -128,10 +127,11 @@ impl HRDLDriverInternal {
         })
     }
 
-    /// Opens a unit, optionally with a specific serial number
+    /// Opens the unit with `serial`, or the next unit with `None`, and returns its handle
     ///
-    /// Because units can only be found by opening them, looking for a particular serial means
-    /// opening others along the way. Those are closed again before returning.
+    /// - To find a serial, it must open other units.
+    ///   It closes them again before it returns.
+    /// - Returns Err with `NOT_FOUND` when no unit matches.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn open_unit(&self, serial: Option<&str>) -> PicoResult<i16> {
         let mut handles_to_close = Vec::new();
@@ -160,6 +160,9 @@ impl HRDLDriverInternal {
         result
     }
 
+    /// The serial, hardware version and variant of the unit
+    ///
+    /// - The version and the variant are empty when the driver does not give them.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<HRDLInfo> {
         let serial = self
@@ -180,15 +183,16 @@ impl HRDLDriverInternal {
         })
     }
 
-    /// Pings the unit to check the connection is still alive
+    /// Checks that the unit is still connected
     ///
-    /// Not to be called while the unit is collecting, after [`Self::run`] (section 5.1).
+    /// - Do not call it while the unit collects samples, after [`Self::run`] (section 5.1).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn ping_unit(&self, handle: i16) -> PicoResult<()> {
         self.wrap_with_get_last_error(handle, || unsafe { self.bindings.HRDLAcknowledge(handle) })
             .to_result((), "ping_unit")
     }
 
+    /// Sets the mains frequency that the unit filters out
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_mains_rejection(&self, handle: i16, freq: MainsRejectionFreq) -> PicoResult<()> {
         let sixty_hertz: i16 = match freq {
@@ -202,9 +206,9 @@ impl HRDLDriverInternal {
         .to_result((), "set_mains_rejection")
     }
 
-    /// Enables (or disables) a channel with a voltage range
+    /// Turns a channel on or off, with a voltage range
     ///
-    /// `single_ended = false` uses differential measurement between adjacent channel pairs.
+    /// - With `single_ended` set to `false`, the unit measures the difference between the two channels of a pair.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_analog_channel(
         &self,
@@ -226,17 +230,15 @@ impl HRDLDriverInternal {
         .to_result((), "set_analog_channel")
     }
 
-    /// Disables a channel
+    /// Turns a channel off
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn disable_channel(&self, handle: i16, channel: HRDLChannel) -> PicoResult<()> {
         self.set_analog_channel(handle, channel, false, HRDLRange::default(), true)
     }
 
-    /// Sets the sample interval (in milliseconds) and the conversion time used for every enabled
-    /// channel
+    /// Sets the sample interval in ms, and the conversion time of each channel that is on
     ///
-    /// The interval must be more than the conversion time times the analog channels that are
-    /// on, as conversion is sequential (section 5.18).
+    /// - The interval must be more than the conversion time multiplied by the number of analog channels that are on, as the unit converts one channel at a time (section 5.18).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn set_interval(
         &self,
@@ -251,7 +253,7 @@ impl HRDLDriverInternal {
         .to_result((), "set_interval")
     }
 
-    /// The full-scale ADC counts for a channel's currently configured range
+    /// The lowest and highest ADC counts of the range that the channel has now
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn min_max_adc_counts(&self, handle: i16, channel: HRDLChannel) -> PicoResult<(i32, i32)> {
         let mut min: i32 = 0;
@@ -268,11 +270,11 @@ impl HRDLDriverInternal {
         .to_result((min, max), "min_max_adc_counts")
     }
 
-    /// Starts collecting samples into the driver's buffer
+    /// Starts to collect samples into the driver buffer
     ///
-    /// `stream = true` runs continuously (`HRDL_BM_STREAM`); `false` collects a single block
-    /// (`HRDL_BM_BLOCK`) of `num_values` samples per channel. In a stream, `num_values` must hold
-    /// what arrives between two calls to [`Self::get_values`] (section 5.15).
+    /// - With `stream` set to `true` it runs continuously (`HRDL_BM_STREAM`).
+    ///   With `false` it collects one block (`HRDL_BM_BLOCK`) of `num_values` samples for each channel.
+    /// - In a stream, `num_values` must hold the samples that come between two calls to [`Self::get_values`] (section 5.15).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn run(&self, handle: i16, num_values: i32, stream: bool) -> PicoResult<()> {
         let method: HRDL_BLOCK_METHOD = if stream {
@@ -287,22 +289,22 @@ impl HRDLDriverInternal {
         .to_result((), "run")
     }
 
-    /// Whether the device has finished collecting the block started by [`Self::run`]
+    /// Tells if the unit has collected the block that [`Self::run`] started
     ///
-    /// Only meaningful for single-block collection; streaming mode is drained continuously with
-    /// [`Self::get_values`] instead.
+    /// - Use it only for one block.
+    ///   In a stream, call [`Self::get_values`] again and again.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub fn ready(&self, handle: i16) -> bool {
         unsafe { self.bindings.HRDLReady(handle) > 0 }
     }
 
-    /// Reads the samples taken since the last call
+    /// Reads the samples since the last call
     ///
-    /// Returns the raw interleaved ADC counts (channel-major within each sample set, i.e.
-    /// `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`, in channel number order) and an over-range bit
-    /// field by channel number: the least significant bit is channel 1, set when that channel is
-    /// over range in at least one returned sample (section 5.10). `HRDLGetValues` returns 0 both
-    /// when it fails and when there are no new values, so a 0 reads as no values.
+    /// - Returns the raw ADC counts.
+    ///   Each sample set has one value for each channel, in channel number order, as `[ch0_t0, ch1_t0, ch0_t1, ch1_t1, ...]`.
+    /// - Also returns an over-range bit field by channel number.
+    ///   Bit 0 is channel 1, and a bit is set when its channel is over range in one or more of the samples (section 5.10).
+    /// - `HRDLGetValues` returns 0 when it fails and when it has no new values, so the wrapper reads 0 as no values.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_values(
         &self,
@@ -338,13 +340,15 @@ impl HRDLDriverInternal {
         Ok((values, overflow))
     }
 
-    /// Ends a stream; needed in streaming mode for the unit to be ready for the next capture
-    /// (section 5.20)
+    /// Stops the capture
+    ///
+    /// - After a stream, the unit needs this call before the next capture (section 5.20).
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn stop(&self, handle: i16) {
         unsafe { self.bindings.HRDLStop(handle) };
     }
 
+    /// Closes the unit
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn close_unit(&self, handle: i16) -> PicoResult<()> {
         self.digital_io.lock().remove(&handle);
@@ -373,11 +377,18 @@ fn open_error_status(code: i32) -> PicoStatus {
     }
 }
 
-/// A loaded ADC-20/ADC-24 (PicoHRDL) driver
+/// A loaded ADC-20 and ADC-24 (PicoHRDL) driver
+///
+/// - It dereferences to [`HRDLDriverInternal`], which has the methods.
+/// - Clones share the loaded library.
 #[derive(Clone)]
 pub struct HRDLDriver(Arc<HRDLDriverInternal>);
 
 impl HRDLDriver {
+    /// Loads the library file at `path`
+    ///
+    /// - The library stays loaded until the process ends.
+    /// - Returns Err when the library does not load.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, ::libloading::Error> {
         Ok(HRDLDriver(Arc::new(HRDLDriverInternal {
             bindings: crate::Kept::new(unsafe { HRDLLoader::new(path.as_ref())? }),
@@ -385,6 +396,9 @@ impl HRDLDriver {
         })))
     }
 
+    /// Loads the library that `resolution` finds
+    ///
+    /// - Returns Err when the library does not load.
     pub fn load(resolution: &LibraryResolution) -> Result<Self, ::libloading::Error> {
         HRDLDriver::new(resolution.get_path(Driver::PicoHRDL))
     }
