@@ -12,7 +12,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle, ThreadId},
     time::{Duration, Instant},
 };
 use tracing::{debug, error, info, trace, warn};
@@ -166,6 +166,55 @@ pub fn sleep_ms(ms: u64) {
 /// driver.
 fn thread_name(serial: &str) -> String {
     format!("Streaming background thread - {}", serial.replace('\0', ""))
+}
+
+/// The lock that each step holds across its driver calls, and the
+/// thread that holds it.
+#[derive(Default)]
+struct Steps {
+    lock: Mutex<()>,
+    owner: Mutex<Option<ThreadId>>,
+}
+
+struct StepsGuard<'a> {
+    _lock: MutexGuard<'a, ()>,
+    owner: &'a Mutex<Option<ThreadId>>,
+}
+
+impl Steps {
+    fn guard<'a>(&'a self, lock: MutexGuard<'a, ()>) -> StepsGuard<'a> {
+        *self.owner.lock() = Some(thread::current().id());
+        StepsGuard {
+            _lock: lock,
+            owner: &self.owner,
+        }
+    }
+
+    fn lock(&self) -> StepsGuard<'_> {
+        self.guard(self.lock.lock())
+    }
+
+    fn try_lock_for(&self, timeout: Duration) -> Option<StepsGuard<'_>> {
+        Some(self.guard(self.lock.try_lock_for(timeout)?))
+    }
+
+    /// Whether this thread holds the lock, as a handler that a step
+    /// calls does.
+    fn held_here(&self) -> bool {
+        *self.owner.lock() == Some(thread::current().id())
+    }
+}
+
+impl Drop for StepsGuard<'_> {
+    fn drop(&mut self) {
+        *self.owner.lock() = None;
+    }
+}
+
+/// The error of a call that waits for the steps, made from a handler
+/// inside a step.
+fn in_step(context: &str) -> PicoError {
+    PicoError::from_status(PicoStatus::BUSY, context)
 }
 
 pub struct BackgroundThreadHandle {
@@ -440,7 +489,7 @@ fn next_state<Config, Info, Stream, Event>(
 /// - Make one with [`IntoStreamingDevice::into_streaming_device`].
 /// - Clones share the device, the state, the thread and the emitters.
 /// - The handlers of [`StreamingRunner::events`] and [`StreamingRunner::notices`] run on the background thread.
-///   The crate docs tell what a handler must not call.
+///   The crate docs tell what a handler can call.
 /// - When the last clone drops, the runner closes the unit and waits for the background thread to end.
 ///
 /// ```no_run
@@ -487,7 +536,7 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     /// wait for a slow driver.
     state: Arc<RwLock<StreamingState<Config, Info, Stream>>>,
     /// Held across each step's driver calls, so steps run one at a time.
-    steps: Arc<Mutex<()>>,
+    steps: Arc<Steps>,
     /// Starts in a row that failed with a status not counted as lost.
     failed_starts: Arc<AtomicUsize>,
     /// While above 0, the background thread takes no step: a caller
@@ -529,7 +578,7 @@ where
         let mut runner = StreamingRunner {
             device,
             state,
-            steps: Arc::new(Mutex::new(())),
+            steps: Default::default(),
             failed_starts: Arc::new(AtomicUsize::new(0)),
             holds: Arc::new(AtomicUsize::new(0)),
             wake: bounded(1),
@@ -545,7 +594,7 @@ where
 
     /// One step from the current state towards the target, by the
     /// holder of `_steps`.
-    fn step(&self, _steps: &MutexGuard<'_, ()>) -> PicoResult<Stepped> {
+    fn step(&self, _steps: &StepsGuard<'_>) -> PicoResult<Stepped> {
         let (current, target) = {
             let state = self.state.read();
             (state.current.clone(), state.target.clone())
@@ -643,12 +692,16 @@ where
     /// - It stops a stream that runs, then starts the new one.
     /// - It opens a closed unit first.
     /// - A unit found lost opens again one time within the call.
-    /// - Returns Err with `TIMEOUT` when another step holds the device for more than 30 s, or when the device does not stream after 11 steps.
-    /// - Returns Err when [`StreamDevice::check`] refuses the config, or when [`settings_refused`] names the status of the start.
-    ///   The target is then open, and the background thread does not try again.
-    /// - Returns Err when the open or the start fails for another reason, or when the unit is lost a second time.
-    ///   The target stays a stream, so the background thread tries again.
+    /// - Returns Err with `TIMEOUT` when another step holds the device for more than 30 s, and changes nothing.
+    /// - Returns Err with `BUSY` at once when a handler calls it inside a step, and changes nothing.
+    /// - Returns Err with `TIMEOUT` when the device does not stream after 11 steps.
+    /// - Returns Err when [`StreamDevice::check`] refuses the config, or when the open or the start fails, or when the unit is lost a second time.
+    /// - After each of these last errors, the target is open, and the background thread does not try the stream again.
+    /// - After it returns Ok, a unit found lost later opens again and the stream starts again, as the crate docs tell.
     pub fn start(&self, config: Config) -> PicoResult<()> {
+        if self.steps.held_here() {
+            return Err(in_step("start"));
+        }
         let waited = Instant::now();
         let Some(steps) = self.steps.try_lock_for(START_WAIT) else {
             warn!(
@@ -679,12 +732,24 @@ where
         self.state.write().target = Target::Streaming(config);
         self.wake();
 
-        // Drive the state until we're streaming or we get an error we can return.
-        // A unit found lost opens again once; a second lost start is the error.
+        let started = self.step_to_stream(&steps);
+        if started.is_err() {
+            let mut state = self.state.write();
+            if matches!(state.target, Target::Streaming(_)) {
+                state.target = Target::Open;
+            }
+        }
+        started
+    }
+
+    /// Steps until the device streams, or until an error that `start`
+    /// returns. A unit found lost opens again once; a second lost start
+    /// is the error.
+    fn step_to_stream(&self, steps: &StepsGuard<'_>) -> PicoResult<()> {
         let mut count = 0;
         let mut lost = false;
         loop {
-            if let Stepped::UnitLost(error) = self.step(&steps)? {
+            if let Stepped::UnitLost(error) = self.step(steps)? {
                 if lost {
                     return Err(error);
                 }
@@ -710,7 +775,11 @@ where
     /// - The target stays, so a stream starts again on the next steps.
     ///   With the target closed, the unit stays closed.
     /// - Returns Err when the open fails.
+    /// - Returns Err with `BUSY` at once when a handler calls it inside a step, and changes nothing.
     pub fn reopen(&self) -> PicoResult<()> {
+        if self.steps.held_here() {
+            return Err(in_step("reopen"));
+        }
         let started = Instant::now();
         let steps = self.steps.lock();
         let current = self.state.read().current.clone();
@@ -785,11 +854,29 @@ where
     /// - A driver call that a stream allows runs, and the stream does not stop.
     /// - It waits for the step that runs now to end.
     /// - Returns `None` while the unit is closed.
-    /// - Do not call it from an event handler or from `f`, as the call then never returns.
+    /// - Returns `None` at once, with no call to `f`, when a handler calls it inside a step or another `f` calls it.
     pub fn with_open<R>(&self, f: impl FnOnce(&Device, &Info) -> R) -> Option<R> {
+        if self.steps.held_here() {
+            return None;
+        }
         let _steps = self.steps.lock();
         let info = self.state.read().current.get_info()?;
         Some(f(&self.device, &info))
+    }
+
+    /// Runs `f` as [`StreamingRunner::with_open`] does, with an error
+    /// named `context` in place of `None`: `BUSY` inside a step, and
+    /// `INVALID_HANDLE` while the unit is closed.
+    pub(crate) fn call_open<R>(
+        &self,
+        context: &str,
+        f: impl FnOnce(&Device, &Info) -> PicoResult<R>,
+    ) -> PicoResult<R> {
+        if self.steps.held_here() {
+            return Err(in_step(context));
+        }
+        self.with_open(f)
+            .unwrap_or_else(|| Err(PicoError::from_status(PicoStatus::INVALID_HANDLE, context)))
     }
 
     /// A step that panicked left the device in a state no one knows,
@@ -824,10 +911,14 @@ where
     /// - Use it to drive an open device for a while, such as for a block capture, with calls through [`StreamingRunner::with_open`] and no ping between them.
     /// - Other callers of [`StreamingRunner::with_open`], such as an output set, still run between those calls.
     /// - It waits for the step that runs now to end.
+    ///   A handler that calls it inside a step gets the guard at once.
+    ///   The background steps then stop when that step ends.
     pub fn hold_steps(&self) -> StepsHeld {
         self.holds.fetch_add(1, Ordering::SeqCst);
         // A step that runs now ends before the hold counts.
-        drop(self.steps.lock());
+        if !self.steps.held_here() {
+            drop(self.steps.lock());
+        }
         debug!("background steps held");
         StepsHeld {
             holds: self.holds.clone(),

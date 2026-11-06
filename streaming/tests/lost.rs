@@ -194,17 +194,18 @@ fn a_start_that_finds_the_unit_lost_opens_it_again_and_streams() {
     runner.close();
 }
 
-/// A unit that answers the communication error to every start: `start`
-/// returns the error after one open again, and the background thread
-/// goes on trying with a wait that doubles between tries, so it never
-/// spins on the driver.
+/// A unit that answers the communication error to every start after a
+/// stream started: the background thread goes on trying with a wait
+/// that doubles between tries, so it never spins on the driver.
 #[test]
 fn a_unit_that_stays_lost_is_tried_again_with_longer_waits() {
-    let unit = Unit::lost_for(usize::MAX);
+    let unit = Unit::lost_for(0);
     let (runner, seen) = runner_of(&unit);
 
-    let error = runner.start(()).unwrap_err();
-    assert_eq!(error.status, PicoStatus::DEVICE_NOT_FUNCTIONING);
+    runner.start(()).unwrap();
+    unit.lost_starts.store(usize::MAX, Ordering::SeqCst);
+    runner.reopen().unwrap();
+    let events = seen.events.load(Ordering::SeqCst);
     assert_eq!(unit.opens().len(), 1);
 
     // Waits of 1 s and 2 s between the background thread's tries.
@@ -222,10 +223,10 @@ fn a_unit_that_stays_lost_is_tried_again_with_longer_waits() {
         "gaps {gaps:?}"
     );
     assert!(
-        seen.notices.lock().unwrap().len() >= 4,
+        seen.notices.lock().unwrap().len() >= 3,
         "each lost start is a notice"
     );
-    assert_eq!(seen.events.load(Ordering::SeqCst), 0);
+    assert_eq!(seen.events.load(Ordering::SeqCst), events);
 
     // A close ends the wait at once.
     let closed = Instant::now();
@@ -236,10 +237,10 @@ fn a_unit_that_stays_lost_is_tried_again_with_longer_waits() {
     assert!(closed.elapsed() < Duration::from_millis(500));
 }
 
-/// A start that keeps failing with a status that does not say the unit
-/// is lost counts the unit as lost after 3 tries on its handle: the
-/// runner closes it, tells why, opens it again and streams on the new
-/// handle. With no such rule it tries the same handle for ever.
+/// Starts that keep failing with a status that does not say the unit
+/// is lost count the unit as lost after 3 tries on its handle: the
+/// third start closes it, tells why, opens it again and streams on the
+/// new handle. With no such rule each start tries the same handle.
 #[test]
 fn starts_that_keep_failing_count_the_unit_as_lost() {
     let unit = Unit::stuck_on(1);
@@ -250,8 +251,11 @@ fn starts_that_keep_failing_count_the_unit_as_lost() {
         runner.get_info().is_none()
     });
 
-    let error = runner.start(()).unwrap_err();
-    assert_eq!(error.status, PicoStatus::BUSY);
+    for _ in 1..LOST_AFTER_STARTS {
+        let error = runner.start(()).unwrap_err();
+        assert_eq!(error.status, PicoStatus::BUSY);
+    }
+    runner.start(()).unwrap();
 
     wait_until("events on a new handle", Duration::from_secs(10), || {
         seen.events.load(Ordering::SeqCst) >= 1
@@ -321,5 +325,54 @@ fn a_start_refused_for_its_settings_does_not_count_the_unit_as_lost() {
     wait_until("events", Duration::from_secs(5), || {
         seen.events.load(Ordering::SeqCst) >= 1
     });
+    runner.close();
+}
+
+/// A start that returns Err leaves the target open, so the background
+/// thread does not try that stream again. Here the start fails with a
+/// status that does not say the unit is lost.
+#[test]
+fn a_failed_start_leaves_the_target_open() {
+    let unit = Unit::stuck_on(0);
+    let (runner, seen) = runner_of(&unit);
+
+    let error = runner.start(()).unwrap_err();
+    assert_eq!(error.status, PicoStatus::BUSY);
+    assert_eq!(runner.get_config(), None, "the target is Open");
+
+    // Longer than the 1 s wait before a retry.
+    thread::sleep(Duration::from_millis(1_500));
+    assert_eq!(
+        *unit.starts.lock().unwrap(),
+        vec![0],
+        "no start but the caller's"
+    );
+    assert_eq!(runner.get_info(), Some(0));
+    assert_eq!(seen.events.load(Ordering::SeqCst), 0);
+    runner.close();
+}
+
+/// A start that finds the unit lost a second time returns Err and
+/// leaves the target open: the background thread opens the unit again,
+/// but does not start it.
+#[test]
+fn a_start_that_finds_the_unit_lost_twice_leaves_the_target_open() {
+    let unit = Unit::lost_for(usize::MAX);
+    let (runner, _seen) = runner_of(&unit);
+
+    let error = runner.start(()).unwrap_err();
+    assert_eq!(error.status, PicoStatus::DEVICE_NOT_FUNCTIONING);
+    assert_eq!(runner.get_config(), None, "the target is Open");
+
+    wait_until("open again", Duration::from_secs(5), || {
+        runner.get_info().is_some()
+    });
+    thread::sleep(Duration::from_millis(1_500));
+    assert_eq!(
+        unit.starts.lock().unwrap().len(),
+        2,
+        "the caller's two starts"
+    );
+    assert_eq!(unit.opens().len(), 2);
     runner.close();
 }

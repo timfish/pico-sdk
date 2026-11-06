@@ -70,16 +70,20 @@ impl<T> EventEmitter<T> {
     /// Sends `value` to each live listener, in the order they subscribed
     ///
     /// - It calls the listeners on the thread of the caller.
-    /// - It holds the lock of the emitter during the calls, so a listener must not subscribe to the same emitter.
+    /// - It calls the listeners with the lock of the emitter free, so a listener can subscribe to the same emitter.
+    ///   A listener that subscribes during a call gets the events after this one.
     #[tracing::instrument(level = "trace", skip(self, value))]
     pub fn new_data(&self, value: T) {
-        let mut inner = self.inner.lock();
-        inner
-            .listeners
-            .retain(|listener| listener.strong_count() > 0);
+        let live: Vec<Arc<dyn EventHandler<T>>> = {
+            let mut inner = self.inner.lock();
+            inner
+                .listeners
+                .retain(|listener| listener.strong_count() > 0);
+            inner.listeners.iter().filter_map(Weak::upgrade).collect()
+        };
 
         let mut value = Some(Arc::new(value));
-        let mut live = inner.listeners.iter().filter_map(Weak::upgrade).peekable();
+        let mut live = live.into_iter().peekable();
 
         while let Some(listener) = live.next() {
             // The last listener gets our reference, not a clone of it.
@@ -146,5 +150,42 @@ mod tests {
 
         assert_eq!(emitter.inner.lock().listeners.len(), 1);
         assert_eq!(*taker.0.lock(), vec![Ok(vec![4])]);
+    }
+
+    struct Subscriber {
+        emitter: EventEmitter<Vec<i16>>,
+        later: Arc<dyn EventHandler<Vec<i16>>>,
+    }
+
+    impl EventHandler<Vec<i16>> for Subscriber {
+        fn new_data(&self, _: Arc<Vec<i16>>) {
+            self.emitter.subscribe(&self.later);
+        }
+    }
+
+    #[test]
+    fn a_listener_subscribes_to_the_emitter_that_calls_it() {
+        let emitter = EventEmitter::new();
+        let reader = Arc::new(Reader(Mutex::new(0)));
+        let subscriber: Arc<dyn EventHandler<Vec<i16>>> = Arc::new(Subscriber {
+            emitter: emitter.clone(),
+            later: reader.clone(),
+        });
+        emitter.subscribe(&subscriber);
+
+        let (done, called) = std::sync::mpsc::channel();
+        std::thread::spawn({
+            let emitter = emitter.clone();
+            move || {
+                emitter.new_data(vec![1]);
+                done.send(()).ok();
+            }
+        });
+        called
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("the call to the listener did not return");
+
+        emitter.new_data(vec![2, 3]);
+        assert_eq!(*reader.0.lock(), 2, "only the event after the subscribe");
     }
 }
