@@ -56,6 +56,7 @@
 //!
 //! Drivers:
 //! - [`Driver`]: each driver library, its USB product ids and its file name.
+//! - [`ScopeDriver`]: the oscilloscope drivers only, for a typed load.
 //!
 //! Oscilloscope settings:
 //! - [`PicoChannel`], [`PicoRange`], [`PicoCoupling`], [`PicoResolution`]: a channel and its input.
