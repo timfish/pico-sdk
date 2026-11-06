@@ -126,7 +126,9 @@ impl Drop for PT104Device {
 impl DeviceOpen<PT104Device> for PT104Driver {
     fn open_device(&self, serial: Option<&str>) -> PicoResult<PT104Device> {
         let handle = self.open_unit(serial)?;
-        let info = self.get_unit_info(handle)?;
+        let info = self.get_unit_info(handle).inspect_err(|_| {
+            let _ = self.close_unit(handle);
+        })?;
 
         Ok(PT104Device {
             driver: self.clone(),

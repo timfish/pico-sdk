@@ -580,12 +580,17 @@ impl OscilloscopeDevice {
     /// Opens the unit by its serial and reads its info, when it is not open
     ///
     /// - It does nothing when the device has its `info`.
+    /// - It closes the unit again when it cannot read the info.
     /// - Returns Err when the driver cannot open the unit or read its info.
-    /// - Panics when the variant string has no channel count as its second character.
+    /// - Returns Err with `INVALID_VARIANT` when the variant string has no channel count as its second character.
     pub fn ensure_open(&mut self) -> PicoResult<()> {
         if self.info.is_none() {
             let handle = self.driver.open_unit(Some(&self.serial))?;
-            self.info = Some(OscilloscopeDevice::read_unit_info(&self.driver, handle)?);
+            let info =
+                OscilloscopeDevice::read_unit_info(&self.driver, handle).inspect_err(|_| {
+                    let _ = self.driver.close(handle);
+                })?;
+            self.info = Some(info);
         }
 
         Ok(())
@@ -596,9 +601,12 @@ impl OscilloscopeDevice {
         let usb_version = driver.get_unit_info(handle, PicoInfo::USB_VERSION)?;
 
         // Get the second letter of the device variant to get the number of channels
-        let ch_count = variant[1..2]
-            .parse::<i32>()
-            .expect("Could not parse device variant for number of channels");
+        let ch_count = variant
+            .get(1..2)
+            .and_then(|c| c.parse::<i32>().ok())
+            .ok_or_else(|| {
+                PicoError::from_status(PicoStatus::INVALID_VARIANT, "variant channel count")
+            })?;
 
         let valid_channel_ranges: HashMap<PicoChannel, Vec<PicoRange>> = (0..ch_count)
             .flat_map(|ch| -> PicoResult<(PicoChannel, Vec<_>)> {
@@ -673,13 +681,18 @@ impl DeviceOpen<OscilloscopeDevice> for OscilloscopeDriver {
     fn open_device(&self, serial: Option<&str>) -> PicoResult<OscilloscopeDevice> {
         let handle = self.open_unit(serial)?;
 
-        let serial = match serial {
-            Some(s) => s.to_string(),
-            None => self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?,
+        let read = || -> PicoResult<_> {
+            let serial = match serial {
+                Some(s) => s.to_string(),
+                None => self.get_unit_info(handle, PicoInfo::BATCH_AND_SERIAL)?,
+            };
+            let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
+            let info = OscilloscopeDevice::read_unit_info(self, handle)?;
+            Ok((serial, variant, info))
         };
-
-        let variant = self.get_unit_info(handle, PicoInfo::VARIANT_INFO)?;
-        let info = OscilloscopeDevice::read_unit_info(self, handle)?;
+        let (serial, variant, info) = read().inspect_err(|_| {
+            let _ = self.close(handle);
+        })?;
 
         Ok(OscilloscopeDevice {
             driver: self.clone(),
@@ -1091,5 +1104,191 @@ mod serde_tests {
         let config: OscilloscopeConfig = serde_json::from_str(json).expect("deserialize");
         assert_eq!(config.samples_per_second, 5000);
         assert!(config.channels.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod open_tests {
+    use super::*;
+    use pico_common::{Downsample, Driver, OscilloscopeSampleConfig, Overflow};
+    use pico_driver::oscilloscope::{
+        AuxIoDriver, BlockDriver, ChannelExtrasDriver, DigitalPortDriver, EnumerationResult,
+        EtsDriver, LedDriver, OscilloscopeDriverInternal, RapidBlockDriver, SampleBuffer,
+        SigGenDriver, StreamingDriver, TriggerDriver,
+    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A driver with one unit that reports `variant`, fails the read of
+    /// `failing` and counts its closes.
+    #[derive(Debug)]
+    struct FakeDriver {
+        variant: &'static str,
+        failing: Option<PicoInfo>,
+        closes: Arc<AtomicUsize>,
+    }
+
+    impl OscilloscopeDriverInternal for FakeDriver {
+        fn get_driver(&self) -> Driver {
+            Driver::PS5000A
+        }
+        fn get_version(&self) -> PicoResult<String> {
+            Ok("2.1.30.1878".to_string())
+        }
+        fn get_path(&self) -> PicoResult<Option<String>> {
+            Ok(None)
+        }
+        fn enumerate_units(&self) -> PicoResult<Vec<EnumerationResult>> {
+            Ok(Vec::new())
+        }
+        fn open_unit(&self, _serial: Option<&str>) -> PicoResult<i16> {
+            Ok(1)
+        }
+        fn ping_unit(&self, _handle: i16) -> PicoResult<()> {
+            Ok(())
+        }
+        fn maximum_value(&self, _handle: i16) -> PicoResult<i16> {
+            Ok(32_512)
+        }
+        fn close(&self, _handle: i16) -> PicoResult<()> {
+            self.closes.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        fn get_unit_info(&self, _handle: i16, info_type: PicoInfo) -> PicoResult<String> {
+            if self.failing.map(|i| i as u32) == Some(info_type as u32) {
+                return Err(PicoError::from_status(PicoStatus::NOT_FOUND, "info"));
+            }
+            Ok(match info_type {
+                PicoInfo::VARIANT_INFO => self.variant.to_string(),
+                PicoInfo::BATCH_AND_SERIAL => "ABC/123".to_string(),
+                _ => String::new(),
+            })
+        }
+        fn get_channel_ranges(
+            &self,
+            _handle: i16,
+            _channel: PicoChannel,
+        ) -> PicoResult<Vec<PicoRange>> {
+            Ok(vec![PicoRange::X1_PROBE_1V])
+        }
+        fn enable_channel(
+            &self,
+            _handle: i16,
+            _channel: PicoChannel,
+            _config: &OscilloscopeChannelConfig,
+        ) -> PicoResult<()> {
+            Ok(())
+        }
+        fn disable_channel(&self, _handle: i16, _channel: PicoChannel) -> PicoResult<()> {
+            Ok(())
+        }
+        fn stop(&self, _handle: i16) -> PicoResult<()> {
+            Ok(())
+        }
+    }
+
+    impl StreamingDriver for FakeDriver {
+        fn set_data_buffer(
+            &self,
+            _handle: i16,
+            _channel: PicoChannel,
+            _buffer: SampleBuffer,
+            _buffer_len: usize,
+            _downsample: Option<Downsample>,
+        ) -> PicoResult<()> {
+            Ok(())
+        }
+        fn start_streaming(
+            &self,
+            _handle: i16,
+            sample_config: &OscilloscopeSampleConfig,
+            _enabled_channels: u8,
+            _buffer_len: usize,
+            _downsample: Option<Downsample>,
+        ) -> PicoResult<OscilloscopeSampleConfig> {
+            Ok(*sample_config)
+        }
+        fn get_latest_streaming_values<'a>(
+            &self,
+            _handle: i16,
+            _channels: &[PicoChannel],
+            _callback: Box<dyn FnMut(usize, usize, Overflow) + 'a>,
+        ) -> PicoResult<()> {
+            Ok(())
+        }
+    }
+
+    impl BlockDriver for FakeDriver {}
+    impl RapidBlockDriver for FakeDriver {}
+    impl TriggerDriver for FakeDriver {}
+    impl EtsDriver for FakeDriver {}
+    impl DigitalPortDriver for FakeDriver {}
+    impl SigGenDriver for FakeDriver {}
+    impl AuxIoDriver for FakeDriver {}
+    impl ChannelExtrasDriver for FakeDriver {}
+    impl LedDriver for FakeDriver {}
+
+    fn fake(
+        variant: &'static str,
+        failing: Option<PicoInfo>,
+    ) -> (OscilloscopeDriver, Arc<AtomicUsize>) {
+        let closes = Arc::new(AtomicUsize::new(0));
+        let driver = OscilloscopeDriver::new(FakeDriver {
+            variant,
+            failing,
+            closes: closes.clone(),
+        });
+        (driver, closes)
+    }
+
+    #[test]
+    fn a_good_unit_stays_open_until_drop() {
+        let (driver, closes) = fake("5444D", None);
+        let device = driver.open_device(None).unwrap();
+        assert_eq!(device.serial, "ABC/123");
+        assert_eq!(device.info.as_ref().unwrap().valid_channel_ranges.len(), 4);
+        assert_eq!(closes.load(Ordering::SeqCst), 0);
+        drop(device);
+        assert_eq!(closes.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn open_device_closes_the_unit_when_an_info_read_fails() {
+        for failing in [
+            PicoInfo::BATCH_AND_SERIAL,
+            PicoInfo::VARIANT_INFO,
+            PicoInfo::USB_VERSION,
+        ] {
+            let (driver, closes) = fake("5444D", Some(failing));
+            let error = driver.open_device(None).unwrap_err();
+            assert_eq!(error.status, PicoStatus::NOT_FOUND, "{failing:?}");
+            assert_eq!(closes.load(Ordering::SeqCst), 1, "{failing:?}");
+        }
+    }
+
+    #[test]
+    fn ensure_open_closes_the_unit_when_an_info_read_fails() {
+        let (driver, closes) = fake("5444D", Some(PicoInfo::USB_VERSION));
+        let mut device = OscilloscopeDevice::new_closed(&driver, "ABC/123".into(), "5444D".into());
+        let error = device.ensure_open().unwrap_err();
+        assert_eq!(error.status, PicoStatus::NOT_FOUND);
+        assert!(device.info.is_none());
+        assert_eq!(closes.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn an_odd_variant_is_an_error_and_closes_the_unit() {
+        for variant in ["5X44D", "5", ""] {
+            let (driver, closes) = fake(variant, None);
+            let error = driver.open_device(None).unwrap_err();
+            assert_eq!(error.status, PicoStatus::INVALID_VARIANT, "{variant:?}");
+            assert_eq!(closes.load(Ordering::SeqCst), 1, "{variant:?}");
+
+            let (driver, closes) = fake(variant, None);
+            let mut device =
+                OscilloscopeDevice::new_closed(&driver, "ABC/123".into(), variant.into());
+            let error = device.ensure_open().unwrap_err();
+            assert_eq!(error.status, PicoStatus::INVALID_VARIANT, "{variant:?}");
+            assert_eq!(closes.load(Ordering::SeqCst), 1, "{variant:?}");
+        }
     }
 }

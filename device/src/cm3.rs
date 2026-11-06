@@ -112,7 +112,9 @@ impl Drop for PLCM3Device {
 impl DeviceOpen<PLCM3Device> for PLCM3Driver {
     fn open_device(&self, serial: Option<&str>) -> PicoResult<PLCM3Device> {
         let handle = self.open_unit(serial)?;
-        let info = self.get_unit_info(handle)?;
+        let info = self.get_unit_info(handle).inspect_err(|_| {
+            let _ = self.close_unit(handle);
+        })?;
 
         Ok(PLCM3Device {
             driver: self.clone(),

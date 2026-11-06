@@ -112,7 +112,9 @@ impl Drop for HRDLDevice {
 impl DeviceOpen<HRDLDevice> for HRDLDriver {
     fn open_device(&self, serial: Option<&str>) -> PicoResult<HRDLDevice> {
         let handle = self.open_unit(serial)?;
-        let info = self.get_unit_info(handle)?;
+        let info = self.get_unit_info(handle).inspect_err(|_| {
+            let _ = self.close_unit(handle);
+        })?;
 
         Ok(HRDLDevice {
             driver: self.clone(),

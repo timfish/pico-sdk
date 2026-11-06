@@ -123,7 +123,9 @@ impl Drop for TC08Device {
 impl DeviceOpen<TC08Device> for TC08Driver {
     fn open_device(&self, serial: Option<&str>) -> PicoResult<TC08Device> {
         let handle = self.open_unit(serial)?;
-        let info = self.get_unit_info(handle)?;
+        let info = self.get_unit_info(handle).inspect_err(|_| {
+            let _ = self.close_unit(handle);
+        })?;
 
         Ok(TC08Device {
             driver: self.clone(),
