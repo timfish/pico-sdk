@@ -57,8 +57,8 @@ pub trait StreamingDriver {
 pub(crate) fn flagged_channels(entries: &[(u32, i16)]) -> Overflow {
     entries
         .iter()
-        .filter(|(code, flag)| *flag != 0 && *code < 8)
-        .map(|(code, _)| PicoChannel::from(*code))
+        .filter(|(_, flag)| *flag != 0)
+        .filter_map(|(code, _)| PicoChannel::try_from(*code).ok())
         .fold(Overflow::default(), Overflow::with)
 }
 

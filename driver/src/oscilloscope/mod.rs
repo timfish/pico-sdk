@@ -564,6 +564,15 @@ pub(crate) fn bandwidth_code<T: Copy>(
         })
 }
 
+/// The range for a range code that the driver lists for a channel
+///
+/// - Returns Err with `INVALID_VOLTAGE_RANGE` for a code that [`PicoRange`] does not name.
+pub(crate) fn channel_range(code: i32) -> PicoResult<PicoRange> {
+    PicoRange::try_from(code).map_err(|_| {
+        PicoError::from_status(PicoStatus::INVALID_VOLTAGE_RANGE, "get_channel_ranges")
+    })
+}
+
 /// Checks that `resolution` allows `enabled` channels
 ///
 /// - `limits` comes from [`OscilloscopeDriverInternal::get_resolution_channel_limits`].

@@ -1,7 +1,7 @@
 use num_derive::*;
 use std::{convert::From, fmt, str::FromStr};
 
-/// The error when a string does not parse as one of the enums of this crate
+/// The error when a string or a driver value does not convert to one of the enums of this crate
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseError;
 
@@ -73,21 +73,25 @@ impl From<PicoChannel> for i16 {
     }
 }
 
-impl From<i32> for PicoChannel {
+impl TryFrom<i32> for PicoChannel {
+    type Error = ParseError;
+
     /// The channel for a driver channel number
     ///
-    /// - Panics when the number is not 0 to 7.
-    fn from(value: i32) -> Self {
-        num_traits::FromPrimitive::from_i32(value).expect("Non-valid channel")
+    /// - Returns [`ParseError`] when the number is not 0 to 7.
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError)
     }
 }
 
-impl From<u32> for PicoChannel {
+impl TryFrom<u32> for PicoChannel {
+    type Error = ParseError;
+
     /// The channel for a driver channel number
     ///
-    /// - Panics when the number is not 0 to 7.
-    fn from(value: u32) -> Self {
-        num_traits::FromPrimitive::from_u32(value).expect("Non-valid channel")
+    /// - Returns [`ParseError`] when the number is not 0 to 7.
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        num_traits::FromPrimitive::from_u32(value).ok_or(ParseError)
     }
 }
 
@@ -100,6 +104,13 @@ mod channel_tests {
         assert_eq!(PicoChannel::from_str("a"), Ok(PicoChannel::A));
         assert_eq!(PicoChannel::from_str("B "), Ok(PicoChannel::B));
         assert_eq!(PicoChannel::from_str("x"), Err(ParseError));
+    }
+
+    #[test]
+    fn channel_from_unknown_number_is_err() {
+        assert_eq!(PicoChannel::try_from(1i32).ok(), Some(PicoChannel::B));
+        assert_eq!(PicoChannel::try_from(8i32).ok(), None);
+        assert_eq!(PicoChannel::try_from(8u32).ok(), None);
     }
 }
 
@@ -205,12 +216,14 @@ impl From<PicoCoupling> for i16 {
     }
 }
 
-impl From<i32> for PicoCoupling {
+impl TryFrom<i32> for PicoCoupling {
+    type Error = ParseError;
+
     /// The coupling for a driver value
     ///
-    /// - Panics when the value is not 0 or 1.
-    fn from(value: i32) -> Self {
-        num_traits::FromPrimitive::from_i32(value).expect("Non-valid channel")
+    /// - Returns [`ParseError`] when the value is not 0 or 1.
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError)
     }
 }
 
@@ -223,6 +236,12 @@ mod coupling_tests {
         assert_eq!(PicoCoupling::from_str("ac"), Ok(PicoCoupling::AC));
         assert_eq!(PicoCoupling::from_str("DC"), Ok(PicoCoupling::DC));
         assert_eq!(PicoCoupling::from_str("ad"), Err(ParseError));
+    }
+
+    #[test]
+    fn coupling_from_unknown_number_is_err() {
+        assert_eq!(PicoCoupling::try_from(0i32).ok(), Some(PicoCoupling::AC));
+        assert_eq!(PicoCoupling::try_from(2i32).ok(), None);
     }
 }
 

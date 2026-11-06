@@ -112,7 +112,8 @@ pub(crate) fn since_previous(
     entries: &[CounterEntry],
 ) -> Vec<TriggerInfo> {
     let valid = |e: &CounterEntry| {
-        status_from_raw(e.status & !(PicoStatus::DEVICE_TIME_STAMP_RESET as u32)) == PicoStatus::OK
+        status_from_raw(e.status & !u32::from(PicoStatus::DEVICE_TIME_STAMP_RESET))
+            == PicoStatus::OK
     };
     let mut previous = before.filter(valid);
     entries
@@ -155,7 +156,7 @@ const TRIGGER_TIME: u32 = 0x0200_0000;
 /// status, less the reset flag and the trigger time flags, is OK
 /// (ps6000a §3.18.1).
 fn counter_valid(raw: u32) -> bool {
-    let mut raw = raw & !(PicoStatus::DEVICE_TIME_STAMP_RESET as u32);
+    let mut raw = raw & !u32::from(PicoStatus::DEVICE_TIME_STAMP_RESET);
     if raw & TRIGGER_TIME != 0 {
         raw &= !(TRIGGER_TIME | 0x7);
     }
@@ -209,7 +210,7 @@ mod tests {
             units: 2,
             ..Default::default()
         };
-        let reset = PicoStatus::DEVICE_TIME_STAMP_RESET as u32;
+        let reset = u32::from(PicoStatus::DEVICE_TIME_STAMP_RESET);
         let infos = since_previous(
             3,
             Some(entry(SINCE_PREVIOUS_MASK - 1, 0)),
@@ -258,7 +259,7 @@ mod tests {
     /// each status `PICO_TRIGGER_TIME_NOT_REQUESTED`, no reset.
     #[test]
     fn a_raw_rapid_block_run_keeps_every_counter() {
-        let not_requested = PicoStatus::TRIGGER_TIME_NOT_REQUESTED as u32;
+        let not_requested = u32::from(PicoStatus::TRIGGER_TIME_NOT_REQUESTED);
         let entries: Vec<_> = (0..10)
             .map(|k| SinceFirstEntry {
                 status: not_requested,

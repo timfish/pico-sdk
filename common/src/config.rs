@@ -1,4 +1,4 @@
-use super::{BandwidthLimit, PicoCoupling, PicoRange};
+use super::{BandwidthLimit, ParseError, PicoCoupling, PicoRange};
 use num_derive::*;
 use std::convert::From;
 
@@ -33,12 +33,14 @@ impl From<TimeUnits> for i16 {
     }
 }
 
-impl From<i32> for TimeUnits {
+impl TryFrom<i32> for TimeUnits {
+    type Error = ParseError;
+
     /// The unit for a `PICO_TIME_UNITS` value
     ///
-    /// - Panics when the value is not 0 to 5.
-    fn from(value: i32) -> Self {
-        num_traits::FromPrimitive::from_i32(value).expect("Non-valid time unit")
+    /// - Returns [`ParseError`] when the value is not 0 to 5.
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        num_traits::FromPrimitive::from_i32(value).ok_or(ParseError)
     }
 }
 
@@ -151,6 +153,12 @@ impl Default for OscilloscopeSampleConfig {
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_units_from_unknown_number_is_err() {
+        assert_eq!(TimeUnits::try_from(5i32).ok(), Some(TimeUnits::S));
+        assert_eq!(TimeUnits::try_from(6i32).ok(), None);
+    }
 
     #[test]
     fn from_samples_per_second() {
