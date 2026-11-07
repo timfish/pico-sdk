@@ -419,3 +419,48 @@ fn a_start_that_finds_the_unit_lost_twice_leaves_the_target_open() {
     assert_eq!(unit.opens().len(), 2);
     runner.close();
 }
+
+/// A stream that the runner stops on its own tells that it stopped,
+/// and tells again once it runs on the new handle.
+#[test]
+fn a_stream_that_stops_on_its_own_tells_when_it_runs_again() {
+    let unit = Unit::lost_for(0);
+    let (runner, seen) = runner_of(&unit);
+
+    runner.start(()).unwrap();
+    unit.lost_starts.store(1, Ordering::SeqCst);
+    runner.reopen().unwrap();
+
+    wait_until("the stream to run again", Duration::from_secs(5), || {
+        seen.notices.lock().unwrap().len() >= 3
+    });
+    assert_eq!(
+        *seen.notices.lock().unwrap(),
+        vec![
+            DeviceNotice::StreamInterrupted,
+            DeviceNotice::UnitLost {
+                status: PicoStatus::DEVICE_NOT_FUNCTIONING
+            },
+            DeviceNotice::StreamResumed,
+        ]
+    );
+    assert!(runner.get_stream().is_some());
+    runner.close();
+}
+
+/// A stream that the caller stops tells nothing.
+#[test]
+fn a_stream_the_caller_stops_tells_nothing() {
+    let unit = Unit::lost_for(0);
+    let (runner, seen) = runner_of(&unit);
+
+    runner.start(()).unwrap();
+    runner.stop();
+    wait_until("the stream to stop", Duration::from_secs(5), || {
+        runner.get_stream().is_none()
+    });
+    runner.start(()).unwrap();
+
+    assert!(seen.notices.lock().unwrap().is_empty());
+    runner.close();
+}

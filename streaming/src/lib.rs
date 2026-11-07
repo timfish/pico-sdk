@@ -105,6 +105,9 @@
 //!   The next steps open it by its serial and start it again with the same config.
 //!   This rule is the same for every family.
 //! - Each time, the runner sends [`DeviceNotice::UnitLost`] to its notices.
+//! - When the runner stops a running stream on its own while the target is still that stream, it sends [`DeviceNotice::StreamInterrupted`].
+//!   When that stream runs again, it sends [`DeviceNotice::StreamResumed`].
+//!   So a caller can see a gap in the samples with no thread that watches [`StreamingRunner::get_stream`].
 //! - [`StreamingRunner::start`] opens the unit again one time within the call.
 //!   A second lost start returns the error.
 //! - When [`StreamingRunner::start`] returns an error after it set the target to its stream, it sets the target to open, so the background thread does not try that stream again.

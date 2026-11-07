@@ -105,6 +105,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   The next steps open it by its serial and start it again with the same config.
   This rule is the same for every family.
 - Each time, the runner sends [`DeviceNotice::UnitLost`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.UnitLost) to its notices.
+- When the runner stops a running stream on its own while the target is still that stream, it sends [`DeviceNotice::StreamInterrupted`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StreamInterrupted).
+  When that stream runs again, it sends [`DeviceNotice::StreamResumed`](https://docs.rs/pico-streaming/latest/pico_streaming/state/enum.DeviceNotice.html#variant.StreamResumed).
+  So a caller can see a gap in the samples with no thread that watches [`StreamingRunner::get_stream`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.get_stream).
 - [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start) opens the unit again one time within the call.
   A second lost start returns the error.
 - When [`StreamingRunner::start`](https://docs.rs/pico-streaming/latest/pico_streaming/state/struct.StreamingRunner.html#method.start) returns an error after it set the target to its stream, it sets the target to open, so the background thread does not try that stream again.

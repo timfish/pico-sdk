@@ -287,12 +287,16 @@ fn plugging_in_the_supply_restarts_the_stream() {
     });
     assert_eq!(
         *notices.0.lock(),
-        vec![DeviceNotice::PowerChanged {
-            from: Some(PowerSource::Usb),
-            to: PowerSource::External,
-            available: vec![A, B, C, D],
-            stream: AfterPowerChange::Restarts,
-        }]
+        vec![
+            DeviceNotice::PowerChanged {
+                from: Some(PowerSource::Usb),
+                to: PowerSource::External,
+                available: vec![A, B, C, D],
+                stream: AfterPowerChange::Restarts,
+            },
+            DeviceNotice::StreamInterrupted,
+            DeviceNotice::StreamResumed,
+        ]
     );
     assert_eq!(*unit.power_set.lock(), vec![PowerSource::External]);
     assert!(streaming.get_config().is_some());
@@ -327,7 +331,8 @@ fn a_power_change_while_idle_is_reported() {
 }
 
 /// A status that names the power the unit has already is a refusal,
-/// so the stream fails as for any other error and is opened again.
+/// so the stream fails as for any other error and is opened again,
+/// with no power notice.
 #[test]
 fn a_status_naming_the_current_power_is_no_change() {
     let unit = unit(Some(PowerSource::Usb));
@@ -343,9 +348,12 @@ fn a_status_naming_the_current_power_is_no_change() {
         unit.closes.load(Ordering::SeqCst) > 0
     });
     wait_until("the stream to start again", || {
-        unit.starts.load(Ordering::SeqCst) == 2
+        unit.starts.load(Ordering::SeqCst) == 2 && streaming.get_stream().is_some()
     });
-    assert!(notices.0.lock().is_empty());
+    assert_eq!(
+        *notices.0.lock(),
+        vec![DeviceNotice::StreamInterrupted, DeviceNotice::StreamResumed]
+    );
     assert!(unit.power_set.lock().is_empty());
     streaming.close();
 }
