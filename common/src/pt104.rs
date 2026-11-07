@@ -230,6 +230,8 @@ pub struct PT104Info {
     pub handle: Arc<i16>,
     /// The serial number
     pub serial: String,
+    /// The model name, from the driver's variant info, or empty when the driver does not give it
+    pub variant: String,
     /// The hardware version
     pub hardware_version: String,
     /// The firmware version

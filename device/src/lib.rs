@@ -169,19 +169,21 @@ impl PicoDevice {
         }
     }
 
-    /// The model of an oscilloscope, such as `5244D`
+    /// The variant string that the driver reports, such as `5244D` for an oscilloscope or `1216` for a PicoLog 1000
     ///
-    /// - Returns `None` for each data logger family, as they report no model string.
+    /// - Each family gives the string as its driver reports it, so it can be a bare model number.
+    /// - Returns `None` for a closed data logger, which has no info, and when the driver reports no variant.
     pub fn get_variant(&self) -> Option<&str> {
-        match self {
-            PicoDevice::Oscilloscope(device) => Some(&device.variant),
-            PicoDevice::DrDAQ(_)
-            | PicoDevice::PicoHRDL(_)
-            | PicoDevice::PL1000(_)
-            | PicoDevice::PLCM3(_)
-            | PicoDevice::PT104(_)
-            | PicoDevice::TC08(_) => None,
-        }
+        let variant = match self {
+            PicoDevice::Oscilloscope(device) => Some(device.variant.as_str()),
+            PicoDevice::DrDAQ(device) => device.info.as_ref().map(|i| i.variant.as_str()),
+            PicoDevice::PicoHRDL(device) => device.info.as_ref().map(|i| i.variant.as_str()),
+            PicoDevice::PL1000(device) => device.info.as_ref().map(|i| i.variant.as_str()),
+            PicoDevice::PLCM3(device) => device.info.as_ref().map(|i| i.variant.as_str()),
+            PicoDevice::PT104(device) => device.info.as_ref().map(|i| i.variant.as_str()),
+            PicoDevice::TC08(device) => device.info.as_ref().map(|i| i.variant.as_str()),
+        };
+        variant.map(str::trim).filter(|v| !v.is_empty())
     }
 }
 
