@@ -9,7 +9,7 @@ use std::{
     fmt,
     panic::{catch_unwind, AssertUnwindSafe},
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     thread::{self, JoinHandle, ThreadId},
@@ -364,6 +364,17 @@ pub enum DeviceNotice {
         /// The number of failed starts in a row
         starts: usize,
     },
+    /// A running stream stopped while the target is still that stream
+    ///
+    /// - The runner stopped it on its own: a stream step that failed, a lost unit, a change of power, a step that panicked, or [`StreamingRunner::reopen`].
+    /// - It comes once for each stop.
+    /// - [`DeviceNotice::StreamResumed`] follows when the stream runs again.
+    ///   It does not follow when the runner gives the stream up, as after [`DeviceNotice::StartRefused`], or when a caller stops, closes or starts the runner first.
+    StreamInterrupted,
+    /// The stream runs again after [`DeviceNotice::StreamInterrupted`]
+    ///
+    /// - The samples from the time that the stream was down are lost.
+    StreamResumed,
     /// The unit reported new probe states
     ///
     /// - There is one state for each channel whose probe was plugged in, taken out or changed.
@@ -540,6 +551,9 @@ pub struct StreamingRunner<Device, Config, Info, Stream, Event> {
     /// Starts in a row on this handle that failed with a status not
     /// counted as lost.
     failed_starts: Arc<AtomicUsize>,
+    /// The runner stopped the target stream on its own, and it has not
+    /// run again.
+    interrupted: Arc<AtomicBool>,
     /// While above 0, the background thread takes no step: a caller
     /// drives the device through [`StreamingRunner::with_open`].
     holds: Arc<AtomicUsize>,
@@ -581,6 +595,7 @@ where
             state,
             steps: Default::default(),
             failed_starts: Arc::new(AtomicUsize::new(0)),
+            interrupted: Arc::new(AtomicBool::new(false)),
             holds: Arc::new(AtomicUsize::new(0)),
             wake: bounded(1),
             events: EventEmitter::new(),
@@ -611,7 +626,14 @@ where
             }
         }
         let mut stepped = Stepped::Moved;
-        let next = match next_state(&self.device, &self.events, &self.notices, &current, &target) {
+        let result = next_state(&self.device, &self.events, &self.notices, &current, &target);
+        if matches!(target, Target::Streaming(_))
+            && matches!(current, Current::Streaming(..))
+            && matches!(&result, Ok(next) if !matches!(next, Current::Streaming(..)))
+        {
+            self.interrupt();
+        }
+        let next = match result {
             Ok(next) => next,
             Err(error)
                 if matches!(current, Current::Open(_))
@@ -679,6 +701,10 @@ where
         if opened || started {
             self.failed_starts.store(0, Ordering::SeqCst);
         }
+        if started && self.interrupted.swap(false, Ordering::SeqCst) {
+            info!("stream resumed");
+            self.notices.new_data(DeviceNotice::StreamResumed);
+        }
         if current != next {
             info!(
                 from = current.name(),
@@ -733,6 +759,7 @@ where
             self.step(&steps)?;
         }
 
+        self.interrupted.store(false, Ordering::SeqCst);
         self.state.write().target = Target::Streaming(config);
         self.wake();
 
@@ -794,6 +821,7 @@ where
             self.device.close(&info);
         }
         self.state.write().current = Current::Closed;
+        self.interrupt_if_streaming(&current);
         if matches!(self.state.read().target, Target::Closed) {
             return Ok(());
         }
@@ -816,6 +844,7 @@ where
     ///
     /// - It returns at once, and does not wait for the stream to stop.
     pub fn stop(&self) {
+        self.interrupted.store(false, Ordering::SeqCst);
         self.state.write().target = Target::Open;
         self.wake();
     }
@@ -824,6 +853,7 @@ where
     ///
     /// - It returns at once, and does not wait for the unit to close.
     pub fn close(&self) {
+        self.interrupted.store(false, Ordering::SeqCst);
         self.state.write().target = Target::Closed;
         self.wake();
     }
@@ -908,6 +938,25 @@ where
             }));
         }
         self.state.write().current = Current::Closed;
+        self.interrupt_if_streaming(&current);
+    }
+
+    /// Tells that the target stream stopped, once until it runs again.
+    fn interrupt(&self) {
+        if !self.interrupted.swap(true, Ordering::SeqCst) {
+            warn!("stream interrupted; it starts again when it can");
+            self.notices.new_data(DeviceNotice::StreamInterrupted);
+        }
+    }
+
+    /// [`Self::interrupt`] for a stream that `current` ran, while the
+    /// target is still a stream.
+    fn interrupt_if_streaming(&self, current: &Current<Info, Stream>) {
+        if matches!(current, Current::Streaming(..))
+            && matches!(self.state.read().target, Target::Streaming(_))
+        {
+            self.interrupt();
+        }
     }
 
     /// Stops the steps of the background thread until the guard drops
