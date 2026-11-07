@@ -322,9 +322,43 @@ impl DeviceEnumerator {
     ///   Oscilloscope devices come back closed.
     #[tracing::instrument(level = "info", skip(self))]
     pub fn enumerate(&self) -> Vec<Result<PicoDevice, EnumerationError>> {
+        self.enumerate_where(|_| true)
+    }
+
+    /// Lists the units of the `drivers` families only
+    ///
+    /// - It does not load any other driver, and it does not open the units of other families.
+    /// - A driver in `drivers` with no USB device loads nothing and gives no result.
+    /// - Otherwise it works as [`DeviceEnumerator::enumerate`] does.
+    ///
+    /// ```no_run
+    /// use pico_common::Driver;
+    /// use pico_enumeration::DeviceEnumerator;
+    ///
+    /// let enumerator = DeviceEnumerator::new();
+    /// for result in enumerator.enumerate_drivers(&[Driver::TC08, Driver::PT104]) {
+    ///     match result {
+    ///         Ok(device) => println!("found {}", device.get_serial()),
+    ///         Err(error) => println!("error: {error}"),
+    ///     }
+    /// }
+    /// ```
+    #[tracing::instrument(level = "info", skip(self))]
+    pub fn enumerate_drivers(
+        &self,
+        drivers: &[Driver],
+    ) -> Vec<Result<PicoDevice, EnumerationError>> {
+        self.enumerate_where(|driver| drivers.contains(&driver))
+    }
+
+    fn enumerate_where(
+        &self,
+        keep: impl Fn(Driver) -> bool + Sync,
+    ) -> Vec<Result<PicoDevice, EnumerationError>> {
         let listing = list_usb_devices();
         by_driver(&listing)
             .into_par_iter()
+            .filter(|(driver, _)| keep(*driver))
             .flat_map(|(driver_type, devices)| {
                 self.enumerate_driver(driver_type, &devices, &listing)
             })
@@ -337,23 +371,16 @@ impl DeviceEnumerator {
     /// - Otherwise it works as [`DeviceEnumerator::enumerate`] does.
     #[tracing::instrument(level = "info", skip(self))]
     pub fn enumerate_oscilloscopes(&self) -> Vec<Result<OscilloscopeDevice, EnumerationError>> {
-        let listing = list_usb_devices();
-        by_driver(&listing)
-            .into_par_iter()
-            .filter(|(driver, _)| driver.is_scope())
-            .flat_map(|(driver_type, devices)| {
-                self.enumerate_driver(driver_type, &devices, &listing)
-                    .into_iter()
-                    .map(|result| {
-                        result.map(|device| match device {
-                            PicoDevice::Oscilloscope(scope) => scope,
-                            other => unreachable!(
-                                "a scope driver returned a non-oscilloscope device: {}",
-                                other.get_serial()
-                            ),
-                        })
-                    })
-                    .collect::<Vec<_>>()
+        self.enumerate_where(|driver| driver.is_scope())
+            .into_iter()
+            .map(|result| {
+                result.map(|device| match device {
+                    PicoDevice::Oscilloscope(scope) => scope,
+                    other => unreachable!(
+                        "a scope driver returned a non-oscilloscope device: {}",
+                        other.get_serial()
+                    ),
+                })
             })
             .collect()
     }
