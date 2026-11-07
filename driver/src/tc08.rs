@@ -12,7 +12,10 @@ use pico_common::{
     Driver, FromPicoStr, MainsRejectionFreq, PicoError, PicoResult, PicoStatus, TC08Channel,
     TC08Error, TC08Info, TCType,
 };
-use pico_sys_dynamic::tc08::{TC08Loader, USBTC08_INFO, USBTC08_MAX_SERIAL_CHARS};
+use pico_sys_dynamic::tc08::{
+    enUSBTC08InfoLine_USBTC08LINE_VARIANT_INFO, TC08Loader, USBTC08_INFO, USBTC08_MAX_INFO_CHARS,
+    USBTC08_MAX_SERIAL_CHARS,
+};
 use std::{
     cmp::Ordering,
     fmt, iter,
@@ -22,14 +25,14 @@ use std::{
     sync::Arc,
 };
 
-fn to_tc08_info(handle: i16, value: USBTC08_INFO) -> TC08Info {
+fn to_tc08_info(handle: i16, value: USBTC08_INFO, variant: Option<String>) -> TC08Info {
     TC08Info {
         handle: Arc::new(handle),
         serial: value
             .szSerial
             .from_pico_i8_string(USBTC08_MAX_SERIAL_CHARS as usize),
         hardware_version: value.HardwareVersion,
-        variant: value.Variant,
+        variant: variant.unwrap_or_else(|| value.Variant.to_string()),
     }
 }
 
@@ -133,10 +136,33 @@ impl TC08DriverInternal {
         let mut info: USBTC08_INFO = unsafe { MaybeUninit::zeroed().assume_init() };
         info.size = size_of::<USBTC08_INFO>() as i16;
 
-        self.wrap_with_get_last_error(handle, || unsafe {
+        let status = self.wrap_with_get_last_error(handle, || unsafe {
             self.bindings.usb_tc08_get_unit_info(handle, &mut info)
-        })
-        .to_result(to_tc08_info(handle, info), "get_unit_info")
+        });
+        let variant = self.get_info_line(handle, enUSBTC08InfoLine_USBTC08LINE_VARIANT_INFO as i16);
+        status.to_result(to_tc08_info(handle, info, variant), "get_unit_info")
+    }
+
+    /// One line of unit info from `usb_tc08_get_unit_info2`
+    ///
+    /// - Returns `None` when the library lacks the call, the call fails, or the line is empty.
+    fn get_info_line(&self, handle: i16, line: i16) -> Option<String> {
+        self.bindings.usb_tc08_get_unit_info2.as_ref().ok()?;
+        let mut buffer = vec![0i8; USBTC08_MAX_INFO_CHARS as usize];
+        let length = unsafe {
+            self.bindings.usb_tc08_get_unit_info2(
+                handle,
+                buffer.as_mut_ptr(),
+                buffer.len() as i16,
+                line,
+            )
+        };
+        if length <= 0 {
+            return None;
+        }
+        let text = buffer.from_pico_i8_string((length as usize).min(buffer.len()));
+        let text = text.trim();
+        (!text.is_empty()).then(|| text.to_string())
     }
 
     /// Sets the mains frequency that the unit filters out

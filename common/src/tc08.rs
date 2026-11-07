@@ -182,8 +182,8 @@ pub struct TC08Info {
     pub serial: String,
     /// The hardware version
     pub hardware_version: i16,
-    /// The variant number
-    pub variant: i16,
+    /// The model name, from the driver's variant line, or the variant number when the driver gives no line
+    pub variant: String,
 }
 
 #[cfg(test)]

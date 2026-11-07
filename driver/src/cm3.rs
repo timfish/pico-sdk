@@ -116,9 +116,9 @@ impl PLCM3DriverInternal {
             .map(|serial: PicoResult<String>| self.open_unit(Some(&serial?)))
     }
 
-    /// The serial, hardware version and firmware version of the unit
+    /// The serial, variant, hardware version and firmware version of the unit
     ///
-    /// - The versions are empty when the driver does not give them.
+    /// - The variant and the versions are empty when the driver does not give them.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn get_unit_info(&self, handle: i16) -> PicoResult<PLCM3Info> {
         let serial = self.get_info_string(handle, u32::from(PicoInfo::BATCH_AND_SERIAL))?;
@@ -126,6 +126,9 @@ impl PLCM3DriverInternal {
         Ok(PLCM3Info {
             handle: Arc::new(handle),
             serial,
+            variant: self
+                .get_info_string(handle, u32::from(PicoInfo::VARIANT_INFO))
+                .unwrap_or_default(),
             hardware_version: self
                 .get_info_string(handle, u32::from(PicoInfo::HARDWARE_VERSION))
                 .unwrap_or_default(),
