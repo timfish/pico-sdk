@@ -39,26 +39,6 @@
 //! # }
 //! ```
 //!
-//! # How the parts fit
-//!
-//! ```text
-//!  pico_download        downloads the driver libraries to a cache
-//!         │
-//!         ▼
-//!  pico_sys_dynamic     unsafe bindings, loaded from a path when the program runs
-//!         │
-//!         ▼
-//!  pico_driver          safe calls, the same for each driver of a family
-//!         │
-//!         ▼
-//!  pico_enumeration ──► pico_device        finds the devices, then opens one
-//!                            │
-//!                            ▼
-//!                       pico_streaming     streams samples, or takes block captures
-//!
-//!  pico_common          the shared types, used by all the crates above
-//! ```
-//!
 //! # Crates
 //!
 //! Each module of this crate re-exports one crate.

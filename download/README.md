@@ -30,30 +30,6 @@ for driver in drivers {
 }
 ```
 
-## How the parts fit
-
-```text
- &[Driver]                      the drivers you ask for
-        │
-        ▼
- download_drivers_to_cache()    adds picoipp for ps4000 and ps6000
-        │
-        ▼
- driver_binary() ──► DriverBinary   file name, size and SHA-256 for this platform
-        │
-        ▼
- download_url()                 BASE_URL or PICO_DRIVERS_BASE_URL, then BUNDLE
-        │
-        ▼
- SHA-256 check                  a bad file gives DriverDownloadError::HashMismatch
-        │
-        ▼
- get_cache_dir()                one directory for each bundle and platform
-        │
-        ▼
- cache_resolution() ──► LibraryResolution   pico_driver loads the drivers from here
-```
-
 ## Platforms
 
 - Windows: x86, x86_64 and aarch64.

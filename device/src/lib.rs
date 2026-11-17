@@ -38,28 +38,6 @@
 //! # }
 //! ```
 //!
-//! # How the parts fit
-//!
-//! ```text
-//!  Driver ──► PicoDriver            pico_driver loads the driver library
-//!                 │
-//!                 ▼
-//!  DeviceOpen::open_device()        opens one unit, by serial or the first one
-//!                 │
-//!                 ▼
-//!  PicoDevice                       one variant for each family
-//!                 │
-//!                 ▼
-//!  OscilloscopeDevice, TC08Device, ...
-//!                 │                 the driver, the serial and the info
-//!                 ▼
-//!  OscilloscopeInfo, TC08Info, ...  the open handle and what the unit reports
-//!                 │
-//!                 ▼
-//!  OscilloscopeConfig, TC08Config, ...
-//!                                   the settings to start a capture
-//! ```
-//!
 //! # Open and close
 //!
 //! - [`DeviceOpen::open_device`] returns an open device, with its `info` set.
