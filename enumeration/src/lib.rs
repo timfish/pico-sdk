@@ -30,31 +30,6 @@
 //! }
 //! ```
 //!
-//! # How the parts fit
-//!
-//! ```text
-//!  list_usb_devices()          every USB device with the Pico vendor id
-//!         │
-//!         ▼
-//!  UsbDevice ──► Driver        the product id selects the driver
-//!         │
-//!         ▼
-//!  DeviceEnumerator            loads each driver once, then keeps it
-//!         │
-//!         ▼
-//!  EnumerateDriver             each driver lists its units, in parallel
-//!         │
-//!         ▼
-//!  match_usb_link()            gives each unit its UsbLink
-//!         │
-//!         ▼
-//!  Vec<Result<PicoDevice, EnumerationError>>
-//!         │
-//!         ▼
-//!  EnumResultHelpers           devices, errors and missing drivers
-//!  PicoDeviceHelpers           devices of one family
-//! ```
-//!
 //! # USB link
 //!
 //! Each device carries its [`UsbLink`]: the speed the host negotiated and the USB version the device declares.

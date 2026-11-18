@@ -32,28 +32,6 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! # How the parts fit
-//!
-//! ```text
-//!  Driver + LibraryResolution     the resolution gives the path of the library
-//!         │
-//!         ▼
-//!  DriverLoad::load()             loads the library and keeps it loaded
-//!         │
-//!         ▼
-//!  PicoDriver                     one variant for each family
-//!         │
-//!         ▼
-//!  OscilloscopeDriver ──► OscilloscopeDriverInternal and the feature traits
-//!  TC08Driver, PT104Driver, ... ──► the methods of each data logger
-//!         │
-//!         ▼
-//!  open_unit() ──► handle: i16    each call on a unit takes its handle
-//!         │
-//!         ▼
-//!  close() or close_unit()
-//! ```
-//!
 //! # Main types
 //!
 //! - [`DriverLoad`]: loads the library of a [`Driver`] and gives a [`PicoDriver`].

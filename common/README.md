@@ -36,21 +36,6 @@ let thermocouple: TCType = "type k".parse().unwrap();
 assert_eq!(thermocouple, TCType::K);
 ```
 
-## How the parts fit
-
-```text
- USB product id or name ──► Driver         the driver library and its file name
-                              │
-                              ▼
- settings of each family                   PicoRange, PicoCoupling, TriggerConfig,
-                              │            TC08Channel, PT104DataType, ...
-                              ▼
- driver call ──► PicoStatus                or TC08Error, HRDLError
-                              │
-                              ▼
- PicoResult<T> = Result<T, PicoError>      the status, and the call that failed
-```
-
 ## Main types
 
 Drivers:

@@ -10,6 +10,10 @@ It loads the library from a path when the program runs.
 All the functions are `unsafe`, and they take and return the raw C types of the driver.
 Most users want a safe wrapper crate instead.
 
+`Loader::new` opens the library and looks up each function.
+A function that the library does not export does not stop the load.
+Its field holds the error, and its method panics when you call it.
+
 ## Quick start
 
 ```rust
@@ -19,28 +23,6 @@ let ps2000 = unsafe { PS2000Loader::new("./path/ps2000.dll").unwrap() };
 let handle = unsafe { ps2000.ps2000_open_unit() };
 println!("handle: {handle}");
 ```
-
-## How the parts fit
-
-```text
- Pico C header               for example ps2000.h, from Pico's Linux packages
-        │
-        ▼
- generate-bindings.sh        downloads the header, then runs bindgen
-        │
-        ▼
- module per driver           constants, enums, structs and type aliases
-        │
-        ▼
- Loader struct ──► libloading::Library
-        │
-        ▼
- one fn pointer per C function, and one unsafe method that calls it
-```
-
-`Loader::new` opens the library and looks up each function.
-A function that the library does not export does not stop the load.
-Its field holds the error, and its method panics when you call it.
 
 ## Main types
 
