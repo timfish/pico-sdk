@@ -65,13 +65,15 @@ pub trait RapidBlockDriver {
 /// The segments from `from` to `to`, both in. The drivers wrap past the
 /// last segment when `from > to`; the wrappers refuse that.
 pub(crate) fn segment_count(from: u64, to: u64) -> PicoResult<usize> {
-    if from > to {
-        return Err(PicoError::from_status(
-            PicoStatus::SEGMENT_OUT_OF_RANGE,
-            &format!("segments {from} to {to}"),
-        ));
-    }
-    Ok((to - from + 1) as usize)
+    to.checked_sub(from)
+        .and_then(|n| n.checked_add(1))
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| {
+            PicoError::from_status(
+                PicoStatus::SEGMENT_OUT_OF_RANGE,
+                &format!("segments {from} to {to}"),
+            )
+        })
 }
 
 pub(crate) fn overflows(raw: &[i16]) -> Vec<Overflow> {
@@ -195,6 +197,7 @@ mod tests {
         assert_eq!(segment_count(2, 5).unwrap(), 4);
         assert_eq!(segment_count(3, 3).unwrap(), 1);
         assert!(segment_count(5, 2).is_err());
+        assert!(segment_count(0, u64::MAX).is_err());
         let infos = offsets_only(4, &[100, -2], &[2, 1]);
         assert_eq!(infos[0].segment, 4);
         assert_eq!(infos[1].segment, 5);
