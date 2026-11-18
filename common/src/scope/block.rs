@@ -121,7 +121,8 @@ pub struct TriggerInfo {
 ///
 /// - `infos` must be in capture order, and `interval_s` is the sample interval in seconds.
 /// - The time comes from the counter of the unit.
-/// - The time is `None` for a segment with no counter, or whose counter started again.
+/// - The time is `None` for a segment with no counter, whose counter started again, or
+///   whose sum of steps does not fit in a `u64`.
 ///   It is also `None` for all the segments after that one.
 pub fn trigger_times(infos: &[TriggerInfo], interval_s: f64) -> Vec<Option<f64>> {
     let mut since_first = Some(0u64);
@@ -143,7 +144,9 @@ pub fn trigger_times(infos: &[TriggerInfo], interval_s: f64) -> Vec<Option<f64>>
                 Some(SegmentTimestamp::SinceFirst(now)) => Some(now),
                 _ => None,
             };
-            since_first = since_first.zip(step).map(|(t, step)| t + step);
+            since_first = since_first
+                .zip(step)
+                .and_then(|(t, step)| t.checked_add(step));
             since_first.map(|t| t as f64 * interval_s)
         })
         .collect()
@@ -210,6 +213,34 @@ mod tests {
             trigger_times(&infos, 0.5),
             vec![Some(0.0), Some(50.0), Some(75.0)]
         );
+    }
+
+    #[test]
+    fn since_previous_deltas_that_overflow_give_none_from_there() {
+        use SegmentTimestamp::SincePrevious;
+        let infos = [
+            info(0, Some(SincePrevious(0)), true),
+            info(1, Some(SincePrevious(u64::MAX)), false),
+            info(2, Some(SincePrevious(2)), false),
+            info(3, Some(SincePrevious(1)), false),
+        ];
+        let times = trigger_times(&infos, 1.0);
+        assert_eq!(times[..2], [Some(0.0), Some(u64::MAX as f64)]);
+        assert_eq!(times[2..], [None, None]);
+    }
+
+    #[test]
+    fn since_previous_deltas_that_sum_to_u64_max_give_a_time() {
+        use SegmentTimestamp::SincePrevious;
+        let infos = [
+            info(0, Some(SincePrevious(0)), true),
+            info(1, Some(SincePrevious(u64::MAX - 1)), false),
+            info(2, Some(SincePrevious(1)), false),
+            info(3, Some(SincePrevious(1)), false),
+        ];
+        let times = trigger_times(&infos, 1.0);
+        assert_eq!(times[2], Some(u64::MAX as f64));
+        assert_eq!(times[3], None);
     }
 
     #[test]

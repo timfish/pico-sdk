@@ -860,8 +860,9 @@ impl BlockRunner {
             .and_then(|s| s.since_first_s)
             .unwrap_or(0.0);
         let ready_wall = SystemTime::now() - ready_at.elapsed();
-        let triggered_at = ready_wall
-            .checked_sub(Duration::from_secs_f64(post_s + last_offset))
+        let triggered_at = Duration::try_from_secs_f64(post_s + last_offset)
+            .ok()
+            .and_then(|back| ready_wall.checked_sub(back))
             .unwrap_or(ready_wall);
         let first = infos.first().copied().unwrap_or_default();
         let counter = match first.timestamp {
